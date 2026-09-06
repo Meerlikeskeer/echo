@@ -1,0 +1,11 @@
+{
+  "ready": false,
+  "checks": [
+    {"id": "tests", "kind": "test", "argv": ["python3", "scripts/run-app-tests.py", "--report", "{report}"]},
+    {"id": "types", "kind": "typecheck", "argv": ["npm", "run", "typecheck"]},
+    {"id": "lint", "kind": "lint", "argv": ["npm", "run", "lint"]},
+    {"id": "production-build", "kind": "build", "argv": ["npm", "run", "build"]},
+    {"id": "goal-acceptance", "kind": "acceptance", "argv": ["python3", "scripts/run-app-acceptance.py", "--report", "{report}"]}
+  ],
+  "protected": ["scripts/run-app-*.py", "**/*test*", "**/*spec*", "tests/**/*", "**/__snapshots__/**/*", "**/fixtures/**/*", "**/package.json", "**/*lock*", "**/tsconfig*", "**/*eslint*", "**/*vitest*", "**/*jest*", "**/*playwright*", "**/next.config.*"]
+}

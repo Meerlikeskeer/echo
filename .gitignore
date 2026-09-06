@@ -44,3 +44,8 @@ local-data/
 .vscode/
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Python controller artifacts and local loop evidence
+__pycache__/
+*.pyc
+.agent-runs/

@@ -27,4 +27,8 @@ Read `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DECISIONS.md`,
 
 ## Initial repository state
 
-This foundation contains documentation and an environment template only. No install/build/test commands exist yet; WEB-001 must establish and document them.
+The web app is not scaffolded. WEB-001 must establish its install/build/test commands. The bounded agent controller has its own Python tests; these do not certify the web app.
+
+## Builder/checker orchestration
+
+Use [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for automated feature work. The builder implements code; the independent checker owns verification and tester responsibilities. The executable orchestrator enforces five maximum builder attempts and immediate stops on regressions. Never restart to evade a stop, weaken protected verification, or claim perfection from green checks. A shared checkout is used sequentially inside one locked run; separate concurrent work still requires separate worktrees.

@@ -10,7 +10,7 @@ Users supply provider credentials. Keep transcription, LLM, storage, research, a
 
 ## This pass
 
-Establish shared documentation and repository hygiene. No application or hardware has been implemented. See `TASKS.md` for the work queue, starting at WEB-001.
+Shared documentation and repository hygiene are established. A bounded builder/checker controller is available; see `AGENT_WORKFLOW.md`. No web application or hardware has been implemented. See `TASKS.md` for the work queue, starting at WEB-001.
 
 ## Deferred hardware vision
 

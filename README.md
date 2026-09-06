@@ -2,7 +2,7 @@
 
 Private-first, web-first AI note-taking: capture conversations and quick thoughts, then turn them into transcripts, titles, summaries, notes, action items, and research suggestions.
 
-**Status:** architecture and repository foundation only. No application, dependencies, or runnable commands have been added yet. Hardware is deferred.
+**Status:** architecture, repository foundation, and bounded agent workflow. No web application or JavaScript dependencies have been added yet. Hardware is deferred.
 
 ## Start here
 
@@ -29,3 +29,7 @@ User-supplied keys and provider choice are core requirements. Cloud processing m
 ## Working on Echo
 
 Read `AGENTS.md`, choose a `WEB-###` task, create a focused branch, and update its status and relevant documentation with the implementation. Until a test toolchain exists, validate documentation links, consistency, and secret hygiene. Do not claim the app is runnable or tests pass before they exist.
+
+## Automated builder/checker workflow
+
+See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for the two specialists and orchestrator command. It permits five builder attempts and stops on any regression. Run `python3 -m unittest discover -s tests -v` to verify the controller. App feature loops remain blocked until the real web checks and goal acceptance tests are configured.

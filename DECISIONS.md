@@ -55,3 +55,13 @@ Repository decisions are authoritative over prior chat context. Amend or superse
 ## Open decisions
 
 Select initial providers/models, durable metadata store, background-job mechanism, supported mobile browsers/codecs, chunk/overlap durations, retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.
+
+## ADR-006 — Separate specialists with a bounded controller
+
+**Status:** Accepted · **Date:** 2026-09-06
+
+**Context:** The owner wants automatic implementation/verification/repair without endless retries or a builder certifying itself.
+
+**Decision:** Use separate builder and checker sessions. The checker owns the tester function with a deterministic command runner. A Python orchestrator allows five builder attempts maximum and immediately stops on regression of any formerly passing check/test. Freeze verification and require independent goal review plus all checks passing.
+
+**Consequences:** Baselines and stable per-test reports are required. Echo's missing app checks block feature runs until configured; controller tests cannot substitute. Changed tests/configuration require a separate reviewed setup change. The initial executable uses Codex CLI, including when launched from Claude's command. It does not auto-commit or deploy, and green is evidence rather than a guarantee of perfection.

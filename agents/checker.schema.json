@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["goal_met","findings"],"properties":{"goal_met":{"type":"boolean"},"findings":{"type":"array","items":{"type":"string"}}}}
