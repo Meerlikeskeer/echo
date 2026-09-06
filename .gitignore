@@ -1,0 +1,46 @@
+# Local secrets/configuration (including nested app environment files)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets/
+
+# Dependencies and generated build/test output
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.turbo/
+.vercel/
+
+# Logs, local data, recordings and databases
+*.log
+recordings/
+uploads/
+local-data/
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.ogg
+*.flac
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Local editor/OS and agent overrides
+.DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json
+CLAUDE.local.md
