@@ -10,7 +10,7 @@ Users supply provider credentials. Keep transcription, LLM, storage, research, a
 
 ## This pass
 
-Shared documentation and repository hygiene are established. A bounded builder/checker controller is available; see `AGENT_WORKFLOW.md`. No web application or hardware has been implemented. See `TASKS.md` for the work queue, starting at WEB-001.
+Shared documentation, the bounded builder/checker controller, and the web shell are established. WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling; ENG-001 adds the controller described in `AGENT_WORKFLOW.md`, whose automated feature loop remains deliberately disabled. No recording, processing, persistence, or hardware is implemented. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands. WEB-002 is the next product milestone.
 
 ## Deferred hardware vision
 

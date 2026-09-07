@@ -65,3 +65,15 @@ Select initial providers/models, durable metadata store, background-job mechanis
 **Decision:** Use separate builder and checker sessions. The checker owns the tester function with a deterministic command runner. A Python orchestrator allows five builder attempts maximum and immediately stops on regression of any formerly passing check/test. Freeze verification and require independent goal review plus all checks passing.
 
 **Consequences:** Baselines and stable per-test reports are required. Echo's missing app checks block feature runs until configured; controller tests cannot substitute. Changed tests/configuration require a separate reviewed setup change. The initial executable uses Codex CLI, including when launched from Claude's command. It does not auto-commit or deploy, and green is evidence rather than a guarantee of perfection.
+
+## ADR-007 — WEB-001 bootstrap and single-owner access
+
+**Status:** Accepted for bootstrap · **Date:** 2026-09-06
+
+**Context:** WEB-001 requires a runnable private shell and meaningful verification before capture or provider implementation. The owner explicitly requests separate builder/checker roles and disabled agent automation until real reporting works.
+
+**Decision:** Use npm workspaces, current stable Next.js App Router, React, TypeScript and Tailwind/PostCSS, with exact dependency versions and a lockfile. Require server-only `ECHO_OWNER_USERNAME` and a random password of at least 32 characters for all environments. Gate every request with Proxy and independently guard server page rendering. Use single-owner HTTP Basic over HTTPS outside localhost. Run ESLint, generated route types plus TypeScript, synthetic unit tests, a production build, and real production HTTP tests in PR CI. Leave the agent loop disabled until check commands and per-test adapters are verified.
+
+**Consequences:** This provides a narrow private access baseline, not logout/session management, brute-force protection, or multi-user isolation. Those need explicit design before expanding deployment. Future data access/actions must perform their own authorization. No providers or persistent data exist yet. Local production tests require loopback socket access; remote Actions and branch protection remain external setup.
+
+**Numbering note:** `feat/bounded-agent-workflow` and `feat/WEB-001-web-shell` independently authored an ADR-006. Both decisions stand: ENG-001's controller decision keeps ADR-006 and this WEB-001 bootstrap decision was renumbered to ADR-007 during branch integration. No content was discarded.

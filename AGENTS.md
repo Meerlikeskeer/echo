@@ -25,9 +25,9 @@ Read `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DECISIONS.md`,
 - Run checks relevant to the change; report exactly what ran and what could not run. Add behavioral tests for risky logic (retries, overlap stitching, offline recovery, deletion guards). Do not fabricate passing tests.
 - Update architecture and ADRs when boundaries or behavior change. Keep the task tracker current. No hardware implementation in the web phase.
 
-## Initial repository state
+## Foundation state (historical)
 
-The web app is not scaffolded. WEB-001 must establish its install/build/test commands. The bounded agent controller has its own Python tests; these do not certify the web app.
+The initial foundation contained documentation and an environment template only. WEB-001 established the install/build/test commands documented in README.md, and ENG-001 added the bounded agent controller. The controller's Python tests certify the controller only; they do not certify the web app. Consult TASKS.md for current verification status.
 
 ## Builder/checker orchestration
 
