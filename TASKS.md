@@ -1,6 +1,6 @@
 # Tasks
 
-Status vocabulary: Todo, In progress, Blocked, Done. DOC-001, ENG-001 and WEB-001 are Done and integrated into `main`. **WEB-002 is the next product-development task**; later web tasks remain Todo. ENG-002 is independent of the WEB sequence and may run alongside WEB-002. Dependencies refer to WEB task IDs.
+Status vocabulary: Todo, In progress, Blocked, Done. DOC-001, ENG-001 and WEB-001 are Done and integrated into `main`. **WEB-002 is implemented and awaiting owner review on `feat/WEB-002-recording-slice`**; later web tasks remain Todo. ENG-002 is independent of the WEB sequence and may run alongside WEB-002. Dependencies refer to WEB task IDs.
 
 ## DOC-001 — Shared repository foundation
 
@@ -44,7 +44,7 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 ## WEB-002 — Short recording vertical slice
 
-**Status:** Todo — **NEXT** · **Dependencies:** WEB-001 (satisfied)
+**Status:** Done — implemented and verified on `feat/WEB-002-recording-slice`; **awaiting owner review, not merged** · **Dependencies:** WEB-001 (satisfied), ADR-009 and ADR-010
 
 **Acceptance:** Record 30–60 seconds, stop, obtain a transcript and generated notes using server-side user-supplied keys through minimal provider interfaces. Handle permission denial and provider failure; verify using synthetic audio.
 
@@ -60,9 +60,58 @@ Browser microphone → record 30–60 seconds → Stop → server-side upload/re
 
 **Constraints:** Keep provider implementations replaceable behind the `TranscriptionProvider` / `NotesProvider` abstractions; keep credentials server-side and out of `NEXT_PUBLIC_*`. Backend work stays inside Next.js Route Handlers and server modules (ADR-008). Do not introduce a database, object storage, background worker, or production auth system — those decisions are open; if WEB-002 genuinely needs one, follow the stack-change procedure in `ARCHITECTURE.md` first. Tests must not require manually recording real microphone audio; use synthetic or fixture audio. shadcn/ui may be installed here if the slice needs its primitives.
 
-**Provider approach (ADR-009, Proposed — confirm before implementing):** Use the OpenAI-compatible wire format as the port for both providers, so hosted and self-hosted deployments share one adapter and switching is a base-URL change. Ship two adapters: `openai-compatible` and a `fixture` adapter supplying deterministic canned transcripts, since the acceptance criteria forbid tests that require real microphone audio. Validate configuration at startup so a missing key fails closed the way the WEB-001 access gate does, rather than at first recording. Diarization is explicitly out of scope: it is a separate session-scoped port that depends on object storage and cannot ship before WEB-005.
+**Provider approach (ADR-009, accepted at the start of this task):** Use the OpenAI-compatible wire format as the port for both providers, so hosted and self-hosted deployments share one adapter and switching is a base-URL change. Ship two adapters: `openai-compatible` and a `fixture` adapter supplying deterministic canned transcripts, since the acceptance criteria forbid tests that require real microphone audio. Validate configuration at startup so a missing key fails closed the way the WEB-001 access gate does, rather than at first recording. Diarization is explicitly out of scope: it is a separate session-scoped port that depends on object storage and cannot ship before WEB-005.
 
 **Sizing note:** a 30–60 second Opus clip is well under one megabyte against Vercel's 4.5 MB function payload limit, so this slice needs no object storage and forces none of the open infrastructure decisions.
+
+### Handoff
+
+**Task:** WEB-002 — short recording vertical slice.
+**Branch:** `feat/WEB-002-recording-slice`, branched from `docs/ADR-009-provider-selection` (see *Branch base* below).
+**Commits:** `1ce70fe` chore — ignore `.claude/worktrees/`; `e9193ff` the implementation and its documentation.
+
+**Branch base — read this before merging.** ADR-009 and ADR-010 were *not* on `main` when this task started. They existed only on `docs/ADR-009-provider-selection` (`93ec5b5`, one commit ahead of `main`, checked out in a worktree) and both were still marked *Proposed — awaiting owner acceptance*. Repository documentation is authoritative, so this branch was based on that commit rather than on `main`, and the two ADRs were marked **Accepted** because the owner directed the implementation to proceed against them. Merging this branch therefore also merges ADR-009 and ADR-010. If either decision is not in fact accepted, stop before merging.
+
+**Scope delivered**
+
+- `POST /api/recordings` (Node runtime, dynamic): accepts one multipart clip, returns transcript, notes, and provider disclosures. It calls `requireOwnerAccess` at its own boundary rather than relying on Proxy.
+- Provider ports in `apps/web/src/lib/providers/`: domain `types.ts`, typed `errors.ts`, startup `config.ts`, `factory.ts`, and the module-scope `registry.ts` that evaluates configuration once at server start. `src/instrumentation.ts` reports problems at boot by variable name.
+- Two adapters per port. `openai-compatible.ts` speaks the ADR-009 wire formats; `fixture.ts` returns deterministic canned output, performs no I/O, and supports injected failures so every failure path is testable without a network.
+- `apps/web/src/lib/recording/pipeline.ts` validates the clip before any credential is used, then transcribes and generates notes. `http.ts` maps a `ProviderError` onto a client-safe status and body.
+- UI: `recorder.tsx` (client) owns MediaRecorder, permission handling, the elapsed timer and the 60-second auto-stop; `recording-result.tsx` renders notes, timestamped transcript and the disclosure notice; `session-shell.tsx` and `page.tsx` wire them to server-side provider status.
+- Documentation: ARCHITECTURE.md gains a `WEB-002 recording slice boundaries` section and an updated `Current implementation state` and layout; ADR-009/ADR-010 marked Accepted; README, `.env.example`, PROJECT_CONTEXT.md and ROADMAP.md reconciled.
+
+**Failure paths surfaced, none carrying credentials**
+
+| Path | Surfaced as |
+| --- | --- |
+| Microphone permission denied | Distinct message per `NotAllowedError`/`SecurityError`, `NotFoundError`, `NotReadableError`, and unsupported browser |
+| Recording failure | `MediaRecorder` error event, empty clip, and sub-second clip each stop the recorder, release the microphone and explain that nothing was sent |
+| Transcription provider failure | `ProviderError` with port `transcription`, a code, and a retryable flag → mapped status (401/403→502, 429→429, 408→504, 413→413, 422→400, 5xx→502) |
+| LLM provider failure | Same, with port `notes`; the UI titles it separately |
+| Incomplete configuration | Startup log by variable name, recorder replaced by an explanation, endpoint answers 503 `provider_unconfigured` |
+
+**Checks and outcomes** — run from the repository root on `e9193ff`:
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm ci` | 0 | Clean install, 0 vulnerabilities |
+| `npm run check` | 0 | ESLint `--max-warnings=0` clean; `next typegen` + `tsc --noEmit` clean; **31 unit tests, 31 pass, 0 fail**; production build succeeded; **4 production HTTP tests, 4 pass, 0 fail** |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (controller only; unchanged by this task) |
+
+Additional evidence: no `NEXT_PUBLIC_*` appears in application source; no API-key-shaped string appears anywhere in `.next` build output; `agent-loop.json` still has `"ready": false`. Unit tests grew from 3 to 31 and production HTTP tests from 2 to 4. No existing assertion was removed or relaxed — the page content marker moved with the page, and `/api/recordings` was added to the private-path list.
+
+**Limitations and blockers**
+
+- **No live vendor call was made.** The `openai-compatible` adapter is verified against a stubbed transport that asserts the request shape, normalization and error mapping. Whether Groq accepts these exact requests is unproven. Verify manually: with `apps/web/.env.local` configured, run `npm run dev` and record a clip.
+- **No browser was driven.** `MediaRecorder`, permission prompts, the auto-stop and mobile capture were not exercised; the client component is covered only by server-rendered markup assertions. Codec and mobile-browser validation remain WEB-003.
+- **Latency was not measured.** REQ-006's 5–10 second target is unverified, and no clip length, device, connection, provider or latency is recorded yet.
+- Nothing is persisted, so a failed notes call discards a successful transcription. Retry re-records and re-transcribes.
+- Retention is reported as `unknown` for every remote endpoint. ADR-009 requires an operator to confirm a vendor's zero-retention setting; Echo has no mechanism for that confirmation yet.
+- shadcn/ui was **not** installed. The slice needs a button and two panels, and ADR-008 makes shadcn available when a task needs its primitives rather than by default. It remains approved and uninstalled.
+- `agent-loop.json` remains `"ready": false`. `scripts/run-app-tests.py` and `scripts/run-app-acceptance.py` still do not exist, and this task did not create them.
+
+**Next step:** owner reviews this branch and confirms ADR-009/ADR-010 acceptance; run the manual live-vendor and browser checks above; then merge to `main`. WEB-003 follows.
 
 ## WEB-003 — Session and playable chunk model
 
