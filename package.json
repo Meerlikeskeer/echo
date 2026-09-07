@@ -11,6 +11,7 @@
     "test": "npm run test --workspace @echo/web",
     "build": "npm run build --workspace @echo/web",
     "test:production": "node --test scripts/production.test.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:production"
+    "check:tracked": "node scripts/check-source-tracked.mjs",
+    "check": "npm run check:tracked && npm run lint && npm run typecheck && npm test && npm run build && npm run test:production"
   }
 }

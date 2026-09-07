@@ -12,6 +12,10 @@ Do not maintain a separate Claude-specific product plan. Repository documentatio
 - Provider credentials stay server-side. Never use `NEXT_PUBLIC_*` for secrets.
 - Current state and next task: see [STATUS.md](STATUS.md). Fill in its *In flight* section **before** starting work and keep it current as you go, so an interrupted session is still recoverable; update the rest of it in the same commit as any change to task status, the verification snapshot, or an accepted ADR.
 
+## Version control
+
+Read `AGENTS.md` → *Version control discipline* before branching or committing. The three rules that matter most: **one task per branch**, **never end a turn with uncommitted work** (commit, then `git push -u origin <branch>`), and **never edit a file another contributor has uncommitted** — check `git status` first. `npm run check` starts with `check:tracked`, which fails when `.gitignore` hides a source file from Git; do not weaken it.
+
 ## Verification
 
 Run `npm ci` then `npm run check` from the repository root, and `python3 -m unittest discover -s tests` for the bounded controller. Report exactly what ran. Do not weaken existing checks or claim passing tests that did not execute. The `STATUS.md` snapshot holds the current exit codes and test counts; a count going down is a regression, not a cleanup.
