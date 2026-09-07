@@ -2,7 +2,7 @@
 
 Private-first, web-first AI note-taking: capture conversations and quick thoughts, then turn them into transcripts, titles, summaries, notes, action items, and research suggestions.
 
-**Status:** WEB-001 bootstrap prepared for independent review: private empty session shell and verification tooling. Recording, providers, persistence, and hardware are not implemented.
+**Status:** WEB-001 bootstrap independently verified and prepared for owner review: private empty session shell and verification tooling. Recording, providers, persistence, and hardware are not implemented.
 
 ## Start here
 

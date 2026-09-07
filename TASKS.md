@@ -1,6 +1,6 @@
 # Tasks
 
-Status vocabulary: Todo, In progress, Blocked, Done. WEB-001 is in progress; later web tasks remain Todo. Dependencies refer to WEB task IDs.
+Status vocabulary: Todo, In progress, Blocked, Done. WEB-001 is implemented and independently verified, awaiting owner review; later web tasks remain Todo. Dependencies refer to WEB task IDs.
 
 ## DOC-001 — Shared repository foundation
 
@@ -10,11 +10,21 @@ Added shared context, engineering rules, architecture, requirements, roadmap, AD
 
 ## WEB-001 — Web shell and tooling
 
-**Status:** In progress · **Dependencies:** None
+**Status:** Done (implemented and independently verified; not merged) · **Dependencies:** None
 
 **Acceptance:** Create apps/web with Next.js, TypeScript, Tailwind; document actual install/dev/lint/typecheck/build commands and lockfile. Add private access baseline and empty session UI. Build and checks succeed.
 
-**Handoff:** Branch `feat/WEB-001-web-shell`; implementation commit is the WEB-001 bootstrap commit containing this entry. Scaffold, single-owner access, unit/production tests, CI, lockfile and setup documentation are implemented. Builder development run: `npm run check` exited 0 after approved escalation for test IPC/loopback sockets: lint and typecheck passed, 3 unit tests passed, Next 16.3.4 production build passed, 2 production HTTP tests passed (0 skipped). Initial sandbox run passed lint/typecheck then hit IPC EPERM; initial ESLint 10 was incompatible with the React plugin, so compatible 9.39.5 is pinned without disabling rules. Current lockfile came from a fresh manifest-only install; independent `npm ci` is still required. These are builder observations, not independent certification. No scope change to later WEB tasks. Agent-loop remains absent/disabled; real adapters are unresolved. Next step: separate checker reviews the clean implementation commit and independently runs `npm ci` and `npm run check`; only then record completion evidence. Remote CI and owner HTTPS/credentials remain setup requirements.
+**Handoff:** Branch `feat/WEB-001-web-shell`; implementation commit `0137bb16b67e2f3fa9ce63f5db8f5fe484458c35`. Coordinator delegated implementation to `builder`, then handed the clean commit to the separate read-only implementation reviewer `checker`. The checker reviewed the full diff against foundation `b2e1111` and independently ran the commands below on 2026-09-06 with Node 22.23.2/npm 10.9.8. No blocking findings; implementation was not changed by the checker. No scope change to later WEB tasks.
+
+**Independent evidence:**
+- `npm ci`: exit 0; 373 packages added, 375 audited, 0 vulnerabilities. Lockfile remained unchanged. npm warned that ESLint 9.39.5 is unsupported; the documented compatible pin remains a maintenance limitation.
+- `npm run check`: exit 0. ESLint with zero warnings allowed passed; Next route generation and strict TypeScript passed; 3 unit tests passed; Next 16.3.4 production build passed; 2 production HTTP tests passed. Both test runs reported 0 failed, 0 skipped, 0 cancelled, 0 todo.
+- `npm ls eslint --all`: exit 0, every resolved ESLint entry is 9.39.5; no stale ESLint 10 installation remains.
+- `git diff --check b2e1111..0137bb16`: exit 0. Working tree remained clean after installation/checks. `git ls-files '*agent-loop*'` returned no tracked configuration: automation remains absent/disabled.
+
+**Review coverage:** Fail-closed missing/invalid configuration and exact credential policy; independent server render guard; unauthorized page/API/static/RSC denial including a middleware-subrequest header; authorized production HTML/RSC/assets; synthetic-password absence from responses/assets; generated Tailwind utility; disabled empty-state action. CI runs the same install and aggregate check commands with read-only permissions and no secrets. Existing assertions and lint rules were not weakened to pass.
+
+**Limitations and next step:** Owner reviews this branch; do not merge automatically. Remote GitHub Actions has not been run and branch protection is not configured by this local change. No browser visual/mobile or deployed HTTPS verification was performed. Provision owner credentials and HTTPS before hosted use. Basic auth limitations and the ESLint compatibility requirement are documented in README. Agent-loop real check commands and per-test reporting adapters remain unresolved; do not enable it. WEB-002 remains next after review.
 
 ## WEB-002 — Short recording vertical slice
 

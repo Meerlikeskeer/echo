@@ -10,7 +10,7 @@ Users supply provider credentials. Keep transcription, LLM, storage, research, a
 
 ## This pass
 
-WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling. It is awaiting independent review; no recording, processing, persistence, or hardware is implemented. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands.
+WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling. It passed independent local review and verification and awaits owner review; no recording, processing, persistence, or hardware is implemented. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands.
 
 ## Deferred hardware vision
 

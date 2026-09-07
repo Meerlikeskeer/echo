@@ -1,6 +1,6 @@
 # Roadmap
 
-WEB-001 is in progress; later implementation tasks are pending. Deliver a working increment before expanding scope; hardware is deferred.
+WEB-001 is implemented and independently verified, awaiting owner review; later implementation tasks are pending. Deliver a working increment before expanding scope; hardware is deferred.
 
 | Milestone | Tasks | Exit condition |
 | --- | --- | --- |
