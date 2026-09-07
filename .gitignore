@@ -43,6 +43,7 @@ local-data/
 .idea/
 .vscode/
 .claude/settings.local.json
+.claude/worktrees/
 CLAUDE.local.md
 
 # Python controller artifacts and local loop evidence
