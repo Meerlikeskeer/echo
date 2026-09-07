@@ -108,16 +108,19 @@ Browser microphone → record 30–60 seconds → Stop → server-side upload/re
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | ESLint `--max-warnings=0` clean; `next typegen` + `tsc --noEmit` clean; **31 unit tests, 31 pass, 0 fail**; production build succeeded; **4 production HTTP tests, 4 pass, 0 fail** |
+| `npm run check` | 0 | ESLint `--max-warnings=0` clean; `next typegen` + `tsc --noEmit` clean; **33 unit tests, 33 pass, 0 fail**; production build succeeded; **4 production HTTP tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (controller only; unchanged by this task) |
 
-Additional evidence: no `NEXT_PUBLIC_*` appears in application source; no API-key-shaped string appears anywhere in `.next` build output; `agent-loop.json` still has `"ready": false`. Unit tests grew from 3 to 31 and production HTTP tests from 2 to 4. No existing assertion was removed or relaxed — the page content marker moved with the page, and `/api/recordings` was added to the private-path list.
+Additional evidence: no `NEXT_PUBLIC_*` appears in application source; no API-key-shaped string appears anywhere in `.next` build output; `agent-loop.json` still has `"ready": false`. Unit tests grew from 3 to 33 and production HTTP tests from 2 to 4. No existing assertion was removed or relaxed — the page content marker moved with the page, and `/api/recordings` was added to the private-path list.
+
+**Live service check — 2026-09-06.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in 1.4 s, correct transcript, sensible notes and action items, timestamps normalized into milliseconds. This was the first live vendor call ever made from this repository.
+
+It exposed one bug, fixed in the same branch. This wire format identifies audio by the uploaded file's **filename extension**, not by its content type, and returns 400 for a name it cannot classify. A browser recording has no extension, so every real recording failed with "The recording was not in a form the provider accepts." The adapter now derives an extension from the clip's media type, and a regression test asserts the uploaded filename. The same fix separated two failures that previously shared one message: `invalid_input` now means Echo rejected the clip, and `rejected_by_provider` means the clip reached the service and was refused. Failures are also logged server-side with port, code and upstream status — no bodies, credentials, audio or transcript.
 
 **Limitations and blockers**
 
-- **No live vendor call was made.** The `openai-compatible` adapter is verified against a stubbed transport that asserts the request shape, normalization and error mapping. Whether Groq accepts these exact requests is unproven. Verify manually: with `apps/web/.env.local` configured, run `npm run dev` and record a clip.
+- **Latency is not measured.** REQ-006 targets 5–10 s from stop to result; the single live check ran 1.4 s for a 7-second clip on one connection. That is one measurement, not a measured claim, and nothing records clip length, device, connection or provider yet.
 - **No browser was driven.** `MediaRecorder`, permission prompts, the auto-stop and mobile capture were not exercised; the client component is covered only by server-rendered markup assertions. Codec and mobile-browser validation remain WEB-003.
-- **Latency was not measured.** REQ-006's 5–10 second target is unverified, and no clip length, device, connection, provider or latency is recorded yet.
 - Nothing is persisted, so a failed notes call discards a successful transcription. Retry re-records and re-transcribes.
 - Retention is reported as `unknown` for every remote endpoint. ADR-009 requires an operator to confirm a vendor's zero-retention setting; Echo has no mechanism for that confirmation yet.
 - shadcn/ui was **not** installed. The slice needs a button and two panels, and ADR-008 makes shadcn available when a task needs its primitives rather than by default. It remains approved and uninstalled.

@@ -3,5 +3,8 @@
 export async function register(): Promise<void> {
   const { providerSetup } = await import("./lib/providers/registry");
   if (providerSetup.ok) return;
-  console.warn(`[echo] recording is disabled until provider configuration is complete:\n  - ${providerSetup.problems.join("\n  - ")}`);
+  console.warn(
+    `[echo] recording is disabled until provider configuration is complete:\n  - ${providerSetup.problems.join("\n  - ")}\n` +
+      "  (this reflects configuration at startup; restart the server after editing apps/web/.env.local)",
+  );
 }

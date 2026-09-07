@@ -30,6 +30,22 @@ export const ACCEPTED_MIME_TYPES: readonly string[] = [
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
 
+// This wire format identifies the audio container by the uploaded file's
+// extension, not by its content type, and rejects a name it cannot classify.
+// A browser recording arrives with no extension at all, so the adapter supplies
+// one — a vendor requirement, kept out of domain code.
+const EXTENSIONS: Readonly<Record<string, string>> = {
+  "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/aac": "m4a",
+  "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/flac": "flac",
+};
+
+export function uploadFileName(fileName: string, mimeType: string): string {
+  const extension = EXTENSIONS[mimeType.split(";")[0]?.trim().toLowerCase() ?? ""];
+  if (!extension) return fileName;
+  const stem = fileName.replace(/\.[^./\\]*$/, "") || "recording";
+  return `${stem}.${extension}`;
+}
+
 function describeEndpoint(baseUrl: string): { host: string | null; processor: ProcessorLocation } {
   try {
     const { hostname, host } = new URL(baseUrl);
@@ -119,7 +135,7 @@ export function createOpenAiCompatibleTranscriptionProvider(settings: OpenAiComp
     async transcribe(clip: AudioClip, options?: TranscribeOptions): Promise<Transcript> {
       const offsetMs = Math.max(0, Math.round(options?.sessionOffsetMs ?? 0));
       const form = new FormData();
-      form.append("file", new Blob([clip.bytes as BlobPart], { type: clip.mimeType }), clip.fileName);
+      form.append("file", new Blob([clip.bytes as BlobPart], { type: clip.mimeType }), uploadFileName(clip.fileName, clip.mimeType));
       form.append("model", settings.model);
       form.append("response_format", "verbose_json");
 

@@ -76,7 +76,8 @@ test("an LLM provider failure surfaces after a successful transcription", async 
 test("provider failures map onto client-safe statuses", () => {
   const statuses: [string, number][] = [
     ["unconfigured", 503], ["unauthorized", 502], ["rate_limited", 429], ["timeout", 504],
-    ["unavailable", 502], ["invalid_response", 502], ["invalid_input", 400], ["clip_too_large", 413], ["no_speech", 422],
+    ["unavailable", 502], ["invalid_response", 502], ["invalid_input", 400],
+    ["rejected_by_provider", 502], ["clip_too_large", 413], ["no_speech", 422],
   ];
   for (const [code, status] of statuses) {
     const described = describeFailure(new ProviderError("transcription", code as "unavailable"));
@@ -84,6 +85,14 @@ test("provider failures map onto client-safe statuses", () => {
     assert.equal(described.body.code, code);
     assert.equal(described.body.port, "transcription");
   }
+});
+
+test("a clip Echo rejects and a clip the service rejects read differently", () => {
+  const local = describeFailure(new ProviderError("transcription", "invalid_input")).body;
+  const upstream = describeFailure(new ProviderError("transcription", "rejected_by_provider", 400)).body;
+  assert.notEqual(local.message, upstream.message);
+  assert.match(local.message, /Echo cannot use/);
+  assert.match(upstream.message, /service rejected/);
 });
 
 test("an unexpected failure is never described to the client", () => {

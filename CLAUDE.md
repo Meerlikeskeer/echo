@@ -10,7 +10,7 @@ Do not maintain a separate Claude-specific product plan. Repository documentatio
 - Approved: Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, Lucide icons, Vercel hosting, and backend logic inside Next.js Route Handlers and server-side modules.
 - Intentionally undecided: relational database, object/audio storage, the **permanent** transcription and LLM vendors, diarization, background/worker infrastructure, and production authentication. Do not pick one silently. ADR-009 selects a Temporary prototype default behind the provider ports; ADR-010 requires Echo to stay deployable outside Vercel.
 - Provider credentials stay server-side. Never use `NEXT_PUBLIC_*` for secrets.
-- Current state and next task: see [STATUS.md](STATUS.md). Keep it current — update it in the same commit as any change to task status, the verification snapshot, or an accepted ADR.
+- Current state and next task: see [STATUS.md](STATUS.md). Fill in its *In flight* section **before** starting work and keep it current as you go, so an interrupted session is still recoverable; update the rest of it in the same commit as any change to task status, the verification snapshot, or an accepted ADR.
 
 ## Verification
 

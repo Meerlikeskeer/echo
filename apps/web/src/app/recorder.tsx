@@ -69,7 +69,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
   async function upload(clip: Blob, durationMs: number) {
     const body = new FormData();
-    body.append("audio", clip, "recording");
+    // The extension matters: transcription services classify audio by filename.
+    body.append("audio", clip, `recording.${clip.type.includes("ogg") ? "ogg" : clip.type.includes("mp4") ? "m4a" : "webm"}`);
     body.append("durationMs", String(durationMs));
     // Same-origin request: the browser reuses the owner credentials it already
     // holds for this page. No credential is ever read by client code.

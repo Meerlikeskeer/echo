@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ProviderError } from "../src/lib/providers/errors";
-import { createOpenAiCompatibleNotesProvider, createOpenAiCompatibleTranscriptionProvider } from "../src/lib/providers/openai-compatible";
+import { createOpenAiCompatibleNotesProvider, createOpenAiCompatibleTranscriptionProvider, uploadFileName } from "../src/lib/providers/openai-compatible";
 import type { AudioClip, Transcript } from "../src/lib/providers/types";
 
 const SECRET = "sk-do-not-leak-abcdefghijklmnop";
@@ -37,6 +37,21 @@ test("transcription sends the OpenAI-compatible multipart request", async () => 
   const file = form.get("file");
   assert.ok(file instanceof Blob);
   assert.equal(file.size, 4);
+  // Regression: this wire format classifies audio by filename extension and
+  // returns 400 for a name it cannot classify. A browser clip has no extension.
+  assert.equal(file instanceof File ? file.name : "", "recording.webm");
+});
+
+test("the uploaded filename always carries an extension for the container", () => {
+  assert.equal(uploadFileName("recording", "audio/webm;codecs=opus"), "recording.webm");
+  assert.equal(uploadFileName("recording", "audio/ogg;codecs=opus"), "recording.ogg");
+  assert.equal(uploadFileName("recording", "audio/mp4"), "recording.m4a");
+  assert.equal(uploadFileName("recording", "AUDIO/WAV"), "recording.wav");
+  assert.equal(uploadFileName("recording", "audio/mpeg"), "recording.mp3");
+  // An existing extension is replaced, not appended to.
+  assert.equal(uploadFileName("recording.bin", "audio/webm"), "recording.webm");
+  // An unmappable type is left alone rather than given a misleading extension.
+  assert.equal(uploadFileName("recording", "application/octet-stream"), "recording");
 });
 
 test("transcription normalizes vendor seconds into session-time milliseconds", async () => {
@@ -72,7 +87,8 @@ test("transcription synthesizes one segment when the vendor omits them", async (
 test("transcription maps upstream statuses onto codes and retryability", async () => {
   const expected: [number, string, boolean][] = [
     [401, "unauthorized", false], [403, "unauthorized", false], [429, "rate_limited", true],
-    [408, "timeout", true], [413, "clip_too_large", false], [422, "invalid_input", false],
+    [408, "timeout", true], [413, "clip_too_large", false],
+    [400, "rejected_by_provider", false], [415, "rejected_by_provider", false], [422, "rejected_by_provider", false],
     [500, "unavailable", true], [503, "unavailable", true],
   ];
   for (const [status, code, retryable] of expected) {

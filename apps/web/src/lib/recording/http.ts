@@ -18,6 +18,8 @@ const STATUS: Readonly<Record<ProviderErrorCode, number>> = {
   unavailable: 502,
   invalid_response: 502,
   invalid_input: 400,
+  // Echo's own request was refused upstream, so this is not the caller's fault.
+  rejected_by_provider: 502,
   clip_too_large: 413,
   no_speech: 422,
 };
