@@ -8,7 +8,11 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 ## In flight
 
-*Nothing in progress.*
+*No task in progress.* One environment blocker, not a code defect:
+
+**Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
+
+Worth building when someone next touches this area: a `npm run doctor` command that makes one cheap authenticated call per configured service and reports pass/fail per port **without printing the key**, so a bad key is a five-second check instead of a log hunt.
 
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
