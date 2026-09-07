@@ -29,9 +29,11 @@ Short summary for convenience. **The `Technology Stack` section of [ARCHITECTURE
 | Hosting | Vercel *(approved, not yet provisioned)* |
 | Tooling | npm workspaces, Node 22.23.2, committed `package-lock.json` |
 | Testing/CI | ESLint, `tsc`, Node's built-in test runner via `tsx`, `next build`, production HTTP tests, Python `unittest` for the agent controller, GitHub Actions |
-| Providers | Transcription and LLM behind small server-side abstractions; **vendors undecided** |
+| Providers | Transcription and LLM behind small server-side ports using the OpenAI-compatible wire format (ADR-009); adapters `openai-compatible` and `fixture`. Groq is a **temporary** prototype default; the permanent vendor is undecided |
 
-Intentionally undecided: relational database (PostgreSQL is the likely direction, not an approved choice), object/audio storage, transcription vendor, LLM vendor, background/worker infrastructure, and production authentication.
+Intentionally undecided: relational database (PostgreSQL is the likely direction, not an approved choice), object/audio storage, the permanent transcription and LLM vendors, diarization, background/worker infrastructure, and production authentication.
+
+Vercel is the hosted target but not Echo's runtime: the application must also run as a container on the Next.js standalone server, so platform-specific primitives require their own ADR (ADR-010).
 
 ## Repository structure
 
@@ -60,7 +62,7 @@ User-supplied keys and provider choice are core requirements. Cloud processing m
 
 ## Working on Echo
 
-`main` is the canonical development branch. Read `AGENTS.md`, choose a `WEB-###` task, branch from `main`, and update its status and relevant documentation with the implementation. Run the verification commands below and record evidence; a builder does not certify its own implementation. **WEB-002 — short recording vertical slice — is the next product task.**
+`main` is the canonical development branch. Read `AGENTS.md`, choose a `WEB-###` task, branch from `main`, and update its status and relevant documentation with the implementation. Run the verification commands below and record evidence; a builder does not certify its own implementation. **WEB-002 — short recording vertical slice — is implemented on `feat/WEB-002-recording-slice`; WEB-003 is the next product task.**
 
 ## Local setup and exact commands
 
@@ -106,7 +108,9 @@ feature branch → GitHub → Vercel preview deployment
 
 - ESLint is pinned to 9.39.5 because the current Next React lint plugin crashes under ESLint 10 (`context.getFilename` API removal). npm marks ESLint 9 unsupported; upgrading the compatible plugin/toolchain remains a maintenance requirement. No lint rules are disabled.
 - Provision the owner's username and random password in the server environment and configure HTTPS before hosted use. No real credentials are checked in or required by CI.
-- Provider choices/keys, storage, capture, owner-scoped persisted data, mobile-browser validation, and deployment/recovery remain their later WEB tasks.
+- Recording requires provider configuration. Copy `.env.example` to `apps/web/.env.local` and set `TRANSCRIPTION_PROVIDER`/`LLM_PROVIDER` (`openai-compatible` or `fixture`) with the matching `*_BASE_URL`, `*_API_KEY` and `*_MODEL`. Echo validates this at startup and disables recording, naming the missing variables, until it is complete.
+- The `openai-compatible` adapter is verified against a stubbed transport, not against a live vendor. A live check is a manual step: configure a real base URL and key, run `npm run dev`, and record a clip.
+- Storage, owner-scoped persisted data, mobile-browser validation, and deployment/recovery remain their later WEB tasks.
 - `agent-loop.json` is present with `"ready": false`; automation remains **disabled**. Do not set it true until its actual check commands and per-test reporting adapters are implemented and independently demonstrated to report failures and individual test outcomes. Current human/CI commands and Node TAP output are not an agent-loop adapter certification.
 
 Scaffold API choices follow the official [Next.js installation](https://nextjs.org/docs/app/getting-started/installation), [Proxy](https://nextjs.org/docs/app/getting-started/proxy), and [Tailwind Next.js](https://tailwindcss.com/docs/installation/framework-guides/nextjs) documentation. Lint runs separately because Next.js production builds do not run ESLint.

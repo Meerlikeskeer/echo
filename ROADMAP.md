@@ -8,10 +8,13 @@ The foundation, agent workflow and web shell are complete and integrated into `m
 DOC-001 ✅   Project/repository foundation
 ENG-001 ✅   Bounded builder/checker workflow
 WEB-001 ✅   Next.js web shell and development tooling
-WEB-002 ←    NEXT — short recording vertical slice
+ENG-002 ⬚    Self-host parity verification (independent of the WEB sequence)
+WEB-002 ✅   Short recording vertical slice — awaiting owner review on
+             feat/WEB-002-recording-slice, not yet merged
+WEB-003 ←    NEXT — session and playable chunk model
 ```
 
-Do not begin WEB-003 or later product work before WEB-002 is implemented and verified. See `TASKS.md` for per-task status, acceptance criteria and handoff evidence.
+Do not begin WEB-003 or later product work until WEB-002 is reviewed and merged. See `TASKS.md` for per-task status, acceptance criteria and handoff evidence.
 
 ## Milestones
 

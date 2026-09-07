@@ -111,7 +111,7 @@ interface DiarizationProvider {
 }
 ```
 
-Echo's provider ports use the OpenAI `/v1/audio/transcriptions` and `/v1/chat/completions` request shapes (ADR-009), which hosted vendors and self-hosted servers both implement; switching between them is a base-URL change rather than a code change. **The permanent transcription and LLM vendors remain undecided**; ADR-009 proposes prototype defaults marked Temporary. Every provider exposes machine-readable capability and disclosure descriptors, and the external-processor disclosure required by REQ-009 is derived from that data rather than from prose. Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
+Echo's provider ports use the OpenAI `/v1/audio/transcriptions` and `/v1/chat/completions` request shapes (ADR-009), which hosted vendors and self-hosted servers both implement; switching between them is a base-URL change rather than a code change. **The permanent transcription and LLM vendors remain undecided**; ADR-009 selects prototype defaults marked Temporary. Every provider exposes machine-readable capability and disclosure descriptors, and the external-processor disclosure required by REQ-009 is derived from that data rather than from prose. Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
 
 ### Data and Infrastructure Decisions Still Open
 
@@ -122,8 +122,8 @@ These are intentionally unresolved. An agent encountering one must not silently 
 | Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. |
 | Object/audio storage provider | **Open.** Large audio must not be stored in relational database rows; object/blob storage will likely be required. |
 | Production authentication | **Open.** The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final architecture. |
-| Transcription vendor | **Open** for the permanent choice. ADR-009 (Proposed) selects a Temporary prototype default behind `TranscriptionProvider`. |
-| LLM vendor | **Open** for the permanent choice. ADR-009 (Proposed) selects a Temporary prototype default behind `NotesProvider`. |
+| Transcription vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `TranscriptionProvider`. |
+| LLM vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `NotesProvider`. |
 | Diarization vendor | **Open.** Kept behind a session-scoped `DiarizationProvider`; depends on object storage, so not required before WEB-005. |
 | Background job / worker infrastructure | **Open.** Introduce only when workload justifies it; ADR-010 requires the chosen mechanism to have a self-hostable implementation. |
 | Long-running processing infrastructure | **Open.** Same trigger conditions as above. |
@@ -143,16 +143,22 @@ A future agent must not silently replace, or introduce an alternative to, a docu
 
 What exists today, after integrating DOC-001, ENG-001 and WEB-001 into `main`:
 
-- `apps/web`: a Next.js App Router application with one page — an empty sessions shell — rendered behind a fail-closed single-owner HTTP Basic gate.
+- `apps/web`: a Next.js App Router application behind a fail-closed single-owner HTTP Basic gate, with one page — the recorder — and one Route Handler, `POST /api/recordings`.
+- The WEB-002 vertical slice: browser microphone capture of a single 30–60 second clip, uploaded in one request, transcribed and turned into notes through the `TranscriptionProvider` and `NotesProvider` ports, then displayed. Two adapters ship per port, `openai-compatible` and `fixture` (ADR-009).
+- Provider configuration is validated at server startup, so a missing key disables recording with a 503 and a named-variable explanation instead of failing at the first recording.
 - Verification: ESLint, strict TypeScript, unit tests, a real production build, and production HTTP tests, aggregated by `npm run check` and run in GitHub Actions.
 - `scripts/agent_loop.py`: the ENG-001 bounded builder/checker controller, with its own Python tests. Its automated feature loop is deliberately **disabled** (`agent-loop.json` has `"ready": false`) and blocks before spending model tokens.
 
-What does **not** exist yet: audio capture, chunking, upload, transcription, notes generation, persistence of any kind, offline queueing, research, reminders, background processing, and hardware. No database, object storage, or external provider is wired up. No Route Handlers exist. Everything in the sections below beyond `Current implementation state`, `Technology Stack` and `WEB-001 access and verification boundaries` describes planned design, not shipped behavior.
+What does **not** exist yet: sessions, chunking, overlap stitching, incremental processing, persistence of any kind (a recording exists only for the lifetime of the request that carries it), offline queueing, history, diarization, research, reminders, background processing, and hardware. No database, object storage, or production authentication is wired up. Everything in the sections below beyond `Current implementation state`, `Technology Stack`, `WEB-001 access and verification boundaries` and `WEB-002 recording slice boundaries` describes planned design, not shipped behavior.
 
 ## Layout (only apps/web is implemented)
 
 ```text
 apps/web/                 Next.js + TypeScript + Tailwind UI and server endpoints
+  src/app/                Pages, client components, and Route Handlers
+  src/lib/access.ts       Single-owner access policy (WEB-001)
+  src/lib/providers/      Provider ports, adapters, configuration, disclosure
+  src/lib/recording/      The WEB-002 clip → transcript → notes pipeline
 packages/audio/           Capture, chunk metadata, durable queue contracts
 packages/transcription/   Transcription provider interface and adapters
 packages/ai/              Structured notes and classification providers
@@ -164,7 +170,7 @@ docs/                    Future detailed designs (not scaffolded yet)
 tests/                    Future integration and synthetic fixtures
 ```
 
-Introduce directories when they contain real implementation. A separate worker service is not required for the first milestone; keep processing boundaries extractable so longer jobs can later move to a durable worker.
+Only `apps/web/`, `scripts/` and `tests/` exist today; the `packages/` tree is planned, not scaffolded. Introduce directories when they contain real implementation. A separate worker service is not required for the first milestone; keep processing boundaries extractable so longer jobs can later move to a durable worker.
 
 ## Flow
 
@@ -199,7 +205,7 @@ Transcribe verified, independently decodable chunks as they arrive. Normalize ti
 | Research | Explicit query → findings with source URLs and provenance |
 | Reminder | Preview proposed action; confirmed export with idempotency key |
 
-Keep credentials in server-side configuration for the single-user prototype; future per-user keys require protected storage and access controls. Browser requests contain audio and settings, never server secrets. Define timeout, cancellation, retryability, rate-limit, and capability behavior at adapter boundaries. Adapters normalize provider timestamps into session time and must not leak vendor response shapes into domain code. Provider errors carry a retryability flag and never carry credentials, audio, or transcript text. No permanent vendor is selected; ADR-009 proposes Temporary prototype defaults.
+Keep credentials in server-side configuration for the single-user prototype; future per-user keys require protected storage and access controls. Browser requests contain audio and settings, never server secrets. Define timeout, cancellation, retryability, rate-limit, and capability behavior at adapter boundaries. Adapters normalize provider timestamps into session time and must not leak vendor response shapes into domain code. Provider errors carry a retryability flag and never carry credentials, audio, or transcript text. No permanent vendor is selected; ADR-009 selects Temporary prototype defaults.
 
 ## Offline and security
 
@@ -210,6 +216,18 @@ Authenticate deployed access, scope sessions and storage to their owner, use pri
 ## Retention
 
 Run deletion as a guarded, auditable job defined by `REQUIREMENTS.md`. Check every guard again immediately before deleting each copy. A verified copy must be independent of the deletion target and remain available after deletion; do not delete the sole remaining verified copy. Storage pressure may trigger early eligible eviction only after warnings and all guards pass. Failed verification or processing blocks deletion. Persist deletion outcomes for retry without retaining sensitive content in logs.
+
+## WEB-002 recording slice boundaries
+
+What the shipped slice does and does not guarantee:
+
+- **One clip per request.** The browser records a single 30–60 second clip (auto-stopped at 60 seconds), posts it once to `POST /api/recordings`, and renders the response. There is no session, no chunking, no retry queue, and nothing is persisted on the server.
+- **Both provider ports carry two adapters.** `openai-compatible` speaks the ADR-009 wire formats; `fixture` returns deterministic canned output, performs no I/O, and is what the test suite uses, because the acceptance criteria forbid tests that need real microphone audio.
+- **Vendor shapes stop at the adapter.** No `verbose_json` field, `choices[0]` envelope, or other vendor structure appears in a domain type or a function signature. Adapters normalize provider timestamps into session time; `sessionOffsetMs` is 0 for this single-clip slice and becomes meaningful in WEB-003.
+- **Errors are typed, not textual.** `ProviderError` carries a port, a code, and a retryable flag, and its constructor accepts no free-form message — an upstream response body, credential, audio payload, or transcript cannot be attached to it.
+- **Disclosure is derived from data.** Each provider exposes a machine-readable disclosure descriptor; the REQ-009 external-processor notice is rendered from it. Retention is reported as `unknown` for any remote endpoint, because Echo has no way to confirm a vendor setting yet.
+- **Configuration fails closed at startup**, the way the access gate does: incomplete provider configuration is reported once at boot by variable name, disables the recorder in the UI, and makes the endpoint answer 503.
+- **The endpoint guards itself.** `POST /api/recordings` calls `requireOwnerAccess` at its own boundary rather than relying on Proxy remaining in place, and transcript and model text are rendered as escaped React text nodes.
 
 ## WEB-001 access and verification boundaries
 

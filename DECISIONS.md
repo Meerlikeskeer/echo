@@ -93,7 +93,7 @@ Repository decisions are authoritative over prior chat context. Amend or superse
 
 ## ADR-009 — Provider ports and prototype transcription/LLM vendors
 
-**Status:** Proposed — awaiting owner acceptance · **Date:** 2026-09-06
+**Status:** Accepted · **Date:** 2026-09-06 · **Accepted:** 2026-09-06, at the start of WEB-002
 
 **Context:** WEB-002 requires working transcription and notes generation, but `ARCHITECTURE.md` lists both vendors as **Open** and forbids choosing one silently. REQ-009 additionally promises user-supplied keys, explicit disclosure of every external processor, and self-hosted operation, so the choice must not be structural. Evaluation of the current market found that the OpenAI `/v1/audio/transcriptions` and `/v1/chat/completions` request shapes are a de-facto interop standard spoken by hosted vendors (Groq, Cerebras, Mistral, OpenRouter, OpenAI) and by self-hosted servers alike (`speaches`, `faster-whisper-server`, `whisper.cpp`, WhisperX API servers, vLLM, llama.cpp, Ollama).
 
@@ -118,7 +118,7 @@ Repository decisions are authoritative over prior chat context. Amend or superse
 
 ## ADR-010 — Deployment portability: Vercel is a target, not a runtime
 
-**Status:** Proposed — awaiting owner acceptance · **Date:** 2026-09-06 · **Amends:** ADR-008
+**Status:** Accepted · **Date:** 2026-09-06 · **Accepted:** 2026-09-06, at the start of WEB-002 · **Amends:** ADR-008
 
 **Context:** Evaluating self-hosted transcription raised the question of whether Echo should move off Vercel. Investigation showed the premise does not hold in the direction assumed: the reason WhisperX cannot run "on Vercel" is that it needs an NVIDIA GPU, PyTorch and multi-gigabyte weights, and no general-purpose application host — Vercel, Railway, Render, Fly.io or a Coolify VPS — provides a GPU by default. GPU inference is a separate HTTP endpoint under every option, so changing application host does not obtain it. Nothing is currently deployed, so there is also nothing to migrate.
 
@@ -146,8 +146,8 @@ Echo has deliberately **not** chosen the following. Do not silently pick one; ma
 
 - **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice.
 - **Object/audio storage:** undecided. Large audio must not be stored in relational database rows; object/blob storage will likely be required. Constrained by ADR-010: prefer an S3-compatible interface so self-hosted deployments can satisfy it.
-- **Transcription provider:** prototype default selected in ADR-009 (**Proposed**) and marked Temporary; the permanent vendor remains undecided. Kept behind `TranscriptionProvider`.
-- **LLM / notes-generation provider:** prototype default selected in ADR-009 (**Proposed**) and marked Temporary; the permanent vendor remains undecided. Kept behind `NotesProvider`.
+- **Transcription provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `TranscriptionProvider`.
+- **LLM / notes-generation provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `NotesProvider`.
 - **Diarization provider:** undecided. Kept behind a separate session-scoped `DiarizationProvider` (ADR-009). Depends on object storage; not required before WEB-005.
 - **Background job and long-running processing infrastructure:** undecided; see ADR-008 for when a split becomes justified, and ADR-010 for the constraint that the chosen mechanism must be self-hostable.
 - **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.

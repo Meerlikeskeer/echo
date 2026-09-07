@@ -10,7 +10,9 @@ Users supply provider credentials. Keep transcription, LLM, storage, research, a
 
 ## Current development stage
 
-Shared documentation, the bounded builder/checker controller, and the web shell are established. WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling; ENG-001 adds the controller described in `AGENT_WORKFLOW.md`, whose automated feature loop remains deliberately disabled. No recording, processing, persistence, or hardware is implemented. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands. WEB-002 is the next product milestone.
+Shared documentation, the bounded builder/checker controller, the web shell and the first recording slice are established. WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling; ENG-001 adds the controller described in `AGENT_WORKFLOW.md`, whose automated feature loop remains deliberately disabled. WEB-002 adds the vertical slice: record one 30–60 second clip in the browser, post it to a Route Handler, and get back a transcript and generated notes through swappable provider ports (ADR-009).
+
+Nothing is persisted — a recording exists only for the lifetime of the request that carries it — and there are still no sessions, chunking, offline queue, history, diarization, or hardware. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands. WEB-003 is the next product milestone.
 
 ## Product and UI direction
 
