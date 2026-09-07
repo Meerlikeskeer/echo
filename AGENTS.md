@@ -19,6 +19,22 @@ STATUS.md is a cache. `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`
 - If contributors work concurrently, use separate branches/worktrees and avoid competing edits to the same files. Resolve integration explicitly; do not share one mutable checkout.
 - Use small descriptive commits with task IDs where applicable. Update acceptance criteria only when scope changes are documented. Mark complete only with evidence.
 
+## Version control discipline
+
+Every failure this section prevents has already happened once in this repository. None of it is hypothetical.
+
+**One task per branch.** A branch carries exactly one task ID and is named `<type>/<TASK-ID>-<slug>`. If the work reveals that a second task must happen too, stop, commit what exists, and open a second branch from the first. Never begin a second task ID on a branch that already carries one: it forces the owner to review and accept both as a single unit, makes either one impossible to revert alone, and turns a small review into a large one. If two tasks genuinely cannot be separated, say so and ask before combining them — do not decide it silently.
+
+**Never end a turn with uncommitted work.** Commit before you stop, before context runs out, and before any operation that rewrites files. A clearly labelled work-in-progress commit is always better than an unsaved tree. If a commit fails for any reason, stop and report it immediately; do not keep building on a tree you cannot save. An entire task was once written into a working tree that could not be committed because a lock file could not be created — one stray command would have destroyed all of it.
+
+**Push after committing.** `git push -u origin <branch>`. A local commit is not a backup, is not reviewable, and is invisible to the owner. If the push fails, report that rather than continuing silently.
+
+**Verify what Git recorded, not what is on disk.** `npm run check` begins with `check:tracked`, which fails when a `.gitignore` rule hides a source file from Git. Do not remove or weaken it. A Route Handler was once excluded from every commit while lint, types, unit tests, the production build and the production HTTP tests all passed green — against the copy on disk. A green check only means something if the thing it checked is the thing that got committed. When a `.gitignore` pattern proves too broad, anchor it to the repository root (`/name/`) rather than adding path-specific negations: a negation patches one case and leaves the pattern waiting to swallow the next.
+
+**A substitute is not verification.** A fallback runner, a subset of tests, or a partial suite does not stand in for the required commands. Report the required command's real exit code, or report explicitly that it did not run and why.
+
+**Do not edit a file another contributor has in flight.** Check `git status` before editing shared documents such as `STATUS.md`, `TASKS.md` or `.gitignore`. If another agent's uncommitted work touches a file you need, work on a separate branch and hand the merge to the owner rather than competing for the same lines.
+
 ## Engineering
 
 - **The `Technology Stack` section of `ARCHITECTURE.md` is the canonical source of truth for Echo's approved technology stack.** Read it before introducing any framework, database, hosting platform, UI library, backend framework, storage provider, authentication system, or major infrastructure service. Prefer simple modules; do not introduce services, infrastructure, or dependencies without an immediate requirement.
