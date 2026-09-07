@@ -13,12 +13,44 @@ Private-first, web-first AI note-taking: capture conversations and quick thought
 - [Decisions](DECISIONS.md): accepted choices and unresolved questions.
 - [Shared engineering rules](AGENTS.md): instructions for all contributors and agents.
 - [Claude Code entry point](CLAUDE.md): points to the same shared rules.
+- [Agent workflow](AGENT_WORKFLOW.md): the bounded builder/checker controller and why it stays disabled.
 
 Repository documentation is authoritative over prior chat context. Keep decisions and implementation synchronized through reviewed commits.
 
-## Planned prototype
+## Technology stack (summary)
 
-Next.js, TypeScript, and Tailwind in `apps/web`, with modular packages for audio, transcription, AI, storage, research, reminders, and shared domain types. `apps/web` is implemented; package paths remain planned. Start with a 30–60 second recording → transcript → generated notes. Add durable chunking and offline behavior before expanding features.
+Short summary for convenience. **The `Technology Stack` section of [ARCHITECTURE.md](ARCHITECTURE.md) is the canonical source of truth** — read it, not this list, before introducing any new framework, database, hosting platform, UI library, backend framework, storage provider, or authentication system.
+
+| Area | Choice |
+| --- | --- |
+| Application | Next.js (App Router), React, TypeScript |
+| Styling and UI | Tailwind CSS; shadcn/ui as the base component system, Lucide for icons *(both approved, not yet installed)* |
+| Backend | Next.js Route Handlers and server-side modules; no separate backend service |
+| Hosting | Vercel *(approved, not yet provisioned)* |
+| Tooling | npm workspaces, Node 22.23.2, committed `package-lock.json` |
+| Testing/CI | ESLint, `tsc`, Node's built-in test runner via `tsx`, `next build`, production HTTP tests, Python `unittest` for the agent controller, GitHub Actions |
+| Providers | Transcription and LLM behind small server-side abstractions; **vendors undecided** |
+
+Intentionally undecided: relational database (PostgreSQL is the likely direction, not an approved choice), object/audio storage, transcription vendor, LLM vendor, background/worker infrastructure, and production authentication.
+
+## Repository structure
+
+```text
+apps/web/                 Next.js application (the only implemented app)
+  src/app/                App Router pages, layout, session shell
+  src/lib/                access policy and the server-only owner guard
+  src/proxy.ts            fail-closed request gate over every route
+  tests/                  unit/behavior tests (Node test runner via tsx)
+scripts/agent_loop.py     ENG-001 bounded builder/checker controller
+scripts/production.test.mjs  production HTTP tests against a real build
+tests/test_agent_loop.py  controller tests (Python unittest)
+agents/, .claude/         builder/checker role definitions and commands
+agent-loop.json           controller configuration — "ready": false (disabled)
+.github/workflows/        pull-request checks
+packages/*                planned, not scaffolded
+```
+
+The product direction is a 30–60 second recording → transcript → generated notes, then durable chunking and offline behavior before expanding features. Modular packages for audio, transcription, AI, storage, research, reminders, and shared domain types remain planned paths.
 
 ## Configuration and privacy
 
@@ -28,7 +60,7 @@ User-supplied keys and provider choice are core requirements. Cloud processing m
 
 ## Working on Echo
 
-Read `AGENTS.md`, choose a `WEB-###` task, create a focused branch, and update its status and relevant documentation with the implementation. Run the verification commands below and record evidence; a builder does not certify its own implementation.
+`main` is the canonical development branch. Read `AGENTS.md`, choose a `WEB-###` task, branch from `main`, and update its status and relevant documentation with the implementation. Run the verification commands below and record evidence; a builder does not certify its own implementation. **WEB-002 — short recording vertical slice — is the next product task.**
 
 ## Local setup and exact commands
 
@@ -59,6 +91,17 @@ The committed `package-lock.json` pins dependencies; `npm ci` installs it withou
 
 GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to `main`, with read-only repository permissions and no secrets. Remote CI execution and branch protection must be configured/observed after pushing; this change does not merge or deploy anything.
 
+## Deployment
+
+Vercel is Echo's intended deployment target (ADR-008). The intended workflow is:
+
+```text
+feature branch → GitHub → Vercel preview deployment
+  → manual + automated verification → merge → production deployment
+```
+
+**Nothing is deployed today.** No Vercel project, environment variables, or preview deployments have been configured. Before any hosted use, provision `ECHO_OWNER_USERNAME` and a random 32+ character `ECHO_OWNER_PASSWORD` as server-side environment variables and serve over HTTPS — Basic credentials require encrypted transport. Keep future feature branches compatible with preview deployments.
+
 ## Unresolved setup and automation
 
 - ESLint is pinned to 9.39.5 because the current Next React lint plugin crashes under ESLint 10 (`context.getFilename` API removal). npm marks ESLint 9 unsupported; upgrading the compatible plugin/toolchain remains a maintenance requirement. No lint rules are disabled.
@@ -70,4 +113,4 @@ Scaffold API choices follow the official [Next.js installation](https://nextjs.o
 
 ## Automated builder/checker workflow
 
-See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for the two specialists and orchestrator command. It permits five builder attempts and stops on any regression. Run `python3 -m unittest discover -s tests -v` (Python 3.10+) to verify the controller. App feature loops remain blocked by `"ready": false` until the real web check adapters and goal acceptance tests are configured.
+See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for the two specialists and orchestrator command. It permits five builder attempts and stops on any regression. Run `python3 -m unittest discover -s tests -v` to verify the controller (16 tests; the controller documents Python 3.10+, and the suite has also been observed passing on 3.9.6). App feature loops remain blocked by `"ready": false` until the real web check adapters and goal acceptance tests are configured.

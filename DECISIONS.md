@@ -52,10 +52,6 @@ Repository decisions are authoritative over prior chat context. Amend or superse
 
 **Consequences:** No browser-bundled secrets. Hosted multi-user operation needs additional credential storage, authentication, and isolation design before use.
 
-## Open decisions
-
-Select initial providers/models, durable metadata store, background-job mechanism, supported mobile browsers/codecs, chunk/overlap durations, retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.
-
 ## ADR-006 — Separate specialists with a bounded controller
 
 **Status:** Accepted · **Date:** 2026-09-06
@@ -77,3 +73,33 @@ Select initial providers/models, durable metadata store, background-job mechanis
 **Consequences:** This provides a narrow private access baseline, not logout/session management, brute-force protection, or multi-user isolation. Those need explicit design before expanding deployment. Future data access/actions must perform their own authorization. No providers or persistent data exist yet. Local production tests require loopback socket access; remote Actions and branch protection remain external setup.
 
 **Numbering note:** `feat/bounded-agent-workflow` and `feat/WEB-001-web-shell` independently authored an ADR-006. Both decisions stand: ENG-001's controller decision keeps ADR-006 and this WEB-001 bootstrap decision was renumbered to ADR-007 during branch integration. No content was discarded.
+
+## ADR-008 — Vercel deployment, shadcn/ui, and initial Next.js full-stack architecture
+
+**Status:** Accepted · **Date:** 2026-09-06
+
+**Context:** WEB-001 established a Next.js application without recording a deliberate decision about hosting, the UI component system, or where server-side logic belongs. Successive agents were re-deriving these choices per task, risking a second frontend framework, a competing design system, or a premature separate backend service.
+
+**Decision:** Confirm the following as intentional project decisions, canonically recorded in the `Technology Stack` section of `ARCHITECTURE.md`:
+
+- **Vercel is Echo's web deployment target.** Feature branches must stay compatible with Vercel preview deployments: branch → GitHub → preview deployment → manual and automated verification → merge → production. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded here.
+- **Next.js remains the web application framework**, with React and TypeScript as the application foundation and Tailwind CSS as the styling system. Do not introduce a second frontend framework.
+- **shadcn/ui becomes Echo's base UI component system**, supplying primitives such as buttons, dialogs, dropdowns, tabs, forms, cards, tooltips, sheets, command/search interfaces, progress indicators, skeletons, and notifications. **Lucide** may supply icons. Echo builds its own visual identity from these primitives rather than adopting default shadcn example layouts or generic SaaS-dashboard patterns; see the UI direction in `PROJECT_CONTEXT.md`. Do not add a second design system without an explicit approved decision.
+- **Backend and API functionality remain inside Next.js initially** — Route Handlers, server-side modules, and server-only provider integrations. Do not create a separate Express, FastAPI, NestJS, or microservice backend during WEB-001 or WEB-002 without a demonstrated technical need.
+- **Separate processing infrastructure is introduced only when workload requirements justify it.** Long recordings, background transcription, retry queues, diarization, transcript stitching, asynchronous AI processing, durable offline synchronization, and large audio uploads are the likely future triggers. Keep processing boundaries extractable; do not build that infrastructure prematurely.
+- **Provider API secrets remain server-side.** Never expose provider credentials in browser bundles or `NEXT_PUBLIC_*` variables.
+
+**Consequences:** shadcn/ui is an approved but not yet installed choice; it enters the repository when a task first needs its primitives, and adding it must not weaken the WEB-001 verification suite. Vercel deployment is documented but not yet provisioned: no project, environment variables, or preview deployments are configured by this decision, and hosted use still requires the owner credentials and HTTPS described in ADR-007. This decision deliberately does **not** select a database, object/audio storage, transcription vendor, LLM vendor, background-job infrastructure, or production authentication; those remain open and are listed below and in `ARCHITECTURE.md`. Changing any decision above requires amending or superseding this ADR before implementation.
+
+## Open decisions
+
+Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
+
+- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice.
+- **Object/audio storage:** undecided. Large audio must not be stored in relational database rows; object/blob storage will likely be required.
+- **Transcription provider:** undecided; kept behind a provider abstraction.
+- **LLM / notes-generation provider:** undecided; kept behind a provider abstraction.
+- **Background job and long-running processing infrastructure:** undecided; see ADR-008 for when a split becomes justified.
+- **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
+
+Also select supported mobile browsers/codecs, chunk/overlap durations, the retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.

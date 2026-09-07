@@ -1,5 +1,143 @@
 # Architecture
 
+## Technology Stack
+
+**This section is the canonical source of truth for Echo's approved technology stack.** `README.md` may carry a shortened summary for developer convenience, but it is not a competing source of truth. Consult this section before introducing any new framework, database, hosting platform, UI library, backend framework, storage provider, authentication system, or major infrastructure service. Approved choices are recorded in ADR-006, ADR-007 and ADR-008 in `DECISIONS.md`.
+
+Entries are marked **Approved** (a recorded decision), **Temporary** (deliberately provisional implementation), or **Open** (intentionally undecided — do not silently choose one).
+
+### Application
+
+| Technology | Responsibility | Status |
+| --- | --- | --- |
+| Next.js (App Router) | Web application framework: UI rendering, routing, and server-side endpoints | Approved (ADR-007, ADR-008) |
+| React | Component model for the user interface | Approved |
+| TypeScript | Application language; strict mode, `tsc --noEmit` in CI | Approved |
+
+Do not introduce a second frontend framework.
+
+### Styling and UI
+
+| Technology | Responsibility | Status |
+| --- | --- | --- |
+| Tailwind CSS (v4 via PostCSS) | Styling system | Approved |
+| shadcn/ui | Base UI component primitives: buttons, dialogs, dropdowns, tabs, forms, cards, tooltips, sheets, command/search, progress, skeletons, notifications | Approved (ADR-008); **not yet installed** |
+| Lucide | Icons, where icons are required | Approved (ADR-008); **not yet installed** |
+
+shadcn/ui is the approved base component system and enters the repository when a task first needs its primitives. Echo builds its own visual identity from these primitives rather than adopting default shadcn example layouts or generic AI-SaaS dashboard patterns; the product UI direction lives in `PROJECT_CONTEXT.md`. Do not add a second design system without an explicit approved decision.
+
+### Hosting and Deployment
+
+| Technology | Responsibility | Status |
+| --- | --- | --- |
+| Vercel | Primary web hosting and deployment target | Approved (ADR-008); **not yet provisioned** |
+
+The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured, and hosted use still requires provisioned owner credentials and HTTPS (ADR-007).
+
+### Initial Backend
+
+| Technology | Responsibility | Status |
+| --- | --- | --- |
+| Next.js Route Handlers | HTTP API endpoints | Approved (ADR-008); none implemented yet |
+| Server-side Next.js modules | Server-only logic and authorization guards | Approved; `src/lib/owner-access.ts` is the current example |
+| Server-only provider integrations | Transcription and LLM calls, holding credentials server-side | Approved; none implemented yet |
+
+Backend functionality stays inside the Next.js application for now:
+
+```text
+Browser
+   ↓
+Next.js application
+   ├── UI
+   ├── API / Route Handlers
+   ├── authentication
+   ├── transcription provider interface
+   └── LLM provider interface
+```
+
+Do not create a separate Express, FastAPI, NestJS, or microservice backend during WEB-001 or WEB-002 without a demonstrated technical need. A separate worker or processing service becomes justified only when workload requires it — long recordings, background transcription, retry queues, diarization, transcript stitching, asynchronous AI processing, durable offline synchronization, or large audio uploads. Keep processing boundaries extractable so that split remains cheap; do not build the infrastructure prematurely.
+
+### Package and Repository Tooling
+
+Documented from what is actually present in the repository:
+
+| Tool | Detail |
+| --- | --- |
+| npm workspaces | Root `package.json` declares `workspaces: ["apps/web"]`; root scripts delegate to the `@echo/web` workspace |
+| npm | `10.9.8` (`packageManager`), `engines.npm >=10 <11` |
+| Node.js | `22.23.2` pinned in `.nvmrc`; `engines.node >=22 <23` |
+| `package-lock.json` | Committed at the repository root; `npm ci` installs it without rewriting resolution |
+| Python 3 | Standard library only, for the bounded agent controller in `scripts/agent_loop.py` |
+
+There is no pnpm, Yarn, Turborepo, Nx, or other monorepo tool. The `packages/*` paths in the layout below are planned, not scaffolded.
+
+### Testing and CI
+
+Documented from what is actually present in the repository. Do not claim a framework that is not installed:
+
+| Tool | Responsibility |
+| --- | --- |
+| ESLint `9.39.5` + `eslint-config-next` | Linting; `--max-warnings=0` |
+| `next typegen` + `tsc --noEmit` | Generated route types, then strict type checking |
+| Node built-in test runner via `tsx` | Unit/behavior tests in `apps/web/tests/` |
+| Node built-in test runner (`node --test`) | Production HTTP tests in `scripts/production.test.mjs` against a real production build |
+| `next build` | Real production compilation |
+| Python `unittest` | Bounded-controller tests in `tests/test_agent_loop.py` |
+| GitHub Actions | `.github/workflows/pull-request.yml` runs `npm ci` and `npm run check` on pull requests and pushes to `main`, read-only permissions, no secrets |
+
+There is **no** Vitest, Jest, Playwright, Cypress, or Testing Library in this repository. ESLint is pinned to `9.39.5` because the current Next React lint plugin crashes under ESLint 10; upgrading remains a maintenance requirement.
+
+### External AI Services
+
+Transcription and notes generation are consumed through small provider abstractions, not vendor SDK calls scattered through the application:
+
+```ts
+interface TranscriptionProvider {
+  transcribe(...): Promise<Transcript>
+}
+
+interface NotesProvider {
+  generateNotes(...): Promise<GeneratedNotes>
+}
+```
+
+Exact type signatures follow the implementing task. **The permanent transcription and LLM vendors remain undecided.** Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
+
+### Data and Infrastructure Decisions Still Open
+
+These are intentionally unresolved. An agent encountering one must not silently choose; make the choice through its task and record an ADR.
+
+| Decision | Current state |
+| --- | --- |
+| Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. |
+| Object/audio storage provider | **Open.** Large audio must not be stored in relational database rows; object/blob storage will likely be required. |
+| Production authentication | **Open.** The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final architecture. |
+| Transcription vendor | **Open.** Kept behind `TranscriptionProvider`. |
+| LLM vendor | **Open.** Kept behind `NotesProvider`. |
+| Background job / worker infrastructure | **Open.** Introduce only when workload justifies it. |
+| Long-running processing infrastructure | **Open.** Same trigger conditions as above. |
+
+### Changing a stack decision
+
+A future agent must not silently replace, or introduce an alternative to, a documented stack decision. If a stack-level change becomes necessary:
+
+1. Identify the existing architecture decision being changed.
+2. Explain the technical reason the existing decision is insufficient.
+3. Create or update the appropriate ADR in `DECISIONS.md`.
+4. Update this `Technology Stack` section.
+5. Update any other affected documentation.
+6. Only then implement the change.
+
+## Current implementation state
+
+What exists today, after integrating DOC-001, ENG-001 and WEB-001 into `main`:
+
+- `apps/web`: a Next.js App Router application with one page — an empty sessions shell — rendered behind a fail-closed single-owner HTTP Basic gate.
+- Verification: ESLint, strict TypeScript, unit tests, a real production build, and production HTTP tests, aggregated by `npm run check` and run in GitHub Actions.
+- `scripts/agent_loop.py`: the ENG-001 bounded builder/checker controller, with its own Python tests. Its automated feature loop is deliberately **disabled** (`agent-loop.json` has `"ready": false`) and blocks before spending model tokens.
+
+What does **not** exist yet: audio capture, chunking, upload, transcription, notes generation, persistence of any kind, offline queueing, research, reminders, background processing, and hardware. No database, object storage, or external provider is wired up. No Route Handlers exist. Everything in the sections below beyond `Current implementation state`, `Technology Stack` and `WEB-001 access and verification boundaries` describes planned design, not shipped behavior.
+
 ## Layout (only apps/web is implemented)
 
 ```text
@@ -65,4 +203,4 @@ Run deletion as a guarded, auditable job defined by `REQUIREMENTS.md`. Check eve
 
 `apps/web/src/proxy.ts` applies a fail-closed HTTP Basic gate to every route, including assets and RSC. `src/lib/access.ts` checks server configuration and exact credentials using constant-time digest comparison. The server page also calls the server-only `requireOwnerAccess` guard independently; future endpoints, actions, and data access must call the guard at their own boundary. There is no development bypass. This is a single-owner shell, not a multi-user identity system. No data store or external SDK exists. Server credentials are never passed to components.
 
-Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and a real production HTTP smoke suite back PR CI. Tailwind compiles locally through PostCSS with system fonts; builds do not need a font service. See ADR-007 and README for limitations and disabled agent-loop requirements.
+Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and a real production HTTP smoke suite back PR CI. Tailwind compiles locally through PostCSS with system fonts; builds do not need a font service. See ADR-007 and README for limitations and disabled agent-loop requirements. The ENG-001 controller shares this repository but is independent of the web application: its Python tests certify the controller's own control flow and do not certify `apps/web`. Its `test` and `acceptance` adapters (`scripts/run-app-tests.py`, `scripts/run-app-acceptance.py`) are not implemented, so the loop stays disabled; see ADR-006 and AGENT_WORKFLOW.md.

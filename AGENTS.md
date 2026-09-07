@@ -16,7 +16,7 @@ Read `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DECISIONS.md`,
 
 ## Engineering
 
-- Use Next.js + TypeScript + Tailwind for the planned web prototype. Prefer simple modules; do not introduce services, infrastructure, or dependencies without an immediate requirement.
+- **The `Technology Stack` section of `ARCHITECTURE.md` is the canonical source of truth for Echo's approved technology stack.** Read it before introducing any framework, database, hosting platform, UI library, backend framework, storage provider, authentication system, or major infrastructure service. Prefer simple modules; do not introduce services, infrastructure, or dependencies without an immediate requirement.
 - Keep domain types and processing independent of UI and vendor SDKs. Vendor-specific code belongs in provider adapters.
 - Validate external inputs. Make upload and processing retries idempotent. Preserve session/chunk identity, ordering, and timestamps; surface missing chunks and partial failures.
 - Never equate an upload request succeeding with a verified durable copy. Enforce the retention guards in `REQUIREMENTS.md` before deletion.
@@ -24,6 +24,48 @@ Read `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DECISIONS.md`,
 - Use synthetic audio/text fixtures. Avoid logging recording content. Require deliberate user action for external reminder/calendar writes.
 - Run checks relevant to the change; report exactly what ran and what could not run. Add behavioral tests for risky logic (retries, overlap stitching, offline recovery, deletion guards). Do not fabricate passing tests.
 - Update architecture and ADRs when boundaries or behavior change. Keep the task tracker current. No hardware implementation in the web phase.
+
+## Technology stack constraints
+
+The approved stack is Next.js, React, TypeScript, Tailwind CSS, shadcn/ui (base component system), Lucide (icons), deployed to Vercel, with backend logic inside Next.js Route Handlers and server-side modules. `ARCHITECTURE.md` holds the canonical detail; `DECISIONS.md` holds the reasoning in ADR-006, ADR-007 and ADR-008. The README summary is convenience only, not a competing source of truth.
+
+**You may not silently replace or add an alternative to a documented stack decision.** In particular, do not add a second frontend framework, a second design system, a separate Express/FastAPI/NestJS/microservice backend, or a different hosting platform. If a stack-level change is genuinely necessary:
+
+1. Identify the existing architecture decision being changed.
+2. Explain why it is insufficient.
+3. Create or update the appropriate ADR in `DECISIONS.md`.
+4. Update the `Technology Stack` section in `ARCHITECTURE.md`.
+5. Update any other affected documentation.
+6. Only then implement the change.
+
+**Decisions deliberately not yet made** — relational database, object/audio storage, transcription vendor, LLM vendor, background/worker infrastructure, and production authentication. Do not silently pick one; make the choice through its task and record an ADR. The current single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
+
+Keep transcription and LLM access behind small provider abstractions. Provider credentials stay server-side; never place them in `NEXT_PUBLIC_*` or browser bundles.
+
+Follow the product UI direction in `PROJECT_CONTEXT.md`: simple, quiet, focused, recording-first. Build Echo's own identity from shadcn primitives instead of default example layouts or generic AI-SaaS dashboards.
+
+## Required verification
+
+Run from the repository root and report exactly what ran:
+
+```sh
+npm ci
+npm run check   # lint → typecheck → unit tests → production build → production HTTP tests
+python3 -m unittest discover -s tests   # bounded-controller tests only
+```
+
+Do not weaken or remove existing verification: lint checks, TypeScript checks, unit tests, production HTTP tests, GitHub Actions checks, and the authentication guards. Do not report tests as passing unless they actually executed successfully; if something cannot run in your environment, say so explicitly instead of inferring success.
+
+## Branch, task and documentation conventions
+
+- Work under a task ID with explicit acceptance criteria: `WEB-###` for product work, `ENG-###` for engineering workflow, `DOC-###`/`INT-###` for documentation and integration.
+- `main` is the canonical branch. Branch from it as `feat/WEB-002-...`, `docs/...`, and keep branches compatible with Vercel preview deployments.
+- Update `TASKS.md` status and the affected documentation in the same change. Update `ARCHITECTURE.md` and `DECISIONS.md` whenever architecture changes.
+- Finish with a clean handoff recording task ID, branch/commit, scope, checks and outcomes, blockers, and next step. GitHub is the source of truth for project state; the repository must stay understandable without access to previous Claude or Codex conversations.
+
+## Automation must fail closed
+
+`agent-loop.json` keeps `"ready": false` until real application test/report adapters and acceptance tests exist and have been independently verified. Do not set it true simply because a web application now exists. Never treat unavailable tests, unparseable test output, missing acceptance tests, or interrupted verification as success.
 
 ## Foundation state (historical)
 

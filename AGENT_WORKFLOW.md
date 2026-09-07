@@ -23,9 +23,20 @@ A regression preserves the code and evidence for human inspection; it does not a
 
 ## Setup before the first feature loop
 
-Echo has no web application yet. `agent-loop.json` deliberately has `ready: false`; example npm commands and test adapters **do not exist**. The loop blocks before spending model tokens. WEB-001/WEB-002 must establish the real toolchain before enabling this workflow.
+Echo now has a web application (WEB-001) and a real npm toolchain, but `agent-loop.json` deliberately keeps `ready: false` and the loop still blocks before spending model tokens. Preflight exits 2 with `BLOCKED: Configure real app and goal acceptance checks; ready is false.`
 
-1. Scaffold the app and add meaningful automated checks in a normal reviewed change.
+What is now satisfied: `npm run typecheck`, `npm run lint` and `npm run build` are real commands backed by `apps/web`.
+
+What still blocks enabling it:
+
+- `scripts/run-app-tests.py` (the `test` adapter) **does not exist**.
+- `scripts/run-app-acceptance.py` (the `acceptance` adapter) **does not exist**.
+- No goal-specific acceptance tests have been written or independently reviewed.
+- Neither adapter has been demonstrated to report individual test outcomes and to preserve failures rather than manufacturing green.
+
+Both adapters must emit a JSON object at the path substituted for `{report}`, mapping every selected test ID to `pass` or `fail`, derived from the framework's machine-readable output. The web unit tests use Node's built-in runner via `tsx`, and the production tests use `node --test`; both emit TAP, which an adapter must parse faithfully — including failures, skips and a nonzero exit status. Do not set `ready: true` until these exist and have been independently verified.
+
+1. Scaffold the app and add meaningful automated checks in a normal reviewed change. *(Done in WEB-001: `npm run check` runs lint, typecheck, unit tests, a production build and production HTTP tests.)*
 2. Define goal-specific acceptance tests **before** the bounded loop. Review them independently of the builder. The builder cannot write its own success criteria during a run.
 3. Replace example commands with actual argv arrays for tests, typecheck, lint, production build, and goal acceptance. Commands must run once, not watch or autofix. Do not use commands that silently allow no tests.
 4. For test and acceptance commands, implement adapters that write a JSON object to the path substituted for `{report}`. Each key is a stable, unique individual test ID and each value is `pass` or `fail`, for example `{"audio/retry preserves chunk ID": "pass"}`. Include **every** selected case, including failed cases; do not omit skips or failures. An empty, missing, skipped or invalid report blocks. The example `scripts/run-app-tests.py` and `scripts/run-app-acceptance.py` are placeholders to implement for the chosen test framework. Never manufacture report values: derive them from the framework's machine-readable output, preserving failures and exit status.
@@ -55,7 +66,7 @@ The loop creates no commits, pushes or deployments. Review its resulting diff be
 python3 -m unittest discover -s tests -v
 ```
 
-These tests use synthetic repositories and stub model calls; they exercise green, repairs, five-cycle exhaustion, regressions, missing reports, protected edits and process failures without model costs. They do not validate Echo's future app or a live authenticated model run.
+These tests use synthetic repositories and stub model calls; they exercise green, repairs, five-cycle exhaustion, regressions, missing reports, protected edits and process failures without model costs. **They certify the controller only — they do not validate `apps/web` or a live authenticated model run.** Last rerun after branch integration: 16 tests, 0 failures.
 
 ## Implementation references
 

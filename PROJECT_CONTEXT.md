@@ -8,9 +8,37 @@ Long recordings are sessions composed of ordered audio chunks, with configurable
 
 Users supply provider credentials. Keep transcription, LLM, storage, research, and reminder integrations interchangeable. Prefer private/self-hosted operation; explicitly disclose each external processor. Retention is configurable from 7–30 days and must preserve audio until transcription and verified-copy safeguards are satisfied.
 
-## This pass
+## Current development stage
 
 Shared documentation, the bounded builder/checker controller, and the web shell are established. WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling; ENG-001 adds the controller described in `AGENT_WORKFLOW.md`, whose automated feature loop remains deliberately disabled. No recording, processing, persistence, or hardware is implemented. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands. WEB-002 is the next product milestone.
+
+## Product and UI direction
+
+Echo should feel **simple, quiet, focused, recording-first, trustworthy, fast, and uncluttered.** Information density increases only when the user opens a session or asks for detail; the default view stays calm.
+
+Avoid analytics cards, dashboard statistics, oversized navigation, decorative gradients, excessive panels, and generic AI-SaaS design patterns. The primary actions stay obvious — recording should be one of the clearest actions in the product.
+
+Echo builds its own visual identity from `shadcn/ui` primitives rather than adopting default shadcn example layouts. See the `Technology Stack` section of `ARCHITECTURE.md` for the approved UI stack.
+
+A future desktop layout may conceptually resemble:
+
+```text
+┌─────────────────────────────────────────────┐
+│ Echo                                   ⚙︎   │
+├────────────┬────────────────────────────────┤
+│            │                                │
+│ Sessions   │   Your Sessions                │
+│            │                                │
+│ Today      │   Physics 7A Lecture           │
+│ Yesterday  │   Project Meeting              │
+│ Earlier    │                                │
+│            │                                │
+│            │              ● Record          │
+│            │                                │
+└────────────┴────────────────────────────────┘
+```
+
+An opened session may eventually expose areas such as `Overview`, `Notes`, `Transcript`, `Tasks`, and `Research`. This is directional guidance, not a commitment to build those screens in any particular task.
 
 ## Deferred hardware vision
 

@@ -1,6 +1,6 @@
 # Tasks
 
-Status vocabulary: Todo, In progress, Blocked, Done. WEB-001 is implemented and independently verified, awaiting owner review; later web tasks remain Todo. Dependencies refer to WEB task IDs.
+Status vocabulary: Todo, In progress, Blocked, Done. DOC-001, ENG-001 and WEB-001 are Done and integrated into `main`. **WEB-002 is the next product-development task**; later web tasks remain Todo. Dependencies refer to WEB task IDs.
 
 ## DOC-001 — Shared repository foundation
 
@@ -8,9 +8,17 @@ Status vocabulary: Todo, In progress, Blocked, Done. WEB-001 is implemented and 
 
 Added shared context, engineering rules, architecture, requirements, roadmap, ADRs, task IDs and secret-safe configuration template. Validation passed: local Markdown links resolve, all 14 WEB task IDs exist, secret/data paths are ignored, and credential placeholders are blank. No application tests exist yet. Branch: `docs/project-foundation`. Next step: WEB-001.
 
+## ENG-001 — Bounded builder/checker workflow
+
+**Status:** Done
+
+Added independent role definitions, a Codex-backed orchestrator, Claude entry points, five-attempt and regression stops, baseline/per-test evidence, protected verification, and setup documentation. Branch: `feat/bounded-agent-workflow`. Synthetic controller tests cover the control paths; live model invocation and web checks remain untested/unconfigured. Next: WEB-001/002, then independently prepare app adapters and goal acceptance tests before setting `agent-loop.json` ready.
+
+**Integration note:** merged into `main`. The loop remains disabled: `agent-loop.json` still has `"ready": false`, and `scripts/run-app-tests.py` / `scripts/run-app-acceptance.py` do not exist. Controller tests were rerun after integration: 16 tests, 0 failures. Preflight correctly refuses to run (exit 2, "ready is false").
+
 ## WEB-001 — Web shell and tooling
 
-**Status:** Done (implemented and independently verified; not merged) · **Dependencies:** None
+**Status:** Done (implemented, independently verified, and merged into `main`) · **Dependencies:** None
 
 **Acceptance:** Create apps/web with Next.js, TypeScript, Tailwind; document actual install/dev/lint/typecheck/build commands and lockfile. Add private access baseline and empty session UI. Build and checks succeed.
 
@@ -28,9 +36,21 @@ Added shared context, engineering rules, architecture, requirements, roadmap, AD
 
 ## WEB-002 — Short recording vertical slice
 
-**Status:** Todo · **Dependencies:** WEB-001
+**Status:** Todo — **NEXT** · **Dependencies:** WEB-001 (satisfied)
 
 **Acceptance:** Record 30–60 seconds, stop, obtain a transcript and generated notes using server-side user-supplied keys through minimal provider interfaces. Handle permission denial and provider failure; verify using synthetic audio.
+
+**Intended vertical slice:**
+
+```text
+Browser microphone → record 30–60 seconds → Stop → server-side upload/request
+  → TranscriptionProvider → Transcript → NotesProvider / LLM → Generated notes
+  → display transcript + notes
+```
+
+**Must handle at least:** microphone permission denial, recording failure, transcription provider failure, and LLM provider failure — each surfaced to the user without exposing credentials.
+
+**Constraints:** Keep provider implementations replaceable behind the `TranscriptionProvider` / `NotesProvider` abstractions; keep credentials server-side and out of `NEXT_PUBLIC_*`. Backend work stays inside Next.js Route Handlers and server modules (ADR-008). Do not introduce a database, object storage, background worker, or production auth system — those decisions are open; if WEB-002 genuinely needs one, follow the stack-change procedure in `ARCHITECTURE.md` first. Tests must not require manually recording real microphone audio; use synthetic or fixture audio. shadcn/ui may be installed here if the slice needs its primitives.
 
 ## WEB-003 — Session and playable chunk model
 
@@ -104,12 +124,19 @@ Added shared context, engineering rules, architecture, requirements, roadmap, AD
 
 **Acceptance:** Add replaceable adapter with preview, date/timezone resolution, explicit confirmation, minimal permissions and idempotent export; test retries without duplicate events.
 
+## INT-001 — Branch integration and architecture documentation
+
+**Status:** Done
+
+Created `main` as the canonical development branch by merging `feat/bounded-agent-workflow` (fast-forward from the DOC-001 base) and then `feat/WEB-001-web-shell`. Source branches `docs/project-foundation`, `feat/bounded-agent-workflow` and `feat/WEB-001-web-shell` are retained unchanged; no unique work remains outside `main`.
+
+Conflicts resolved in `AGENTS.md`, `PROJECT_CONTEXT.md`, `README.md` and `DECISIONS.md`. The duplicate ADR-006 authored independently on both feature branches was reconciled by keeping ENG-001's controller decision as ADR-006 and renumbering WEB-001's bootstrap decision to ADR-007; both decisions are preserved in full. Added ADR-008 (Vercel deployment, shadcn/ui, initial Next.js full-stack architecture) and a canonical `Technology Stack` section in `ARCHITECTURE.md`. Corrected cross-branch stale statements: the web app is no longer "not scaffolded", and `agent-loop.json` is no longer "absent".
+
+**Verification after integration** (Node 22.23.2, npm 10.9.8): `npm ci` exit 0, 373 packages, 0 vulnerabilities, lockfile unchanged; `npm run check` exit 0 — ESLint clean, strict TypeScript clean, 3 unit tests passed, Next 16.3.4 production build succeeded, 2 production HTTP tests passed, 0 failed/skipped in both runs; `python3 -m unittest discover -s tests` exit 0 with 16 tests passing on both Python 3.9.6 and 3.12.13; agent-loop preflight exit 2 (correctly blocked). GitHub Actions was not run remotely and no deployment was performed.
+
+**Next step:** WEB-002. Do not enable the agent loop.
+
 ## Handoff template
 
 For an active/completed task record: task ID; branch and commit; scope changed; checks and outcomes; blockers/open decisions; next step. Keep credentials and real recording content out of handoffs.
 
-## ENG-001 — Bounded builder/checker workflow
-
-**Status:** Done
-
-Added independent role definitions, a Codex-backed orchestrator, Claude entry points, five-attempt and regression stops, baseline/per-test evidence, protected verification, and setup documentation. Branch: `feat/bounded-agent-workflow`. Synthetic controller tests cover the control paths; live model invocation and web checks remain untested/unconfigured. Next: WEB-001/002, then independently prepare app adapters and goal acceptance tests before setting `agent-loop.json` ready.
