@@ -1,6 +1,6 @@
 # Tasks
 
-Status vocabulary: Todo, In progress, Blocked, Done. DOC-001, ENG-001 and WEB-001 are Done and integrated into `main`. **WEB-002 is the next product-development task**; later web tasks remain Todo. Dependencies refer to WEB task IDs.
+Status vocabulary: Todo, In progress, Blocked, Done. DOC-001, ENG-001 and WEB-001 are Done and integrated into `main`. **WEB-002 is the next product-development task**; later web tasks remain Todo. ENG-002 is independent of the WEB sequence and may run alongside WEB-002. Dependencies refer to WEB task IDs.
 
 ## DOC-001 — Shared repository foundation
 
@@ -15,6 +15,14 @@ Added shared context, engineering rules, architecture, requirements, roadmap, AD
 Added independent role definitions, a Codex-backed orchestrator, Claude entry points, five-attempt and regression stops, baseline/per-test evidence, protected verification, and setup documentation. Branch: `feat/bounded-agent-workflow`. Synthetic controller tests cover the control paths; live model invocation and web checks remain untested/unconfigured. Next: WEB-001/002, then independently prepare app adapters and goal acceptance tests before setting `agent-loop.json` ready.
 
 **Integration note:** merged into `main`. The loop remains disabled: `agent-loop.json` still has `"ready": false`, and `scripts/run-app-tests.py` / `scripts/run-app-acceptance.py` do not exist. Controller tests were rerun after integration: 16 tests, 0 failures. Preflight correctly refuses to run (exit 2, "ready is false").
+
+## ENG-002 — Self-host parity verification
+
+**Status:** Todo · **Dependencies:** WEB-001 (satisfied)
+
+**Acceptance:** Demonstrate that Echo runs outside Vercel as required by ADR-010 and REQ-009. Add a container build using the Next.js standalone server, document the self-hosted run command and required configuration, and extend verification with a production smoke check against the container equivalent to the existing production HTTP tests. Static asset serving and build-time versus runtime environment variables must be handled explicitly, not assumed.
+
+**Rationale:** REQ-009 makes self-hosted deployment an architectural baseline, but nothing verifies it. Proving parity is cheapest now, while the application is a single page and an access proxy, and before WEB-004/WEB-005/WEB-010 introduce queues, scheduled work and object storage — the point at which platform-specific primitives would otherwise be adopted silently. Must not weaken any existing check.
 
 ## WEB-001 — Web shell and tooling
 
@@ -51,6 +59,10 @@ Browser microphone → record 30–60 seconds → Stop → server-side upload/re
 **Must handle at least:** microphone permission denial, recording failure, transcription provider failure, and LLM provider failure — each surfaced to the user without exposing credentials.
 
 **Constraints:** Keep provider implementations replaceable behind the `TranscriptionProvider` / `NotesProvider` abstractions; keep credentials server-side and out of `NEXT_PUBLIC_*`. Backend work stays inside Next.js Route Handlers and server modules (ADR-008). Do not introduce a database, object storage, background worker, or production auth system — those decisions are open; if WEB-002 genuinely needs one, follow the stack-change procedure in `ARCHITECTURE.md` first. Tests must not require manually recording real microphone audio; use synthetic or fixture audio. shadcn/ui may be installed here if the slice needs its primitives.
+
+**Provider approach (ADR-009, Proposed — confirm before implementing):** Use the OpenAI-compatible wire format as the port for both providers, so hosted and self-hosted deployments share one adapter and switching is a base-URL change. Ship two adapters: `openai-compatible` and a `fixture` adapter supplying deterministic canned transcripts, since the acceptance criteria forbid tests that require real microphone audio. Validate configuration at startup so a missing key fails closed the way the WEB-001 access gate does, rather than at first recording. Diarization is explicitly out of scope: it is a separate session-scoped port that depends on object storage and cannot ship before WEB-005.
+
+**Sizing note:** a 30–60 second Opus clip is well under one megabyte against Vercel's 4.5 MB function payload limit, so this slice needs no object storage and forces none of the open infrastructure decisions.
 
 ## WEB-003 — Session and playable chunk model
 

@@ -32,7 +32,9 @@ shadcn/ui is the approved base component system and enters the repository when a
 | --- | --- | --- |
 | Vercel | Primary web hosting and deployment target | Approved (ADR-008); **not yet provisioned** |
 
-The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured, and hosted use still requires provisioned owner credentials and HTTPS (ADR-007).
+The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments.
+
+**Vercel is a deployment target, not Echo's runtime (ADR-010).** REQ-009 makes self-hosted deployment an architectural baseline, so Echo must also run as a container using the Next.js standalone server. Application code targets portable primitives; introducing a platform-specific service — managed blob storage, queue, workflow, cron, KV or edge-config binding — requires an ADR stating how self-hosted deployments satisfy the same need. GPU-backed inference is always reached as a configured HTTP endpoint, never co-located with the web application. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured, and hosted use still requires provisioned owner credentials and HTTPS (ADR-007).
 
 ### Initial Backend
 
@@ -101,7 +103,15 @@ interface NotesProvider {
 }
 ```
 
-Exact type signatures follow the implementing task. **The permanent transcription and LLM vendors remain undecided.** Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
+Diarization is a **separate, session-scoped port** — not a flag on `TranscriptionProvider` — because speaker labels are assigned per input file with no cross-file consistency, so a per-chunk pipeline cannot produce globally coherent speakers (ADR-009):
+
+```ts
+interface DiarizationProvider {
+  diarizeSession(...): Promise<SpeakerTurn[]>
+}
+```
+
+Echo's provider ports use the OpenAI `/v1/audio/transcriptions` and `/v1/chat/completions` request shapes (ADR-009), which hosted vendors and self-hosted servers both implement; switching between them is a base-URL change rather than a code change. **The permanent transcription and LLM vendors remain undecided**; ADR-009 proposes prototype defaults marked Temporary. Every provider exposes machine-readable capability and disclosure descriptors, and the external-processor disclosure required by REQ-009 is derived from that data rather than from prose. Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
 
 ### Data and Infrastructure Decisions Still Open
 
@@ -112,9 +122,10 @@ These are intentionally unresolved. An agent encountering one must not silently 
 | Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. |
 | Object/audio storage provider | **Open.** Large audio must not be stored in relational database rows; object/blob storage will likely be required. |
 | Production authentication | **Open.** The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final architecture. |
-| Transcription vendor | **Open.** Kept behind `TranscriptionProvider`. |
-| LLM vendor | **Open.** Kept behind `NotesProvider`. |
-| Background job / worker infrastructure | **Open.** Introduce only when workload justifies it. |
+| Transcription vendor | **Open** for the permanent choice. ADR-009 (Proposed) selects a Temporary prototype default behind `TranscriptionProvider`. |
+| LLM vendor | **Open** for the permanent choice. ADR-009 (Proposed) selects a Temporary prototype default behind `NotesProvider`. |
+| Diarization vendor | **Open.** Kept behind a session-scoped `DiarizationProvider`; depends on object storage, so not required before WEB-005. |
+| Background job / worker infrastructure | **Open.** Introduce only when workload justifies it; ADR-010 requires the chosen mechanism to have a self-hostable implementation. |
 | Long-running processing infrastructure | **Open.** Same trigger conditions as above. |
 
 ### Changing a stack decision
@@ -182,12 +193,13 @@ Transcribe verified, independently decodable chunks as they arrive. Normalize ti
 | Provider | Contract responsibility |
 | --- | --- |
 | Transcription | Audio + metadata → timed segments, language, status/errors |
+| Diarization | Whole-session audio → globally consistent speaker turns, joined onto the finalized transcript by time |
 | LLM | Transcript + schema → validated artifacts or Quick Note classification |
 | Storage | Put/get/delete + integrity and durable-copy verification |
 | Research | Explicit query → findings with source URLs and provenance |
 | Reminder | Preview proposed action; confirmed export with idempotency key |
 
-Keep credentials in server-side configuration for the single-user prototype; future per-user keys require protected storage and access controls. Browser requests contain audio and settings, never server secrets. Define timeout, cancellation, retryability, rate-limit, and capability behavior at adapter boundaries. No specific model or vendor is selected.
+Keep credentials in server-side configuration for the single-user prototype; future per-user keys require protected storage and access controls. Browser requests contain audio and settings, never server secrets. Define timeout, cancellation, retryability, rate-limit, and capability behavior at adapter boundaries. Adapters normalize provider timestamps into session time and must not leak vendor response shapes into domain code. Provider errors carry a retryability flag and never carry credentials, audio, or transcript text. No permanent vendor is selected; ADR-009 proposes Temporary prototype defaults.
 
 ## Offline and security
 
