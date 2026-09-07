@@ -10,7 +10,7 @@ Users supply provider credentials. Keep transcription, LLM, storage, research, a
 
 ## This pass
 
-Establish shared documentation and repository hygiene. No application or hardware has been implemented. See `TASKS.md` for the work queue, starting at WEB-001.
+WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling. It is awaiting independent review; no recording, processing, persistence, or hardware is implemented. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands.
 
 ## Deferred hardware vision
 

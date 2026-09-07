@@ -1,6 +1,6 @@
 # Tasks
 
-Status vocabulary: Todo, In progress, Blocked, Done. All web tasks are Todo; this repository contains no working app yet. Dependencies refer to WEB task IDs.
+Status vocabulary: Todo, In progress, Blocked, Done. WEB-001 is in progress; later web tasks remain Todo. Dependencies refer to WEB task IDs.
 
 ## DOC-001 — Shared repository foundation
 
@@ -10,9 +10,11 @@ Added shared context, engineering rules, architecture, requirements, roadmap, AD
 
 ## WEB-001 — Web shell and tooling
 
-**Status:** Todo · **Dependencies:** None
+**Status:** In progress · **Dependencies:** None
 
 **Acceptance:** Create apps/web with Next.js, TypeScript, Tailwind; document actual install/dev/lint/typecheck/build commands and lockfile. Add private access baseline and empty session UI. Build and checks succeed.
+
+**Handoff:** Branch `feat/WEB-001-web-shell`; implementation commit is the WEB-001 bootstrap commit containing this entry. Scaffold, single-owner access, unit/production tests, CI, lockfile and setup documentation are implemented. Builder development run: `npm run check` exited 0 after approved escalation for test IPC/loopback sockets: lint and typecheck passed, 3 unit tests passed, Next 16.3.4 production build passed, 2 production HTTP tests passed (0 skipped). Initial sandbox run passed lint/typecheck then hit IPC EPERM; initial ESLint 10 was incompatible with the React plugin, so compatible 9.39.5 is pinned without disabling rules. Current lockfile came from a fresh manifest-only install; independent `npm ci` is still required. These are builder observations, not independent certification. No scope change to later WEB tasks. Agent-loop remains absent/disabled; real adapters are unresolved. Next step: separate checker reviews the clean implementation commit and independently runs `npm ci` and `npm run check`; only then record completion evidence. Remote CI and owner HTTPS/credentials remain setup requirements.
 
 ## WEB-002 — Short recording vertical slice
 

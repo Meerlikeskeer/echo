@@ -25,6 +25,6 @@ Read `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DECISIONS.md`,
 - Run checks relevant to the change; report exactly what ran and what could not run. Add behavioral tests for risky logic (retries, overlap stitching, offline recovery, deletion guards). Do not fabricate passing tests.
 - Update architecture and ADRs when boundaries or behavior change. Keep the task tracker current. No hardware implementation in the web phase.
 
-## Initial repository state
+## Foundation state (historical)
 
-This foundation contains documentation and an environment template only. No install/build/test commands exist yet; WEB-001 must establish and document them.
+The initial foundation contained documentation and an environment template only. WEB-001 establishes the install/build/test commands documented in README.md; consult TASKS.md for current verification status.

@@ -1,6 +1,6 @@
 # Architecture
 
-## Planned layout
+## Layout (only apps/web is implemented)
 
 ```text
 apps/web/                 Next.js + TypeScript + Tailwind UI and server endpoints
@@ -60,3 +60,9 @@ Authenticate deployed access, scope sessions and storage to their owner, use pri
 ## Retention
 
 Run deletion as a guarded, auditable job defined by `REQUIREMENTS.md`. Check every guard again immediately before deleting each copy. A verified copy must be independent of the deletion target and remain available after deletion; do not delete the sole remaining verified copy. Storage pressure may trigger early eligible eviction only after warnings and all guards pass. Failed verification or processing blocks deletion. Persist deletion outcomes for retry without retaining sensitive content in logs.
+
+## WEB-001 access and verification boundaries
+
+`apps/web/src/proxy.ts` applies a fail-closed HTTP Basic gate to every route, including assets and RSC. `src/lib/access.ts` checks server configuration and exact credentials using constant-time digest comparison. The server page also calls the server-only `requireOwnerAccess` guard independently; future endpoints, actions, and data access must call the guard at their own boundary. There is no development bypass. This is a single-owner shell, not a multi-user identity system. No data store or external SDK exists. Server credentials are never passed to components.
+
+Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and a real production HTTP smoke suite back PR CI. Tailwind compiles locally through PostCSS with system fonts; builds do not need a font service. See ADR-006 and README for limitations and disabled agent-loop requirements.
