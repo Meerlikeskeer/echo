@@ -25,9 +25,7 @@ next-env.d.ts
 
 # Logs, local data, recordings and databases
 *.log
-recordings/
-!apps/web/src/app/api/recordings/
-!apps/web/src/app/api/recordings/route.ts
+/recordings/
 uploads/
 local-data/
 *.wav

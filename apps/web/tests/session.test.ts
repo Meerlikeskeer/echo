@@ -3,12 +3,26 @@ import { test } from "node:test";
 import { captureSession, type CaptureRuntime } from "../src/lib/recording/capture";
 import { checksum, isAudioChunk, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
 
+type FakeRecorder = {
+  mimeType: string;
+  state: RecordingState;
+  ondataavailable: ((this: FakeRecorder, event: BlobEvent) => void) | null;
+  onstop: ((this: FakeRecorder, event: Event) => void) | null;
+  onerror: ((this: FakeRecorder, event: Event) => void) | null;
+  start(): void;
+  stop(): void;
+};
+
 function harness(overlapMs = 1000, stopThrows = false) {
   let now = 0;
   let released = 0;
   let counter = 0;
   const timers = new Map<number, { at: number; callback: () => void }>();
-  const recorders: MediaRecorder[] = [];
+  // The double is typed structurally rather than cast to MediaRecorder: the DOM
+  // type declares `state` readonly, so a cast makes the recorder unable to
+  // drive its own state, and `onerror` demands an ErrorEvent the test has no
+  // reason to construct.
+  const recorders: FakeRecorder[] = [];
   const io: CaptureRuntime = {
     now: () => now,
     schedule(callback, delay) { const id = ++counter; timers.set(id, { at: now + delay, callback }); return id as unknown as ReturnType<typeof setTimeout>; },
@@ -24,9 +38,9 @@ function harness(overlapMs = 1000, stopThrows = false) {
           this.ondataavailable?.call(this, { data: new Blob([`complete-container-${index}`]) } as BlobEvent);
           this.onstop?.call(this, new Event("stop"));
         },
-      } as MediaRecorder;
+      } satisfies FakeRecorder;
       recorders.push(recorder);
-      return recorder;
+      return recorder as unknown as MediaRecorder;
     },
   };
   const stream = { getTracks: () => [{ stop() { released++; } }] } as unknown as MediaStream;
