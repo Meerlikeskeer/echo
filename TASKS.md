@@ -24,6 +24,18 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 **Rationale:** REQ-009 makes self-hosted deployment an architectural baseline, but nothing verifies it. Proving parity is cheapest now, while the application is a single page and an access proxy, and before WEB-004/WEB-005/WEB-010 introduce queues, scheduled work and object storage — the point at which platform-specific primitives would otherwise be adopted silently. Must not weaken any existing check.
 
+## ENG-003 — Shared status file and reading map
+
+**Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
+
+**Acceptance:** Give every session — Codex, Claude Code, or human — one short file to read first, so work can begin without loading the whole repository. `STATUS.md` carries current task state, the verification baseline with real exit codes and counts, what does and does not exist, and a reading map routing each kind of task to the few documents that answer it. `AGENTS.md`, `CLAUDE.md` and `README.md` route through it, and updating it in the same commit as any status or verification change is a stated rule.
+
+**Rationale:** The previous instruction was to read `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DECISIONS.md` and `TASKS.md` before changing behavior — roughly 50 KB of prose ahead of every task, which is the main reason a session exhausts its context before finishing. `STATUS.md` is explicitly a cache, not a competing source of truth: the owning document wins any disagreement and the stale summary gets fixed.
+
+**Also in this change:** `apps/web/next.config.ts` sets `agentRules: false`, because `next dev` was generating a second `apps/web/AGENTS.md` and `apps/web/CLAUDE.md` on every start — a competing instruction file that reappeared as an uncommitted change after each run. `next-env.d.ts` is now gitignored, matching the Next.js default, because `next dev` and `next build` write different contents into that tracked file.
+
+**Handoff:** committed with the WEB-002 branch rather than on its own, since it documents the state that branch creates. Verification is the WEB-002 run recorded below and in `STATUS.md`.
+
 ## WEB-001 — Web shell and tooling
 
 **Status:** Done (implemented, independently verified, and merged into `main`) · **Dependencies:** None

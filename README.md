@@ -6,6 +6,7 @@ Private-first, web-first AI note-taking: capture conversations and quick thought
 
 ## Start here
 
+- **[Status](STATUS.md): current task state, the verification baseline, and a reading map. Read this first — it exists so a session can start work without loading the whole repository.**
 - [Project context](PROJECT_CONTEXT.md): scope, priorities, and handoff context.
 - [Requirements](REQUIREMENTS.md): product behavior and safety constraints.
 - [Architecture](ARCHITECTURE.md): data flow, package boundaries, and provider contracts.
@@ -15,7 +16,7 @@ Private-first, web-first AI note-taking: capture conversations and quick thought
 - [Claude Code entry point](CLAUDE.md): points to the same shared rules.
 - [Agent workflow](AGENT_WORKFLOW.md): the bounded builder/checker controller and why it stays disabled.
 
-Repository documentation is authoritative over prior chat context. Keep decisions and implementation synchronized through reviewed commits.
+Repository documentation is authoritative over prior chat context. Keep decisions and implementation synchronized through reviewed commits, and keep [STATUS.md](STATUS.md) current in the same commit as any change to task status or verification.
 
 ## Technology stack (summary)
 
