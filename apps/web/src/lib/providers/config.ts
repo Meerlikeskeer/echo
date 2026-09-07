@@ -31,7 +31,7 @@ const read = (env: Environment, name: string) => env[name]?.trim() ?? "";
 
 // Problems name environment variables and never quote their values, so this
 // output is safe to log at startup and to show the authenticated owner.
-function readPort(env: Environment, port: ProviderPort, problems: string[]): PortSettings | null {
+export function readPort(env: Environment, port: ProviderPort, problems: string[]): PortSettings | null {
   const names = VARIABLES[port];
   const adapter = read(env, names.adapter);
   if (!adapter) {

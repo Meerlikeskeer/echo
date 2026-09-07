@@ -149,7 +149,7 @@ What exists today, after integrating DOC-001, ENG-001 and WEB-001 into `main`:
 - Verification: ESLint, strict TypeScript, unit tests, a real production build, and production HTTP tests, aggregated by `npm run check` and run in GitHub Actions.
 - `scripts/agent_loop.py`: the ENG-001 bounded builder/checker controller, with its own Python tests. Its automated feature loop is deliberately **disabled** (`agent-loop.json` has `"ready": false`) and blocks before spending model tokens.
 
-What does **not** exist yet: sessions, chunking, overlap stitching, incremental processing, persistence of any kind (a recording exists only for the lifetime of the request that carries it), offline queueing, history, diarization, research, reminders, background processing, and hardware. No database, object storage, or production authentication is wired up. Everything in the sections below beyond `Current implementation state`, `Technology Stack`, `WEB-001 access and verification boundaries` and `WEB-002 recording slice boundaries` describes planned design, not shipped behavior.
+WEB-003 adds browser-memory sessions and complete playable chunk capture on the feature branch, pending full verification. See its boundaries below. Overlap stitching, incremental processing during capture, persistence, offline queueing, history, diarization, research, reminders, background processing and hardware still do not exist. No database, object storage or production authentication is wired up.
 
 ## Layout (only apps/web is implemented)
 
@@ -219,7 +219,7 @@ Run deletion as a guarded, auditable job defined by `REQUIREMENTS.md`. Check eve
 
 ## WEB-002 recording slice boundaries
 
-What the shipped slice does and does not guarantee:
+Historical WEB-002 behavior; WEB-003 supersedes the one-clip capture boundary below:
 
 - **One clip per request.** The browser records a single 30–60 second clip (auto-stopped at 60 seconds), posts it once to `POST /api/recordings`, and renders the response. There is no session, no chunking, no retry queue, and nothing is persisted on the server.
 - **Both provider ports carry two adapters.** `openai-compatible` speaks the ADR-009 wire formats; `fixture` returns deterministic canned output, performs no I/O, and is what the test suite uses, because the acceptance criteria forbid tests that need real microphone audio.
@@ -228,6 +228,18 @@ What the shipped slice does and does not guarantee:
 - **Disclosure is derived from data.** Each provider exposes a machine-readable disclosure descriptor; the REQ-009 external-processor notice is rendered from it. Retention is reported as `unknown` for any remote endpoint, because Echo has no way to confirm a vendor setting yet.
 - **Configuration fails closed at startup**, the way the access gate does: incomplete provider configuration is reported once at boot by variable name, disables the recorder in the UI, and makes the endpoint answer 503.
 - **The endpoint guards itself.** `POST /api/recordings` calls `requireOwnerAccess` at its own boundary rather than relying on Proxy remaining in place, and transcript and model text are rendered as escaped React text nodes.
+
+## WEB-003 session and capture boundaries
+
+- A session and its chunks live in browser memory only. Each chunk carries stable session/chunk identifiers, sequence, monotonic session offsets, measured overlap, actual codec, byte count and SHA-256 checksum. Capture completion is separate from processing success; failures retain available clips.
+- Independent MediaRecorder instances each produce one complete container. Start the next recorder before stopping the previous one; the owner can select zero, one or two seconds of overlap. Default chunk duration is 30 seconds and session capture remains capped at one minute. Timers can be delayed by browser suspension; metadata records actual boundaries and validation exposes gaps/invalid capture instead of claiming continuity.
+- Once capture stops, process chunks sequentially through the existing authenticated endpoint; stop automatic processing on the first failed request and keep each successful chunk result separately. Manual retries preserve metadata. There is no server-side durable deduplication or background retry queue yet. Overlapping text is deliberately not stitched (WEB-006).
+- The existing endpoint accepts optional strict chunk metadata, verifies bytes/codec/checksum/duration and passes the start offset into the provider port. Legacy single-clip requests remain valid. No new endpoint or vendor-shaped domain fields are introduced.
+- Playback uses complete browser blobs with object URLs released on unmount. This is not a durable or verified remote copy. Browser decoding, mobile capture and full repository verification remain pending; synthetic tests validate timing/control flow only.
+
+## ENG-005 diagnostic boundaries
+
+`npm run doctor` is an opt-in server-side command, excluded from `npm run check`. It loads the owner's local configuration for normal use and makes one authenticated GET models request per remote port, with a ten-second deadline and redirects disabled. Fixtures bypass file loading when both ports are explicitly configured as fixture and make no request. Responses and exceptions are never printed; output contains fixed explanations and variable names. A successful probe certifies credential acceptance at that endpoint only, not inference or configured model access. The implementation session used synthetic configuration only.
 
 ## WEB-001 access and verification boundaries
 

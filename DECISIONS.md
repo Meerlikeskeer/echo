@@ -140,6 +140,16 @@ A different and real risk was identified instead. REQ-009 makes self-hosted depl
 - Should a future requirement genuinely demand a Vercel-specific primitive, this ADR is amended rather than bypassed.
 - This decision costs little today and is the only moment where it is nearly free.
 
+## ADR-011 — Prototype playable chunk capture
+
+**Status:** Implemented on feature branch; browser validation and owner review pending · **Date:** 2026-09-06 · **Task:** WEB-003
+
+**Context:** Arbitrary MediaRecorder data events are not independently playable audio files. WEB-003 needs complete chunks and explicit overlap without selecting storage or workers.
+
+**Decision:** Rotate independent recorders over one stream, briefly running both during overlap. Preserve actual monotonic offsets, ordering, codec and checksums in browser-memory metadata. Keep the one-minute prototype cap. After stopping, process each chunk through the existing guarded endpoint and retain separate results; stop on processing failure. Storage, durable deduplication, incremental processing and overlap stitching remain later tasks. ENG-005 uses a separate models-list authentication probe with no inference content.
+
+**Consequences:** Overlap consumes extra encoding work and duplicates speech until WEB-006. Browser scheduling and simultaneous encoder support require actual browser validation before this task can be marked complete. No database, storage, authentication, provider or hosting decision changes.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.

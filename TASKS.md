@@ -128,11 +128,46 @@ It exposed one bug, fixed in the same branch. This wire format identifies audio 
 
 **Next step:** owner reviews this branch and confirms ADR-009/ADR-010 acceptance; run the manual live-vendor and browser checks above; then merge to `main`. WEB-003 follows.
 
+## ENG-005 — Provider configuration doctor
+
+**Status:** Implemented; required verification blocked · **Branch:** `feat/WEB-002-recording-slice`
+
+**Acceptance:** `npm run doctor` makes one cheap authenticated request per configured remote port, reports pass/fail and relevant variable names without exposing credentials, runs fixture adapters offline, and remains outside `npm run check`.
+
+**Scope:** GET models probes authenticate without inference or audio; they do not certify model access. Independent port validation, ten-second timeouts, no redirects, body disposal and fixed error text. The command loads local server configuration for owner use; this development session does not read that file or run a real-key probe.
+
+**Handoff (2026-09-06):** Uncommitted changes on base commit `56346ab`; Git staging cannot create `.git/index.lock` (`EPERM`), including escalation. Four synthetic doctor tests pass through the independent fallback runner; the fixture command entrypoint reports PASS for both ports, exit 0, without loading local configuration. Focused strict typecheck passes. Required verification remains blocked as detailed in WEB-003 below. Groq key replacement remains owner work. Next: restore dependencies, run `npm run doctor` with explicit fixture configuration through npm, and finish the full verification gate. No real key was read or tested in this session.
+
 ## WEB-003 — Session and playable chunk model
 
-**Status:** Todo · **Dependencies:** WEB-002
+**Status:** Implemented; full verification and browser acceptance blocked · **Dependencies:** WEB-002 (owner authorized proceeding before merge on 2026-09-06)
 
 **Acceptance:** Implement timed ordered chunk metadata and independently decodable chunks with configurable overlap. Validate boundary capture, sequence, checksum and codec behavior on selected browsers.
+
+### Handoff (2026-09-06)
+
+- **Branch/commit:** `feat/WEB-002-recording-slice`; uncommitted changes on `56346ab`. Scoped `git add` failed to create `.git/index.lock` (`EPERM`), including an escalated attempt. No commit, merge or push performed.
+- **Scope:** Browser-memory session/chunk identities, sequence, monotonic boundaries, measured overlap, codec/size/SHA-256 metadata; independent recorder containers with configurable overlap; playback and sequential processing after stop, with separate results and preserved clips on failure. Existing endpoint validates optional metadata/checksum and passes real session offsets to adapters. Architecture Decision Record ADR-011 documents this prototype strategy, pending browser validation and owner review. No new infrastructure, credential handling changes to ProviderError, or activation of the bounded loop.
+- **Source recovery:** Existing `apps/web/src/app/api/recordings/route.ts` was ignored by the broad `recordings/` rule and absent from Git. Narrow source exceptions now include it; no recording data is added.
+- **Independent review:** Fixed full-overlap terminal chunks, recorder callback typing, failure settlement, unexpected stop notification, object URL lifecycle, and stopping processing after HTTP failure. Nine synthetic session tests cover ordering, checksums, overlap/zero-overlap boundaries, repeated stop, errors and invalid metadata. One new production HTTP test covers checksum rejection and session offsets; it has not run.
+- **Required checks actually attempted:** `npm ci` exit 255 (`EPERM` removing `apps/web/node_modules/.bin`), including a repeated escalated attempt with the same result. `npm run check` exit 127 (`eslint` missing), so later stages did not run. `python3 -m unittest discover -s tests` exit 1 (Python 3.9 cleanup/error-reporting recursion). `/Users/meermathur/.local/bin/python3.12 -m unittest discover -s tests` exit 1: 16 tests, 16 errors caused by denied temporary-directory cleanup. `npm install --ignore-scripts --package-lock=false --cache /private/tmp/echo-npm-cache` was interrupted, exit 130, after no output; dependencies remain incomplete. No verification rules were weakened.
+- **Partial evidence:** Independent checker ran 41 non-React tests, all passed, and fixture doctor entrypoint, both ports passed (exit 0). Focused strict TypeScript check below passed. Direct ESLint exited 7 (missing package metadata), full TypeScript exited 2 (missing dependencies), and `node --import tsx --test apps/web/tests/*.test.ts apps/web/tests/*.test.tsx` exited 1 before tests loaded. These are not substitutes for the required gate. Prior floors remain 33 unit / 4 production HTTP / 16 Python tests; none removed. New suite defines 46 unit and 5 production HTTP tests, not yet fully executed.
+- **Browser blocker:** Safari was available, but could not open a generated local synthetic-audio probe; starting a loopback HTTP server was denied (`EPERM`). No independent decoding or mobile-browser pass is claimed. The probe artifact is `/private/tmp/echo-browser-f6tElS/standalone.html` (temporary, not a handoff dependency).
+- **Next:** Restore dependencies and directory/socket permissions, run all three required root commands, then validate actual decoding and boundary capture in Safari and Chromium with generated audio and test mobile capture before marking WEB-003 complete. Review/merge remains owner-controlled. Durable retry deduplication, offline storage and stitching remain WEB-004 onward.
+
+Reproducible partial test command (no real environment or microphone input):
+
+```sh
+node - <<'NODE'
+const ts = require('./node_modules/typescript/lib/typescript.js');
+const fs = require('node:fs');
+require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }}).outputText, filename);
+for (const filename of fs.readdirSync('apps/web/tests').filter(n => /\.test\.ts$/.test(n))) require('./apps/web/tests/' + filename);
+NODE
+node node_modules/typescript/bin/tsc --noEmit --strict --skipLibCheck --target ES2022 --moduleResolution bundler --module ESNext --lib ES2022,DOM apps/web/src/lib/recording/capture.ts apps/web/src/lib/recording/session.ts apps/web/src/lib/providers/doctor.ts
+```
+
+For the fixture CLI fallback, use the same hook with the last line replaced by `require('./apps/web/scripts/doctor.ts');` and prefix `node` with `TRANSCRIPTION_PROVIDER=fixture TRANSCRIPTION_MODEL=test LLM_PROVIDER=fixture LLM_MODEL=test`. Normal owner use is `npm run doctor`; it reads local server configuration. A passing models probe does not prove model-specific inference access.
 
 ## WEB-004 — Durable offline queue
 
@@ -215,4 +250,3 @@ Conflicts resolved in `AGENTS.md`, `PROJECT_CONTEXT.md`, `README.md` and `DECISI
 ## Handoff template
 
 For an active/completed task record: task ID; branch and commit; scope changed; checks and outcomes; blockers/open decisions; next step. Keep credentials and real recording content out of handoffs.
-

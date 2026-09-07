@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 
 const username = "synthetic-owner";
@@ -18,6 +19,20 @@ const BLANK_PROVIDERS = {
   LLM_PROVIDER: "", LLM_BASE_URL: "", LLM_API_KEY: "", LLM_MODEL: "",
 };
 const FIXTURE_PROVIDERS = { ...BLANK_PROVIDERS, TRANSCRIPTION_PROVIDER: "fixture", TRANSCRIPTION_MODEL: "fixture-transcribe", LLM_PROVIDER: "fixture", LLM_MODEL: "fixture-notes" };
+
+test("chunk uploads validate checksum and normalize transcription into session time", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    const metadata = { sessionId: "synthetic-session", id: "synthetic-chunk", sequence: 1, startMs: 29000, endMs: 70000, overlapMs: 1000, mimeType: "audio/webm;codecs=opus", size: 2048, checksum: createHash("sha256").update(new Uint8Array(2048)).digest("hex") };
+    const body = syntheticClip(); body.append("chunk", JSON.stringify(metadata));
+    const response = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.chunk, metadata);
+    assert.ok(result.transcript.segments[0].startMs >= 29000);
+    const invalid = syntheticClip(); invalid.append("chunk", JSON.stringify({ ...metadata, checksum: "0".repeat(64) }));
+    assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: invalid })).status, 400);
+  });
+});
 
 async function withServer({ configured, providers = BLANK_PROVIDERS }, run) {
   const socket = createServer();
