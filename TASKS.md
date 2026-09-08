@@ -376,6 +376,24 @@ Error: ENOENT: no such file or directory, open
 - **Not verified:** that Vercel now builds. Only a deployment shows that, and the CLI cannot run from an agent sandbox.
 - **If it still fails**, the next suspect is the project's **Root Directory** setting, which lives in Vercel's dashboard rather than in Git and so is invisible from here. Get the build log again before changing anything; two diagnoses in this task have already been made without one, and one of them was wrong.
 
+## ENG-013 — Name Vercel Deployment Protection instead of failing with `302 !== 401`
+
+**Status:** Done; **verified against the live deployment** · **Branch:** `eng/ENG-013-deployment-protection`, off `main` @ `53c0851` · **Decisions:** none changed
+
+**What the first real run of `npm run test:deployed` found.** The deployed origin answered **302**, not 401, and redirected anonymous requests to `https://vercel.com/sso-api`. **Vercel Deployment Protection is enabled, so Echo's own access gate is never reached.** Access to the deployment is controlled by the owner's Vercel account rather than by `ECHO_OWNER_USERNAME` / `ECHO_OWNER_PASSWORD`, and every later assertion in the script would have been testing Vercel's login page rather than Echo.
+
+**This is the check doing its job.** It is the same class of finding ENG-010 was built for — the platform answering in front of the application, invisible to every suite that runs on loopback — and it is the second one this script has caught before a human did.
+
+**Change.** `scripts/deployed-smoke.mjs` now detects a 3xx to Vercel's SSO (by `location` or the `_vercel_sso` cookie) before asserting, and exits 1 naming the cause, the consequence and the fix. A bare `302 !== 401` sends the reader to `proxy.ts`, which is not where the problem is.
+
+**Owner action, not a code change:** Vercel dashboard → Project → Settings → **Deployment Protection** → turn **Vercel Authentication** off, then re-run the check. Echo gates every path itself with no exclusions; that gate is what the deployment is supposed to be protected by, and it cannot be verified while Vercel's own login sits in front of it.
+
+### Handoff
+
+- **What changed:** `scripts/deployed-smoke.mjs`, `TASKS.md`, `STATUS.md`. No application source.
+- **Verified against the real origin** at `https://echo-73alocfwt-…vercel.app`: the new branch fires and prints the diagnosis instead of an assertion trace. Locally `npm run check` exit 0 — 72 unit, 7 production HTTP, 4 self-host parity.
+- **Still outstanding:** the deployed check has **not** completed a full pass. It stops at this first gate and will keep doing so until Deployment Protection is off. The CDN static-asset question ENG-010 exists to answer is therefore still unanswered.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
