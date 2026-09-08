@@ -8,6 +8,8 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 ## In flight
 
+**WEB-004 — durable offline queue, in progress on `feat/WEB-004-durable-queue`, based on `main` @ `a032a01`.** Resuming owner request: no earlier WEB-004 branch or implementation found locally or in fetched branches. First record browser-local storage ADR, then persist/recover existing chunk identities, integrate retries and diagnostics, and verify native IndexedDB plus failure cases. Implementation and all verification are not done yet. WEB-003 browser measurements below are evidence to reuse, not re-derive. WEB-004 must remain pending owner acceptance.
+
 **Everything through ENG-007 is merged.** `main` is at `3d0e87e` and carries ADR-009 through ADR-011, WEB-002, ENG-002, ENG-003, ENG-005, ENG-006, WEB-003 and ENG-007. `main` had been fourteen commits behind; that is resolved, and the pull request workflow exists so it cannot recur.
 
 **The container image is verified.** On 2026-09-08 the `selfhost-container` CI job built the image and its smoke check passed — the first confirmed build of Echo's Docker image, and the last open item on ENG-002.
