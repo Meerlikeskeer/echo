@@ -2,17 +2,17 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `eng/ENG-010-deploy-hosted-origin` · **Base:** `main` @ `6cee6fd`
+**Updated:** 2026-09-08 · **Branch:** `docs/DOC-002-status-after-eng-010` · **Base:** `main` @ `318c356`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
-**ENG-010 — implemented and verified as far as an agent can verify it. On `eng/ENG-010-deploy-hosted-origin`, off `main` @ `f234040`. Nothing is deployed; the first deployment is the owner's step.** This is the task ADR-013 put ahead of mobile: nothing is deployed, so nothing outside the machine running Echo has ever reached it, and the `crypto.subtle` secure-context gap has no fix until a real certificate exists.
+**ENG-010 — DONE and merged** (PRs #11 and #12, `main` @ `318c356`). `vercel.json`, `scripts/deployed-smoke.mjs` and `npm run test:deployed` are on `main`, with the provisioning runbook in `README.md` → *Deployment*. ADR-014 was accepted mid-task: `git.deploymentEnabled` is `false`, so a push builds nothing and deploying is always an explicit command. **Merged and deployed are separate states** — check which commit is live before concluding anything from a deployed origin.
 
-**Scope.** Make a deployment reproducible from the repository rather than from a dashboard click-path, make "it is deployed" a check rather than a claim, and — per **ADR-014**, decided by the owner mid-task — keep deploying an explicit command rather than a consequence of pushing. Deploy-on-push would spend a finite free-plan build allowance on ordinary branch activity; `vercel.json` disables it, so *merged* and *deployed* are now separate states. Three deliverables: a committed `vercel.json` so the build is defined in version control; `scripts/deployed-smoke.mjs`, which verifies a live origin over HTTPS without printing credentials; and a README runbook naming the exact provisioning steps and environment variables. No new dependency, framework, host or storage decision — ADR-008 and ADR-010 already govern this and neither changes.
+**Deployment state, 2026-09-08 — provisioning started, nothing deployed yet.** The Vercel project exists and this checkout is linked to it (`.vercel/project.json`, project `echo`). The owner set all ten environment variables for **Production and Preview**: `ECHO_OWNER_USERNAME`, `ECHO_OWNER_PASSWORD`, and the `TRANSCRIPTION_*` and `LLM_*` groups. **No deployment has been created**, so no hosted origin exists and `npm run test:deployed` has still never met a CDN or a real certificate. Remaining, and owner-only because the CLI needs their account: `npx vercel` for a preview, `npm run test:deployed -- <preview URL>`, then `npx vercel --prod` and the check again. An agent cannot run these — `npx` fails from an agent sandbox on npm cache permissions, separately from the account question.
 
-**What this task cannot do.** Provisioning needs the owner's Vercel account and the owner's secrets. An agent cannot run `vercel login`, create the project, or set `ECHO_OWNER_PASSWORD`. So this task ends with everything the owner needs; the first real deployment and the first `npm run test:deployed` against a hosted URL are the owner's step, and until they happen **Echo is still not deployed.** The runbook is `README.md` → *Deployment* → *Provisioning runbook*, six steps.
+**WEB-004 native browser acceptance — in flight elsewhere.** `test/WEB-004-browser-acceptance` (draft PR #13) records a blocked attempt: no native PASS was observed, Safari could not connect to the development server and Chrome automation refused actions. Nothing there indicates a code defect, and no application source was changed. The four acceptance steps in the WEB-004 handoff are owner checks by design; the development server needs `ECHO_OWNER_USERNAME`, a 32+ character `ECHO_OWNER_PASSWORD` and `TRANSCRIPTION_PROVIDER=fixture LLM_PROVIDER=fixture`, which requires no real credentials.
 
 **The risk this exists to catch, and proof the check is not vacuous.** `apps/web/src/proxy.ts` deliberately gates every path with no exclusions, and `scripts/production.test.mjs` proves that against `next start`. A hosted platform serves `/_next/static` from a CDN, which may answer before the proxy runs. If it does, compiled assets are public on the deployed origin while every local check stays green. `deployed-smoke.mjs` fetches each linked asset unauthenticated and fails if any returns 200 — and on 2026-09-08 that assertion was **demonstrated to fire** against a deliberately broken origin: a local proxy standing in for a CDN edge, serving `/_next/static` without credentials and passing everything else through. The script failed on the first asset with the intended message. Five other negative controls behaved correctly; see the verification snapshot.
 
@@ -63,7 +63,7 @@ Echo is a private-first web AI note taker. Everything through WEB-004 is merged 
 | ENG-008 Secure-context diagnosis | **Done** — merged; its `dev:lan` half was withdrawn by ADR-013 | `main` |
 | ENG-009 Withdraw LAN exposure; pause mobile | **Done** — merged (PR #10); recorded ADR-013 | `main` |
 | WEB-004 Browser-local durable queue | Merged (PR #9); **native browser acceptance outstanding** and it is the only thing still open | `main` |
-| ENG-010 Reproducible deployment and deployed-origin check | Implemented and locally verified; **nothing is deployed** — provisioning is the owner's step | `eng/ENG-010-deploy-hosted-origin` |
+| ENG-010 Reproducible deployment and deployed-origin check | **Done** — merged; project linked and variables set, but **nothing is deployed yet** | `main` |
 
 
 ## What exists today
@@ -81,7 +81,7 @@ Echo is a private-first web AI note taker. Everything through WEB-004 is merged 
 
 ## What does not exist
 
-Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts. **Nothing is deployed:** no Vercel project, no environment variables, no hosted origin — ENG-010 added the procedure and the check, not a running service.
+Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts. **No hosted origin exists.** The Vercel project is created and its Production and Preview environment variables are set, but no deployment has been run, so there is still nothing to browse to and nothing for `npm run test:deployed` to check.
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 
@@ -89,17 +89,17 @@ Overlap stitching, incremental processing during capture, history, speaker label
 
 ## Verification snapshot
 
-Run from the repository root. **Rows below are the ENG-010 run after merging `main` @ `6cee6fd` (which brought WEB-004) into this branch: 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** Every command was executed here; nothing is copied forward.
+Run from the repository root. **Rows below were re-run on merged `main` @ `318c356` — not copied forward from the ENG-010 branch: 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6.**
 
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
 | `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **69 unit tests, 69 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run test:deployed -- http://127.0.0.1:3121` | 0 | Against a local `next start` production server built from this merged tree: gate challenged, wrong credentials refused, page served to the owner, **9 compiled assets each refused unauthenticated and served to the owner**, **both `/diagnostics/capture` and WEB-004's `/diagnostics/queue` 404 for the authenticated owner**, `POST /api/recordings` refused anonymously and 503 to an empty authorized body. Noted providers unconfigured and that loopback does not verify transport |
+| `npm run test:deployed -- http://127.0.0.1:3131` | 0 | Against a local `next start` production server built from `main`: gate challenged, wrong credentials refused, page served to the owner, **9 compiled assets each refused unauthenticated and served to the owner**, **both `/diagnostics/capture` and WEB-004's `/diagnostics/queue` 404 for the authenticated owner**, `POST /api/recordings` refused anonymously and 503 to an empty authorized body. Noted providers unconfigured and that loopback does not verify transport |
 | `npm run doctor` (fixture mode) | not run | Not executed for ENG-010; this change touches no provider code |
 | `selfhost-container` CI job | not run locally | Docker is unavailable on this machine; last passed in CI on 2026-09-08 |
-| Against a **hosted** deployment | **not run** | No deployment exists. `vercel.json` has never been built by Vercel and the script has never met a CDN or a real certificate |
+| Against a **hosted** deployment | **not run** | The Vercel project is linked and its variables are set, but no deployment has been created. `vercel.json` has never been built by Vercel and the script has never met a CDN or a real certificate |
 | Native IndexedDB/capture diagnostics (WEB-004) | **not verified** | Inherited from WEB-004 and not this task's to close: no browser has run `/diagnostics/queue` |
 
 **Negative controls — the deployed check was made to fail on purpose, six ways.** A check that has only ever passed proves nothing:
