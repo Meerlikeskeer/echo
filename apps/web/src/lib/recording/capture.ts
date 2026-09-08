@@ -17,11 +17,19 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   if (!runtime && !mimeType) throw new Error("No supported recording codec");
   const io: CaptureRuntime = runtime ?? {
     create: () => new MediaRecorder(stream, { mimeType }),
-    now: () => performance.now(), schedule: setTimeout, cancel: clearTimeout,
+    now: () => performance.now(),
+    // setTimeout and clearTimeout are DOM globals that require `this` to be the
+    // window. Assigned directly as properties they get called as io.schedule(),
+    // making `this` the io object, and every browser throws
+    // "TypeError: Illegal invocation" — which broke capture in every real
+    // browser while every test here passed, because tests inject a runtime and
+    // never construct this object. Keep them wrapped.
+    schedule: (callback, delay) => setTimeout(callback, delay),
+    cancel: (timer) => clearTimeout(timer),
   };
   const origin = io.now();
   const session: Session = { id: crypto.randomUUID(), startedAt: Date.now(), endedAt: null, captureStatus: "recording" };
-  const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout> }[] = [];
+  const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; stopping: boolean; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout> }[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let stopped = false;
   let failed = false;
@@ -34,22 +42,31 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
     timers.add(timer);
   };
   const stopEntry = (entry: typeof entries[number]) => {
-    if (entry.recorder.state !== "inactive") {
-      entry.endMs = elapsed();
+    if (entry.recorder.state === "inactive") return;
+    entry.stopping = true;
+    entry.endMs = elapsed();
+    // The watchdog schedule is inside the guard too. When it threw, the throw
+    // escaped stop() and therefore captureSession itself, turning a capture
+    // failure the caller was meant to observe as captureStatus "failed" into an
+    // uncaught exception. Nothing in here may leave this function.
+    try {
       entry.timeout = io.schedule(() => { failed = true; entry.settle(new Blob()); }, 5000);
-      try { entry.recorder.stop(); } catch { failed = true; entry.settle(new Blob()); }
-    }
+      entry.recorder.stop();
+    } catch { failed = true; entry.settle(new Blob()); }
   };
   function begin() {
     try {
       const recorder = io.create();
       const pieces: Blob[] = [];
-      const entry: typeof entries[number] = { recorder, id: crypto.randomUUID(), startMs: entries.length ? elapsed() : 0, endMs: 0, done: Promise.resolve(new Blob()), settle: () => {} };
+      const entry: typeof entries[number] = { recorder, id: crypto.randomUUID(), startMs: entries.length ? elapsed() : 0, endMs: 0, stopping: false, done: Promise.resolve(new Blob()), settle: () => {} };
       entry.done = new Promise<Blob>((resolve) => {
         entry.settle = (audio) => { if (entry.timeout !== undefined) io.cancel(entry.timeout); resolve(audio); };
         recorder.ondataavailable = (event) => { if (event.data.size) pieces.push(event.data); };
         recorder.onstop = () => {
-          const unexpected = entry.endMs === 0;
+          // An explicit flag, not `endMs === 0`: zero is a legal elapsed time,
+          // so a stop requested in the first millisecond used to be misread as
+          // a recorder crash and failed the whole session.
+          const unexpected = !entry.stopping;
           if (unexpected) { entry.endMs = elapsed(); failed = true; }
           entry.settle(new Blob(pieces, { type: recorder.mimeType }));
           if (unexpected) void stop();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { captureSession, type CaptureRuntime } from "../src/lib/recording/capture";
+import { captureSession, PREFERRED_MIME_TYPES, type CaptureRuntime } from "../src/lib/recording/capture";
 import { checksum, isAudioChunk, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
 
 type FakeRecorder = {
@@ -112,4 +112,57 @@ test("metadata validation detects missing sequence, gap, altered overlap and inv
   }
   assert.equal(isAudioChunk({ ...chunks[0], startMs: NaN }), false);
   assert.notEqual(await checksum(new Blob(["a"])), await checksum(new Blob(["b"])));
+});
+
+test("the default browser runtime keeps setTimeout bound to the global", async () => {
+  // Browsers throw "TypeError: Illegal invocation" when setTimeout is called
+  // with any `this` other than the window. capture.ts once assigned the global
+  // straight onto the runtime object, so io.schedule() called it with `this`
+  // set to the runtime and capture failed in every real browser — while every
+  // test above passed, because they all inject a runtime and never build the
+  // default one. Node does not enforce that rule, so this reproduces it.
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const realMediaRecorder = (globalThis as Record<string, unknown>).MediaRecorder;
+  const boundOnly = (real: (...args: never[]) => unknown) =>
+    function (this: unknown, ...args: never[]) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      return real(...args);
+    };
+
+  class StubRecorder {
+    static isTypeSupported = (type: string) => type === PREFERRED_MIME_TYPES[0];
+    mimeType = PREFERRED_MIME_TYPES[0];
+    state: "inactive" | "recording" = "inactive";
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onstop: ((event: Event) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+    start() { this.state = "recording"; }
+    stop() {
+      this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["complete-container"]) });
+      this.onstop?.(new Event("stop"));
+    }
+  }
+
+  const stream = { getTracks: () => [{ stop() {} }] } as unknown as MediaStream;
+  try {
+    globalThis.setTimeout = boundOnly(realSetTimeout) as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = boundOnly(realClearTimeout) as typeof globalThis.clearTimeout;
+    (globalThis as Record<string, unknown>).MediaRecorder = StubRecorder;
+
+    // No runtime argument: this is the only test that exercises the real one.
+    const capture = captureSession(stream, { chunkMs: 30000, overlapMs: 1000 });
+    // Real elapsed time, because this runtime reads performance.now(). A chunk
+    // stopped in the same millisecond has zero duration, which validateChunkOrder
+    // rejects for good reason.
+    await new Promise((resolve) => realSetTimeout(resolve, 20));
+    const result = await capture.stop();
+    assert.equal(result.session.captureStatus, "stopped");
+    assert.equal(result.chunks.length, 1);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    (globalThis as Record<string, unknown>).MediaRecorder = realMediaRecorder;
+  }
 });

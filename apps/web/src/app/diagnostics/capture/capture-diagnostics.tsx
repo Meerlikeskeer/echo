@@ -58,15 +58,24 @@ async function runCase(context: AudioContext, overlapMs: number, signal: AbortSi
   }
   let capture: ReturnType<typeof captureSession> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Named so a thrown browser error reports which step died. Without it the
+  // caller can only say "something failed", which is worthless in the one tool
+  // whose entire job is diagnosis.
+  let stage = "setup";
   const stop = () => { void capture?.stop().catch(() => {}); };
   try {
+    stage = "install MediaRecorder observer";
     window.MediaRecorder = ObservedRecorder;
+    stage = "start oscillator";
     oscillator.start();
+    stage = "captureSession(): codec negotiation and first recorder";
     capture = captureSession(destination.stream, { chunkMs: CHUNK_MS, overlapMs });
     signal.addEventListener("abort", stop, { once: true });
     if (signal.aborted) stop();
     timer = setTimeout(stop, RUN_MS);
+    stage = "await capture.finished";
     const result = await capture.finished;
+    stage = "decode chunks and recompute checksums";
     const chunks = await Promise.all(result.chunks.map(async ({ audio, metadata }) => {
       let decoded: { pass: boolean; durationMs?: number; samples?: number; sampleRate?: number; channels?: number } = { pass: false };
       try {
@@ -78,6 +87,7 @@ async function runCase(context: AudioContext, overlapMs: number, signal: AbortSi
       return { ...metadata, durationMs: metadata.endMs - metadata.startMs, blobMime: audio.type,
         decoded, freshChecksum, checksumMatches: metadata.checksum === freshChecksum };
     }));
+    stage = "measure recorder windows";
     const windows = observations.slice(1).map((current, index) => {
       const previous = observations[index];
       const stateOverlap = previous.stopCall !== undefined && current.startCall !== undefined
@@ -108,6 +118,14 @@ async function runCase(context: AudioContext, overlapMs: number, signal: AbortSi
     ];
     return { overlapMs, checks, evidence: { sessionDurationMs: result.session.endedAt === null ? null : result.session.endedAt - result.session.startedAt,
       chunkMs: CHUNK_MS, toleranceMs: TOLERANCE_MS, observations, windows, chunks } };
+  } catch (error) {
+    // Re-thrown with the stage attached. The observations collected before the
+    // failure are the useful part, so they travel with it.
+    const described = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    const failure = new Error(`stage "${stage}" threw ${described}`);
+    failure.stack = error instanceof Error && error.stack ? error.stack : failure.stack;
+    (failure as Error & { observations?: Observation[] }).observations = observations;
+    throw failure;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     signal.removeEventListener("abort", stop);
@@ -142,9 +160,12 @@ export function CaptureDiagnostics() {
         let report: Report;
         try {
           report = await runCase(context, overlap, controller.signal);
-        } catch {
+        } catch (error) {
+          const described = error instanceof Error ? error.message : String(error);
+          const trace = error instanceof Error && error.stack ? error.stack.split("\n").slice(0, 6).join("\n") : "";
           report = { overlapMs: overlap, checks: [{ name: "Native capture and validation", pass: false,
-            detail: "Browser API failed; this setting has no complete evidence. No acceptance assertion may be treated as passed." }], evidence: null };
+            detail: `Browser API failed, so this setting has no complete evidence and no acceptance assertion may be treated as passed. ${described}` }],
+            evidence: { failure: described, trace, observations: (error as Error & { observations?: Observation[] })?.observations ?? null } };
         }
         setReports(previous => [...previous, report]);
       }
