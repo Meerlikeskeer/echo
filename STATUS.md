@@ -2,28 +2,26 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `eng/ENG-007-pull-request-workflow` · **Base:** `main` @ `71f0451`
+**Updated:** 2026-09-08 · **Branch:** `feat/WEB-003-browser-acceptance` · **Base:** `main` @ `3d0e87e`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
-**Everything through ENG-002 is merged.** `main` is at `71f0451` and now carries ADR-009, ADR-010, ADR-011, WEB-002, ENG-003, ENG-005, ENG-006, WEB-003 and ENG-002. `main` had been fourteen commits behind; that is resolved, and ENG-007 exists so it cannot recur.
+**Everything through ENG-007 is merged.** `main` is at `3d0e87e` and carries ADR-009 through ADR-011, WEB-002, ENG-002, ENG-003, ENG-005, ENG-006, WEB-003 and ENG-007. `main` had been fourteen commits behind; that is resolved, and the pull request workflow exists so it cannot recur.
 
-**ENG-007 — pull request workflow, in flight on `eng/ENG-007-pull-request-workflow`.** A pull request template and the `AGENTS.md` rules that make agents open pull requests and never merge. **Branch protection itself is owner-applied** — it lives in GitHub settings and cannot be committed. Required approvals must stay at **zero**: GitHub does not allow approving your own pull request, so requiring one deadlocks a single-owner repository. Not done until the owner applies the rule and confirms a direct push to `main` is refused.
+**The container image is verified.** On 2026-09-08 the `selfhost-container` CI job built the image and its smoke check passed — the first confirmed build of Echo's Docker image, and the last open item on ENG-002.
 
-**WEB-003 browser acceptance — Codex is working on it**, on `feat/WEB-002-recording-slice`. Commit `6067b9b` adds `apps/web/src/app/diagnostics/capture/`, a harness that drives the real capture path with synthetic oscillator audio so no microphone permission is needed. Do not edit that branch. As of this writing it was **committed but not pushed**; confirm it reached `origin` before relying on it.
+**WEB-003 browser acceptance — harness implemented, gate verified, browser run outstanding.** `feat/WEB-003-browser-acceptance` carries a development-only, owner-gated `/diagnostics/capture` page built around the shipped `captureSession`, measuring native recorder timing, independent decoding, and metadata and checksum agreement at 0, 1000 and 2000 ms overlap. **No browser has run it yet, so no acceptance is claimed.** Harness code and unit tests are not browser evidence.
 
 **What still blocks WEB-003:**
 
 1. **No browser has ever run the capture path.** The harness above is the fix, but it has not been run and reviewed. The riskiest untested assumption is the relay: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
 2. **Microphone permission and mobile capture cannot be automated** by the synthetic-audio approach. Those stay manual owner checks.
 
-**Two carried-over gaps, neither blocking:**
+**One carried-over gap, not blocking:**
 
 - **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Unreachable today because `dev` and `start` bind `127.0.0.1`. Logged against ENG-002.
-- **The container image has never been built.** The `selfhost-container` CI job exists on `main` as of `71f0451` but has not been observed green. `npm run check` proves the standalone bundle, not the image. Do not describe the container as verified until that job passes.
-
 Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
 
 **Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
@@ -62,20 +60,20 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`. O
 | ADR-009 / ADR-010 provider ports and deployment portability | Accepted, **not on `main`** | `docs/ADR-009-provider-selection` @ `93ec5b5` |
 | WEB-002 Short recording vertical slice | Implemented, verified live, **awaiting owner review** | `feat/WEB-002-recording-slice` |
 | ENG-003 Status file and reading map | Done | `feat/WEB-002-recording-slice` |
-| ENG-002 Self-host parity verification | Merged to `main`; **container image unverified until the CI job is observed green** | `main` |
+| ENG-002 Self-host parity verification | **Done** — merged, and the container image built and passed its smoke check in CI | `main` |
 | ENG-007 Pull request workflow | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
 | ENG-005 Provider doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
-| WEB-003 Session and playable chunk model | Implemented and verified by test; **browser validation outstanding** | `feat/WEB-002-recording-slice` |
+| WEB-003 Session and playable chunk model | Merged to `main`; browser acceptance harness on `feat/WEB-003-browser-acceptance`, **no browser has run it** | `main` + branch |
 
 `feat/WEB-002-recording-slice` is branched from the ADR commit, not from `main`, because ADR-009 and ADR-010 were never merged. Merging WEB-002 merges those two ADRs with it.
 
 ## What exists today
 
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
-- One page — the recorder — and one Route Handler, `POST /api/recordings`.
+- The recorder page, development-only owner-gated `/diagnostics/capture`, and one Route Handler, `POST /api/recordings`.
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
-- A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and three parity tests inside `npm run check` that boot the standalone bundle a container would run. The bundle is verified; **the image itself has never been built** — no Docker in the development environment.
+- A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
 
@@ -85,17 +83,17 @@ Overlap stitching, incremental processing during capture, **saving anything at a
 
 ## Verification snapshot
 
-Run from the repository root. Last run 2026-09-07 on `feat/WEB-002-recording-slice` @ `67212de`, Node 22.23.2 / npm 10.9.8.
+Run from the repository root. Last run 2026-09-08 on `feat/WEB-003-browser-acceptance`, Node 22.23.2 / npm 10.9.8.
 
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **5 production HTTP tests, 5 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **6 production HTTP tests, 6 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
 | `npm run doctor` (fixture mode) | 0 | Both ports PASS; no credential file read |
-| `docker build` / `scripts/container-smoke.mjs` | not run | Docker is not installed in the development environment, and the CI job that would run it is **not committed** — GitHub gates `.github/workflows/` behind a scope agents here do not hold. The job is recorded in the ENG-002 handoff in `TASKS.md` for the owner to add |
+| `selfhost-container` CI job | 0 | **Passed 2026-09-08** — image built, no environment file inside it, gate enforced, page and every compiled asset served from the container. Docker is still unavailable locally, so this is verified only in CI |
 
-Previous green baseline: **33 unit, 4 production HTTP, 16 Python tests**. Every one still exists; ENG-005 and WEB-003 added 13 unit tests and one production HTTP test, and no assertion was removed or relaxed. The 2026-09-06 `EPERM` / `exit 127` snapshot recorded a sandbox failure, not a code failure, and does not reproduce.
+Counts only ever rise: **33 → 46 unit** and **4 → 6 production HTTP**, plus 4 self-host parity tests added by ENG-002. Nothing was removed or relaxed. The WEB-003 harness added the sixth production HTTP test, which asserts `/diagnostics/capture` returns 404 in production even to an authenticated owner. The repeated `EPERM` / `exit 127` snapshots recorded agent sandbox failures, not code failures, and do not reproduce here.
 
 `npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
 
