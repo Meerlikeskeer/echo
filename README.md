@@ -163,3 +163,11 @@ Scaffold API choices follow the official [Next.js installation](https://nextjs.o
 ## Automated builder/checker workflow
 
 See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for the two specialists and orchestrator command. It permits five builder attempts and stops on any regression. Run `python3 -m unittest discover -s tests -v` to verify the controller (16 tests; the controller documents Python 3.10+, and the suite has also been observed passing on 3.9.6). App feature loops remain blocked by `"ready": false` until the real web check adapters and goal acceptance tests are configured.
+
+### Local audio recovery (WEB-004, acceptance pending)
+
+Completed chunks are saved in this browser's IndexedDB before processing. Reopen the same origin and browser to recover them; processing retries while the page is active and online. Results do not delete raw audio. The recorder shows pending/unsaved counts and offers downloads; export unsaved clips before leaving. Browser persistence can be refused, site data can be evicted/cleared, and private browsing is temporary.
+
+The queue has a 64 MiB audio budget and warns below a 4 MiB reserve, sized from Safari's measured ~204 kbps with overlap/headroom. Capacity failure stops capture rather than deleting sole-copy audio. A persistent-storage grant is not an independent backup. Mobile backgrounding, screen lock or force-close can suspend work and lose the unfinished container. No background upload or offline application-shell cache is included: an offline hard navigation must wait for the same origin to become reachable.
+
+Development-only, owner-gated `/diagnostics/queue` runs native IndexedDB tests with synthetic fixtures. Run the storage suite, reload and recover pending clips, then test capture persistence. Expected outputs and remaining physical-device checks are in TASKS.md's WEB-004 handoff. Browser acceptance has not yet been established.

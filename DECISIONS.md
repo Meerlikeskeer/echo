@@ -156,6 +156,24 @@ Validation also established that **overlap cannot be optional**. `MediaRecorder`
 
 The recorder no longer offers zero overlap, and a test asserts every offered value is at least 1000 ms. `captureSession` still accepts `overlapMs: 0`, because the port itself is not wrong — the product choice is. WEB-006 stitching cannot recover audio that nothing recorded, so this must stay a capture-time guarantee rather than a downstream repair.
 
+## ADR-012 — Browser-local durable queue (WEB-004)
+
+**Status:** Accepted for implementation; owner acceptance pending · **Date:** 2026-09-08
+
+**Context:** ADR-003 requires local queuing, but WEB-003 keeps chunks in memory. This resolves only the browser queue candidate in Architecture, not its deliberately open server object/audio storage decision.
+
+**Decision:** Use native IndexedDB, with no dependency. Store each complete Blob, existing AudioChunk metadata and processing state in one transaction keyed by `(sessionId, id)`, with a unique `(sessionId, sequence)` index. Resolve writes on transaction completion, request strict transaction durability, verify checksums before writes and after recovery. Equal offers are idempotent; conflicting identities or sequence slots are rejected. Sort recovered chunks and surface gaps. A capture completion callback persists containers as they finish; failure stops further capture and keeps available audio for export/retry.
+
+**Alternatives:** localStorage is synchronous, string-only and too small for audio; sessionStorage/memory do not survive closed tabs. Cache Storage stores responses but lacks atomic Blob/metadata/state transactions and unique indexes. OPFS fits large files but would need a separate transactional metadata journal. IndexedDB meets this bounded queue's requirements without that complexity. No service, package, server database, object store or background worker is selected. This is portable across Vercel and self-hosted origins; moving origin does not move browser data.
+
+**Capacity and eviction:** Chrome documents an origin ceiling up to 60% of disk, with lower private-mode limits; estimates are advisory and storage pressure can evict best-effort origins ([Chrome guidance](https://web.dev/articles/storage-for-the-web)). Safari 17+ documents up to 60% in browser apps / 15% in embedded apps, with overall limits, pressure and inactivity eviction; persistence is heuristic ([WebKit policy](https://webkit.org/blog/14403/updates-to-storage-policy/)). These are ceilings, not reservations. Request `navigator.storage.persist()` on user recording action and display the actual grant; neither a grant nor a transaction commit protects against user clearing data, device loss or all power failures. Private browsing is temporary. Other engines use their own quota policies; never assume a numeric allowance.
+
+Echo imposes a conservative 64 MiB audio budget and warns with less than 4 MiB remaining (also considering origin estimates). This reserves over two minutes at the measured Safari ~204 kbps, including overlap and headroom, rather than sizing from Chrome's ~128 kbps. Check actual Blob sizes; never rely on bitrate estimates to authorize a write. On QuotaExceededError or aborted writes, stop capture, report local-unsaved audio, preserve prior commits and offer download. Never evict to make space.
+
+**Retry and retention:** Persist pending/attempt/backoff/result state. Serialize drains across same-origin tabs using Web Locks; fail closed for automatic processing when locks are unavailable. Retry while the page is active, after reconnect/reload, with capped backoff. Reuse existing chunk identity; completed local results skip later requests. The stateless endpoint cannot guarantee exactly-once provider execution after a lost HTTP response; retries can repeat processing, but never create a second local chunk/result. No server durable-copy claim is made. All raw Blobs remain local even after HTTP 200; no deletion API is implemented because RET-002 through RET-006 cannot yet be satisfied.
+
+**Limits:** Mobile backgrounding may suspend capture, transactions, timers and network; closed pages cannot upload. Only committed complete containers survive; the active unfinished container can be lost on abrupt termination. An offline hard navigation still needs the application shell available; this task persists data, not an authenticated service-worker shell. Reopen the same origin when reachable to recover. Physical mobile background, termination, disk pressure and private-mode behavior require owner testing.
+
 ## ADR-013 — Echo binds loopback only; mobile waits for a deployed origin
 
 **Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-009 · **Supersedes:** the `dev:lan` half of ENG-008

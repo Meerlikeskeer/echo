@@ -448,9 +448,43 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 ## WEB-004 — Durable offline queue
 
-**Status:** Todo · **Dependencies:** WEB-003
+**Status:** Implemented; native browser/local verification and owner acceptance pending — **NOT Done** · **Dependencies:** WEB-003
 
 **Acceptance:** Persist chunks before upload; recover after reload and disconnect, retry on reconnect without data duplication, expose quota errors and unsynced status. Document mobile background limits.
+
+### Handoff (2026-09-08)
+
+- **Branch/base/PR:** `feat/WEB-004-durable-queue`, from `main` @ `a032a01`; [PR #9](https://github.com/Meerlikeskeer/echo/pull/9), implementation `5e4b9bc`, checker fixes `64ba19b`, documentation handoff in the following commit. All are pushed. Do not merge automatically.
+- **Decision first:** ADR-012 committed as `c31c4de` before code. Native IndexedDB with no new dependency; browser-local storage only, no server object/audio storage choice. Alternatives, browser quota/eviction risks, Safari budget and explicit limits are recorded in DECISIONS.md and ARCHITECTURE.md.
+- **Implemented:** atomic Blob/metadata/state commits; existing `(sessionId, id)` identity and unique session sequence; normalized media types at persistence and HTTP boundaries; checksum verification before save/upload and after recovery; out-of-order recovery with gap notice; bounded reconnect/reload retries under Web Locks; persisted results; explicit local-only/pending/unsaved status, capacity/persistence warnings and audio downloads. Raw audio is never deleted, including after HTTP 200, because RET-002 through RET-006 cannot yet be satisfied.
+- **Collision-sensitive change:** `capture.ts` must invoke persistence at each completed container, because its former design materialized chunks only at session stop. `finished` now waits for those callbacks; failure stops capture and retains available chunks. Existing runtime/timing behavior stays covered. `session.ts` is unchanged.
+- **Independent checker:** found and then confirmed fixes for playback resetting on every IndexedDB refresh, permanent provider failures being retried, and server-side MIME whitespace mismatch. Focused regression tests added; no remaining serious code defect reported at `64ba19b`. The disabled bounded loop was not enabled; this was a manual read-only checker review.
+
+**Required command results, not substituted:**
+
+| Environment / command | Exit | Observed result |
+| --- | --- | --- |
+| Original root `npm ci` | 255 | EPERM removing workspace node_modules/.bin, including escalated retry. |
+| Original root `npm run check` | 127 | Source tracking passed; eslint missing after failed install. Tests/build did not execute. |
+| Original root `python3 -m unittest discover -s tests`, system Python 3.9 | 1 | RecursionError during cleanup, no final count. |
+| Original root same Python command, Python 3.12 selected in PATH | 1 | 16 tests, 16 cleanup errors (rmdir EPERM); not green. |
+| Isolated checkout `npm ci --cache /private/tmp/echo-web004-npm-cache` | 0 | Installed same locked dependencies, 0 vulnerabilities, cleanup warnings. Environment files excluded by policy. |
+| Isolated checkout `npm run check`, final code | 1 | lint/types pass; 68 unit, 68 pass, 0 fail; build EPERM deleting .next/types. HTTP/self-host did not run locally. |
+| CI `npm ci` and `npm run check` | 0 / 0 | [Run 34191686984](https://github.com/Meerlikeskeer/echo/actions/runs/34191686984) on `64ba19b`: 68 unit, 7 production HTTP, 4 self-host parity, all pass; build passes. Container build/smoke job also passes. CI does not certify the Python command. |
+
+**Local dependency repair — resolved 2026-09-09, and it was never a repository problem.** The earlier `EPERM` / exit 255 / exit 127 failures came from an agent session that lost filesystem access to the repository mid-run; the symptom was misread as a corrupt dependency tree. From a healthy session, a plain `npm ci` at the repository root succeeds (373 packages, 0 vulnerabilities) and the full `npm run check` passes including the production build. No dependency manifest or lockfile was ever changed, and the isolated-checkout workaround is no longer needed.
+
+**Native test artifact, not a claimed pass:** `/diagnostics/queue` executes the production IndexedDB adapter in the browser, including Blob roundtrip/checksums, simultaneous duplicate offers, sequence conflict, out-of-order recovery, a quota-budget abort preserving the earlier commit, and abort after native request success. Separate buttons exercise real capture persistence before session stop and pending recovery after page reload. A new production HTTP test ensures the page is unavailable in production; the existing unauthorized route matrix includes it. Safari displayed the page (HTTP 200), but automation lost the page view / returned `elementHasNoFrame` and `noWindowsAvailable`; no native PASS result was observed. Budget injection tests do not certify real disk exhaustion.
+
+**Human still must verify:**
+
+1. On a development server, open `/diagnostics/queue` in Chrome and Safari. Run native storage tests; require all PASS lines. Reload, then select Recover pending clips; require 3 pending chunks with verified checksums. Run Test capture persistence; require a commit before session stop and all completed Blobs recovered. Use synthetic data only.
+2. In the real recorder, record, disconnect, stop and reload/reopen the same origin when reachable. Pending audio must recover; reconnect must process once locally, retain raw Blobs/results and not reset playback every five seconds. Repeat with two tabs and an interrupted response; remote provider work may repeat because no durable server job ledger exists.
+3. Exercise actual browser quota exhaustion/private mode and a mid-recording write failure. Confirm capture stops, previous commits remain, unsaved audio can be downloaded, and no raw copy is automatically deleted. Diagnostic budget/abort tests are only deterministic coverage of that path.
+4. **Deferred, not outstanding (ADR-013).** Physical mobile: microphone Allow/Deny, interruption/background/lock-screen, force-close and reopen, low storage and persistent-storage refusal. Echo no longer binds a non-loopback interface, so no phone can reach it; this moves to its own task against a deployed HTTPS origin and **WEB-004 is not incomplete for lacking it.** The stated limits still hold whenever it is run: only complete committed containers survive, the active container can be lost, timers and uploads stop when suspended or closed, and the application shell is not cached for an offline hard navigation — data recovers when the same origin is available. The former "HTTPS LAN phone certificate trust" owner check is void; ADR-013 removed the LAN server it referred to.
+5. **Done, 2026-09-09.** All required commands were rerun from the original repository root after merging `main` @ `f234040`: `npm ci` exit 0, `npm run check` exit 0 (69 unit, 7 production HTTP, 4 self-host parity, all pass, production build succeeded), `python3 -m unittest discover -s tests` exit 0 (16 tests, OK). The earlier failures were a broken agent sandbox, not a repository defect; see the local-environment note above. WEB-004 remains pending acceptance on native-browser evidence alone.
+
+**Next:** owner reviews PR #9 and completes the native/manual checks above. No CI change is needed; no workflows were edited. No server copy, retention deletion, background upload or exactly-once provider execution is claimed.
 
 ## WEB-005 — Incremental upload and transcription
 

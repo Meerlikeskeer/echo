@@ -1,45 +1,49 @@
 # Status
 
-**Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
+**Read this file first, then follow the reading map.** Repository source documents win over this cache; current owner instructions can change scope.
 
-**Updated:** 2026-09-08 · **Branch:** `eng/ENG-009-withdraw-lan-exposure` · **Base:** `main` @ `a032a01`
+**Updated:** 2026-09-09 · **Branch:** `feat/WEB-004-durable-queue` · **Base:** `main` @ `f234040`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
-**Everything through ENG-007 is merged.** `main` is at `3d0e87e` and carries ADR-009 through ADR-011, WEB-002, ENG-002, ENG-003, ENG-005, ENG-006, WEB-003 and ENG-007. `main` had been fourteen commits behind; that is resolved, and the pull request workflow exists so it cannot recur.
+**WEB-004 — implemented, verification incomplete, NOT Done.** [PR #9](https://github.com/Meerlikeskeer/echo/pull/9) contains only WEB-004. Code at `64ba19b` adds native IndexedDB persistence and recovery, identity-preserving retries, quota/unsaved notices, download and native-browser diagnostics. ADR-012 precedes implementation. No dependency or server-side storage choice. `capture.ts` necessarily adds an awaited per-complete-container callback because it previously built chunks only at session end; `session.ts` is unchanged. Independent read-only checker reviewed the fixes at `64ba19b` and found no remaining serious code defect; this is not browser acceptance.
 
-**The container image is verified.** On 2026-09-08 the `selfhost-container` CI job built the image and its smoke check passed — the first confirmed build of Echo's Docker image, and the last open item on ENG-002.
+**Remaining: native browser test results, and nothing else.** Safari loaded the owner-gated diagnostic page with HTTP 200, but automation lost its page view and returned `elementHasNoFrame` / `noWindowsAvailable` on interaction. No native test PASS was observed. Do not claim IndexedDB/browser acceptance from unit tests or from the earlier WEB-003 capture evidence. Exact manual steps are in the WEB-004 handoff in TASKS.md. The two other items this section previously listed are closed: **physical mobile acceptance is deferred by ADR-013**, and the **local controller command is green** — see the verification snapshot.
 
-**WEB-003 — ADR-011 validated on Chrome 150 and Safari 26.4.** Both engines ran the harness clean: two `MediaRecorder` instances recording concurrently on one `MediaStream`, every container decoding independently, every checksum matching, overlap drift 0–4.8 ms against a ±250 ms tolerance. Full measurements are in the TASKS.md *Browser evidence* section.
+**GitHub contribution works:** task commits are pushed and the automatically opened PR is reviewable. No merge performed. CI at `64ba19b` passed full application checks and the container job, and every required command now also passes locally.
 
-**The first browser run found that `captureSession` had never worked in any browser.** `capture.ts` assigned `setTimeout`/`clearTimeout` straight onto its runtime object, so `io.schedule()` set `this` to that object and every browser threw `TypeError: Illegal invocation`. Forty-six unit tests missed it because every one injects a fake runtime — the default object was constructed by no test at all. Fixed, with a regression test that reproduces the browser rule in Node and was verified to fail without the fix.
+**Existing browser evidence:** WEB-003 validated ADR-011 on Chrome 150 and Safari 26.4. Complete chunks decoded independently and checksums matched. Reuse TASKS.md's *Browser evidence* measurements: Safari ~153 KB/6 s vs Chrome ~96 KB/6 s; MIME parameter whitespace differs. Mandatory product overlap is 1 or 2 seconds. Do not re-derive these measurements. WEB-003's physical microphone/mobile checks remain manual.
 
-**Overlap is now mandatory (ADR-011 amended).** Chrome's `MediaRecorder` takes 61–82 ms to start, so at zero overlap ~52 ms per boundary was captured by nothing; Safari starts in 0–2 ms and lost nothing. The same setting was correct on one browser and lossy on another. The recorder now offers 1 s and 2 s only, guarded by a test verified to fail when zero is reintroduced.
+**Merged base:** `f234040` merges ENG-009 (PR #10) and with it **ADR-013**: nothing in the repository binds a non-loopback interface, `dev` and `start` bind `127.0.0.1`, and `dev:lan` is gone. Mobile capture is therefore **deferred, not outstanding** — it returns as its own task against a deployed HTTPS origin, and deployment now precedes it. This branch's earlier pre-decision mobile wording is corrected here, closing the follow-up ENG-009 left open. The base also includes ENG-008's secure-context diagnosis (its HTTPS LAN development server is what ADR-013 withdrew), plus the earlier WEB-003 browser fixes. The old STATUS claims that no browser had run capture and that the secure-context diagnosis was missing were stale and are removed here. Phone certificate trust remains unverified. The existing provider-key diagnostic note was historical; use the opt-in doctor when investigating provider access, without reading or printing credentials.
 
-**Not finished:** microphone permission, the 60-second auto-stop and chunk playback in the real recorder, and mobile capture — all manual, none coverable by synthetic audio.
-**What still blocks WEB-003:**
+## What exists and what does not
 
-1. **No browser has ever run the capture path.** The harness above is the fix, but it has not been run and reviewed. The riskiest untested assumption is the relay: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
-2. **Microphone permission and mobile capture cannot be automated** by the synthetic-audio approach. Those stay manual owner checks.
+The approved Next.js application remains behind the owner access gate. WEB-004 saves each completed audio container and metadata in browser-local IndexedDB, recovers and checks bytes, retains processing results, and retries while the page is active. The adapter exposes no deletion operation; no HTTP response is counted as a verified remote copy. A 64 MiB audio budget and 4 MiB warning reserve use Safari sizing. Native diagnostic pages are development-only and owner-gated; production denies them.
 
-**One carried-over gap, not blocking:**
+No server audio storage, relational database, production user accounts, stitched transcript, incremental upload during capture, authenticated offline application-shell cache, background worker, history product, research/reminder export or hardware is introduced. Browser storage can be evicted or cleared. Abrupt termination can lose the unfinished container; a closed/suspended page cannot upload. Offline hard navigation must wait until the same origin's application is reachable. Exactly-once remote provider processing after an ambiguous response requires later server work; retries do not duplicate local chunk identities/results.
 
-- **`crypto.subtle` secure-context gap — diagnosed, not solved.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP — an ADR-010 baseline — makes it `undefined`. ENG-008's `secure-context` module now refuses capture up front and says why, so this no longer surfaces as a generic "Capture incomplete"; it is unreachable in development because `dev` and `start` bind `127.0.0.1`. Serving a deployed origin over HTTPS is the actual fix and belongs to the deployment task.
-Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
+**No network access to Echo, by decision (ADR-013).** Echo is reachable only from the machine running it, so capture cannot be exercised from a phone or a second device until a deployed origin exists. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR.
 
-**Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
+**`crypto.subtle` secure-context gap — diagnosed, not solved.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP — an ADR-010 baseline — makes it `undefined`. ENG-008's `secure-context` module refuses capture up front and says why, and it is unreachable in development because `dev` and `start` bind `127.0.0.1`. Serving a deployed origin over HTTPS is the actual fix and belongs to the deployment task.
 
-**ENG-009 — DONE on `eng/ENG-009-withdraw-lan-exposure`, off `main` @ `a032a01`. Awaiting review; not merged.** Owner decision, 2026-09-08, recorded as **ADR-013**: serving Echo on every network interface is not wanted, so ENG-008's `dev:lan` script was removed rather than kept as an opt-in. Nothing in the repository now binds a non-loopback interface; `dev` and `start` bind `127.0.0.1`. The README section documenting phone access is replaced by one stating the loopback-only bind and why.
+## Verification snapshot
 
-**Mobile capture is paused as an acceptance requirement.** No current task is blocked on a physical phone. WEB-003's mobile item is now *deferred*, not *outstanding*, and WEB-003 is not incomplete for lacking it. Mobile returns as its own task against a **deployed** HTTPS origin, once the laptop path is deployed and working end to end. Deployment therefore moves ahead of mobile in priority; ADR-008 and ADR-010 already govern how it is done and neither changed.
+**Observed on 2026-09-09 at the merge of `origin/main` @ `f234040` into this branch, from the repository root, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** All four required commands were executed here; nothing is copied forward.
 
-**Kept deliberately:** `apps/web/src/lib/recording/secure-context.ts`, its call site and its tests. The guard is not a mobile feature — it refuses capture before the microphone opens on any origin without `crypto.subtle`, the ADR-010 self-hosted-over-HTTP case deployment is heading into. Only its advice changed. The file went from 4 tests to **5**: the new one fails if any user-facing message ever advertises `dev:lan`, `0.0.0.0` or `--experimental-https` again.
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm ci` | 0 | 373 packages installed, 0 vulnerabilities |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **69 unit tests, 69 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
+| `npm run doctor` | not run | Not executed; this branch touches no provider code |
+| GitHub Actions at `64ba19b` | 0 | [Run 34191686984](https://github.com/Meerlikeskeer/echo/actions/runs/34191686984): `npm ci`, `npm run check` and `selfhost-container` all passed, pre-merge |
+| Native IndexedDB/capture persistence diagnostics | not verified | Page loaded in Safari; automation could not obtain a test result |
 
-**Open follow-up:** `feat/WEB-004-durable-queue` (PR #9) still carries pre-decision mobile wording in its own `STATUS.md` and `TASKS.md`. ADR-013 supersedes it; mark it deferred when that branch merges. This branch deliberately does not edit another task's lane. See the ENG-009 handoff in TASKS.md.
+**The earlier `EPERM` / exit 127 / exit 255 rows are removed: they did not reproduce.** They recorded a broken agent sandbox in a prior session — filesystem access to the repository was lost mid-session — not a defect in the repository. `npm ci`, the full `npm run check` including the production build, and the bounded controller all pass from the original repository root. The prior workaround of an isolated checkout is no longer needed.
 
-Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
+Counts only ever rise. This branch measured **68 unit** before the merge; merging `main` brought ENG-009's added `secure-context` test, giving the **69** observed above. Also **7 production HTTP**, 4 self-host parity, 16 controller. Nothing was removed or relaxed; if a count goes down, that is a regression, not a cleanup. Docker and live providers were not run locally.
 
 ## Vocabulary
 
@@ -60,62 +64,6 @@ Short definitions so nobody has to reconstruct them from context.
 | **Route Handler** | A server-side URL that accepts requests. Echo has one: `POST /api/recordings`. |
 | **Bounded loop** | The optional automation in `AGENT_WORKFLOW.md`: a *builder* agent writes code, a separate *checker* agent verifies it, an *orchestrator* runs them in turns with hard stop rules. **Currently off.** |
 | `npm run check` | The single command that runs everything: style, types, tests, a real production build, and live HTTP tests. |
-
-## Where the project is
-
-Echo is a private-first web AI note taker. Three tasks are merged into `main`. One feature branch, `feat/WEB-002-recording-slice`, carries everything since: WEB-002, ENG-003, ENG-006, ENG-005 and WEB-003, plus ADR-009 and ADR-010. It is green and awaiting owner review as a single unit.
-
-| Task | Status | Where |
-| --- | --- | --- |
-| DOC-001 Repository foundation | Done | `main` |
-| ENG-001 Bounded builder/checker workflow | Done | `main` |
-| WEB-001 Web shell, access gate, verification tooling | Done | `main` |
-| ADR-009 / ADR-010 provider ports and deployment portability | Accepted, **not on `main`** | `docs/ADR-009-provider-selection` @ `93ec5b5` |
-| WEB-002 Short recording vertical slice | Implemented, verified live, **awaiting owner review** | `feat/WEB-002-recording-slice` |
-| ENG-003 Status file and reading map | Done | `feat/WEB-002-recording-slice` |
-| ENG-002 Self-host parity verification | **Done** — merged, and the container image built and passed its smoke check in CI | `main` |
-| ENG-007 Pull request workflow | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
-| ENG-005 Provider doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
-| WEB-003 Session and playable chunk model | Merged to `main`; browser acceptance harness on `feat/WEB-003-browser-acceptance`, **no browser has run it** | `main` + branch |
-
-`feat/WEB-002-recording-slice` is branched from the ADR commit, not from `main`, because ADR-009 and ADR-010 were never merged. Merging WEB-002 merges those two ADRs with it.
-
-## What exists today
-
-- A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
-- The recorder page, development-only owner-gated `/diagnostics/capture`, and one Route Handler, `POST /api/recordings`.
-- The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
-- Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
-- A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
-- Provider ports with two adapters each: `openai-compatible` and `fixture`.
-- A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
-- The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
-
-## What does not exist
-
-Overlap stitching, incremental processing during capture, **saving anything at all**, offline queue, history, speaker labels, research, reminders, background processing, hardware. No database, file storage, or real user accounts. Sessions/chunks exist only in page memory. Nothing is deployed.
-
-**No network access to Echo, by decision (ADR-013).** `dev` and `start` bind `127.0.0.1` and no script binds any other interface, so Echo is reachable only from the machine running it. Capture therefore cannot be exercised from a phone or any second device, and mobile acceptance is deferred until a deployed HTTPS origin exists. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR.
-
-## Verification snapshot
-
-Run from the repository root. **Rows below are the ENG-009 run: 2026-09-08 on `eng/ENG-009-withdraw-lan-exposure` @ `a032a01` + this branch, Node 22.23.2 / npm 10.9.8, in a clean worktree checkout.** All four commands were executed; nothing is copied forward.
-
-| Command | Exit | Result |
-| --- | --- | --- |
-| `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **53 unit tests, 53 pass, 0 fail** · production build succeeded · **6 production HTTP tests, 6 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
-| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run doctor` (fixture mode) | not run | Not executed for ENG-009; this change touches no provider code. Previous run: both ports PASS, no credential file read |
-| `selfhost-container` CI job | 0 | **Passed 2026-09-08** — image built, no environment file inside it, gate enforced, page and every compiled asset served from the container. Docker is still unavailable locally, so this is verified only in CI |
-
-Counts only ever rise: **33 → 46 → 52 → 53 unit** and **4 → 6 production HTTP**, plus 4 self-host parity tests added by ENG-002. Nothing was removed or relaxed. ENG-009 removed a script and a README section, not a check: its only test-file change takes `secure-context.test.ts` from 4 tests to 5, verified against `main` by diff. The WEB-003 harness added the sixth production HTTP test, which asserts `/diagnostics/capture` returns 404 in production even to an authenticated owner. The repeated `EPERM` / `exit 127` snapshots recorded agent sandbox failures, not code failures, and do not reproduce here.
-
-`npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
-
-**Live service check — 2026-09-06, first one ever performed.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in **1.4 s**, correct transcript, sensible notes and action items, timestamps normalized. This retires the previous "no live vendor call has ever been made" caveat. REQ-006 targets 5–10 s from stop to result; 1.4 s for a 7-second clip is inside it, but that is one measurement of one short clip on one connection, not a measured latency claim.
-
-**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding — all of which run on the host machine over loopback. An earlier synthetic Safari probe was blocked by sandbox filesystem and socket restrictions; that limit was environment-specific and `npm run dev` starts normally here. No long clip has been timed. **Mobile capture is no longer listed here as unverified work in progress: under ADR-013 it is deferred until a deployed origin exists.**
 
 ## Reading map
 
