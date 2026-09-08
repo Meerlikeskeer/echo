@@ -64,3 +64,17 @@ test("transcript and model text are escaped when rendered", () => {
   // Segment timestamps render as session-time clock values.
   assert.match(html, /01:05/);
 });
+
+test("the recorder never offers a zero-overlap capture", () => {
+  // Measured on 2026-09-08: Chrome 150's MediaRecorder start event lags its
+  // start() call by 61-82 ms, so with no overlap the outgoing recorder stops
+  // ~52 ms before the incoming one begins and that speech is captured by
+  // nothing. Safari 26.4 starts in 0-2 ms and loses nothing, which is exactly
+  // why this needs a test: the option looks correct on whichever browser
+  // someone happens to develop on. Evidence is in TASKS.md, WEB-003.
+  const html = renderToStaticMarkup(<SessionShell status={ready} />);
+  const options = [...html.matchAll(/<option value="(\d+)"/g)].map(match => Number(match[1]));
+  assert.ok(options.length > 0, "the overlap selector rendered no options");
+  assert.ok(!options.includes(0), `zero overlap must not be offered; found ${JSON.stringify(options)}`);
+  assert.ok(options.every(value => value >= 1000), `every overlap option must be at least 1000 ms; found ${JSON.stringify(options)}`);
+});

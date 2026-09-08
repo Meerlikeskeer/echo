@@ -209,11 +209,23 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             )}
           </p>
         </div>
+        {/*
+          No zero-overlap option, and this is measured rather than cautious.
+          MediaRecorder does not begin capturing when start() returns: on Chrome
+          150 the start event lagged the call by 61-82 ms, so with no overlap the
+          previous recorder had already stopped ~52 ms before the next one began
+          and that audio was captured by nothing. Safari 26.4 starts in 0-2 ms
+          and loses nothing — which makes it worse, not better, because the
+          setting behaves correctly on whichever browser a developer happens to
+          use. Overlap is a requirement here, not a preference. Evidence is in
+          the WEB-003 browser evidence section of TASKS.md.
+        */}
         <label className="text-sm text-slate-600">Chunk overlap
           <select className="ml-3 rounded border p-1" value={overlapMs} disabled={busy || phase === "recording"} onChange={(event) => setOverlapMs(Number(event.target.value))}>
-            <option value={0}>None</option><option value={1000}>1 second</option><option value={2000}>2 seconds</option>
+            <option value={1000}>1 second</option><option value={2000}>2 seconds</option>
           </select>
         </label>
+        <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Overlapping words are not merged yet, so they appear in both chunks.</p>
       </section>
 
       {chunks.length ? <section className="mt-6 space-y-4" aria-label="Session chunks">

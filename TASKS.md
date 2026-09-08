@@ -24,6 +24,35 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 **Rationale:** REQ-009 makes self-hosted deployment an architectural baseline, but nothing verifies it. Proving parity is cheapest now, while the application is a single page and an access proxy, and before WEB-004/WEB-005/WEB-010 introduce queues, scheduled work and object storage — the point at which platform-specific primitives would otherwise be adopted silently. Must not weaken any existing check.
 
+### Browser evidence (2026-09-08, macOS)
+
+**ADR-011 is validated on Chrome 150 and Safari 26.4.** The relay works in both engines. Measured, not inferred:
+
+- `simultaneousRecordingStates: true` at every boundary in every run, with `sameStream: true` throughout — two `MediaRecorder` instances genuinely recording at once on one `MediaStream`, which is the assumption the entire design rests on.
+- Every container decoded independently through its own `decodeAudioData` call: **3/3, 3/3, 4/4 on Chrome; 3/3, 3/3, 4/4 on Safari**.
+- Every SHA-256 checksum recomputed from the blob matched its capture metadata, in all six runs.
+- `validateChunkOrder` passed on real metadata at every setting.
+- Overlap drift against ±250 ms: **Chrome 0.6–4.8 ms, Safari 0–4 ms**. Both negotiated Opus in WebM at 48 kHz stereo.
+
+**Finding: the zero-overlap audio gap is Chrome-specific.** `MediaRecorder` start latency differs sharply between engines:
+
+| | `start()` → `start` event | `eventOverlapMs` at 0 ms overlap | Verdict at 0 ms |
+| --- | --- | --- | --- |
+| Chrome 150 | **61–82 ms** | **−54.4, −51.4** | **FAIL** — audio lost |
+| Safari 26.4 | **0–2 ms** | +4, +3 | PASS |
+
+On Chrome the previous recorder's `stop` event precedes the next recorder's `start` event by ~52 ms, so nothing captures the audio in between and it is permanently gone. Native *state* timing hides this completely — it reported +1 ms of overlap while the audio was already lost; only the event windows expose it. Safari starts essentially instantly and has no gap.
+
+Because the loss depends on the engine, a zero-overlap setting is safe on one browser and lossy on another, with nothing in the UI to distinguish them — and it behaves correctly on whichever browser a developer happens to use, which is the worst failure shape available.
+
+**Resolved 2026-09-08: the owner removed the option.** The recorder offers 1 second and 2 seconds only, a test asserts every offered value is at least 1000 ms and was verified to fail when zero is reintroduced, and ADR-011 is amended to record overlap as mandatory. `captureSession` still accepts `overlapMs: 0`, because the port is not wrong — the product choice was. WEB-006 stitching cannot recover audio nothing recorded, so this stays a capture-time guarantee rather than a downstream repair.
+
+**Second finding: Safari encodes ~1.6× larger.** Same six seconds of identical synthetic audio: **~153 KB on Safari against ~96 KB on Chrome** (roughly 204 kbps against 128 kbps). At the current 60-second cap that is about 1.5 MB, comfortably inside Vercel's 4.5 MB request limit, so it forces nothing now — but WEB-004 and WEB-005 must size against Safari, not Chrome.
+
+**Third: Safari normalises the container type with a space** — `audio/webm; codecs=opus` rather than Chrome's `audio/webm;codecs=opus`. The harness reports requested and actual MIME separately, so this passed correctly. Any future code that compares media-type strings for equality must normalise rather than match literally.
+
+**Remaining for WEB-003 acceptance, all manual and none automatable by synthetic audio:** microphone permission Allow and Deny in the real recorder, the recorder UI's 60-second auto-stop and chunk playback, and capture on a physical mobile browser including interruption and backgrounding. Mobile needs a secure origin reachable from the device; the `127.0.0.1` bind and the `crypto.subtle` secure-context gap recorded against ENG-002 both apply.
+
 ### Handoff (2026-09-07)
 
 **Branch base — read this before merging.** This branch is based on `feat/WEB-002-recording-slice` @ `cbd216b`, **not** on `main`. `main` is six commits behind and does not contain `STATUS.md`, the ENG-006 tracked-source guard, `npm run doctor`, the recording slice, or this task's own entry in `TASKS.md` — ENG-002 could not be defined, let alone verified against the current gate, from `main`. Merging this branch therefore also merges everything on the WEB-002 branch. If that branch is not being accepted, stop before merging this one.
@@ -352,7 +381,17 @@ It exposed one bug, fixed in the same branch. This wire format identifies audio 
 
 **Acceptance:** Implement timed ordered chunk metadata and independently decodable chunks with configurable overlap. Validate boundary capture, sequence, checksum and codec behavior on selected browsers.
 
-### Handoff (2026-09-07)
+### Browser harness handoff (2026-09-07)
+
+- **Status:** harness implemented, unverified; WEB-003 is **not Done**. Browser evidence remains for owner review. Same branch `feat/WEB-002-recording-slice`; no other task added.
+- **Run:** start `npm run dev` from the repository root with the existing owner configuration, open `http://localhost:3000/diagnostics/capture`, sign in through the existing owner gate, then click **Run browser acceptance**. Keep the tab visible for about 42 seconds. No microphone permission or provider access is needed. Production returns 404 after owner authorization; Proxy and independent server-page guard both remain in place.
+- **Harness:** OscillatorNode frequency sweep (220–1320 Hz) → MediaStreamAudioDestinationNode → existing `captureSession`, with no injected runtime. Three 14-second runs use 6-second chunks and 0/1000/2000 ms overlap. A temporary native MediaRecorder subclass observes constructor MIME, same-stream identity, native states, and start/stop calls/events; restores the constructor and releases audio resources afterward. It does not replace the capture algorithm, clock, recorder implementation, events or blobs.
+- **Assertions/evidence:** every independent blob must decode using `AudioContext.decodeAudioData`; every checksum is recomputed; real metadata must pass `validateChunkOrder` and contain at least three chunks. Shows all metadata, bytes, MIME types, decode duration/sample rate/channels, checksums, recorder timings and pairwise overlap/drift. Native state overlap must be within **±250 ms** of requested overlap; asynchronous event overlap is shown separately. Positive overlap requires overlapping event windows as well as simultaneous native recording states. Zero overlap checks the immediate relay handoff. A hidden tab or cancelled/incomplete run fails acceptance. Timing does not prove sample-accurate audio continuity.
+- **Browser observations:** **none collected**. Dev launch could not find `next` (exit 127). Do not interpret harness code or unit tests as browser evidence.
+- **Required commands actually attempted from repository root:** `npm ci` exit **255**, `EPERM` removing `apps/web/node_modules/.bin` (same on unsandboxed retry); `npm run check` exit **127**, source-tracked passed then `eslint` missing, so unit/build/HTTP stages did not execute; `python3 -m unittest discover -s tests` exit **1**, Python 3.9 unittest error reporting hit `RecursionError`, no completed count (same on unsandboxed retry). No dependencies repaired, tests skipped/rewritten, or historical green results claimed for this change. Existing 46 unit / 5 HTTP tests retained; one production exclusion test added and the diagnostic path added to existing access-denial probes. New expected HTTP count: 6, unexecuted. `git diff --check` passed.
+- **Human work still required:** after the required gate succeeds, run the harness in Chromium and Safari and review every result; exercise the normal recorder with microphone Allow and Deny, verify the real UI’s 60-second auto-stop and playback, and repeat capture on a physical mobile browser (including interruption/background behavior). Mobile access must use an appropriately reachable secure origin; the existing localhost bind and ENG-002 secure-context issue are unchanged. Review browser evidence before deciding task acceptance.
+
+### Prior implementation handoff (2026-09-07, before harness)
 
 - **Branch/commit:** `feat/WEB-002-recording-slice`; implementation `4675423`, typecheck fix `67212de`, pushed to `origin/feat/WEB-002-recording-slice`. Working tree clean. The 2026-09-06 handoff recorded this work as uncommitted and unverifiable; that was a sandbox failure (`.git/index.lock` `EPERM`, half-deleted `node_modules`, missing `eslint`) and none of it reproduces.
 - **Scope:** Browser-memory session and chunk identities, sequence, monotonic boundaries, measured overlap, and codec/size/SHA-256 metadata; independent recorder containers with configurable overlap; playback and sequential processing after stop, with separate results per chunk and clips preserved on failure. The endpoint validates optional chunk metadata, recomputes the checksum server-side, and passes real session offsets to adapters. ADR-011 records the prototype strategy. No new infrastructure, no credential-handling change, bounded loop still off.
