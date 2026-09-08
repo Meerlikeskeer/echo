@@ -2,7 +2,7 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `feat/WEB-003-browser-acceptance` · **Base:** `main` @ `3d0e87e`
+**Updated:** 2026-09-08 · **Branch:** `eng/ENG-009-withdraw-lan-exposure` · **Base:** `main` @ `a032a01`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
@@ -26,12 +26,16 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **One carried-over gap, not blocking:**
 
-- **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Unreachable today because `dev` and `start` bind `127.0.0.1`. Logged against ENG-002.
+- **`crypto.subtle` secure-context gap — diagnosed, not solved.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP — an ADR-010 baseline — makes it `undefined`. ENG-008's `secure-context` module now refuses capture up front and says why, so this no longer surfaces as a generic "Capture incomplete"; it is unreachable in development because `dev` and `start` bind `127.0.0.1`. Serving a deployed origin over HTTPS is the actual fix and belongs to the deployment task.
 Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
 
 **Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
 
-**ENG-008 — secure-context development server, in flight on `eng/ENG-008-https-dev-server`.** Runs in parallel with WEB-004 and touches no file in that lane. `npm run dev:lan` serves HTTPS on the LAN address so a phone can reach Echo in a secure context, using Next.js 16's built-in `--experimental-https` — no dependency and no stack decision. `npm run dev` still binds `127.0.0.1` over HTTP; exposing the application to the network stays a separately named, deliberate command. A new `secure-context` module refuses capture *before* the microphone opens when `crypto.subtle` is unavailable, naming the address and the fix instead of failing later as the generic "Capture incomplete". That closes the gap logged against ENG-002 and unblocks WEB-003's remaining mobile check. **Certificate trust on the phone is unverified** — the harness has not been opened from a device yet.
+**ENG-009 — withdraw the LAN development server; pause mobile until the laptop path is deployed. IN FLIGHT on `eng/ENG-009-withdraw-lan-exposure`, off `main` @ `a032a01`.** Owner decision, 2026-09-08: serving Echo on every network interface is not wanted, so ENG-008's `dev:lan` script is being removed rather than kept as an opt-in. Mobile capture stops being an acceptance requirement for any current task until the laptop path is deployed and working end to end; it becomes a later task against a deployed HTTPS origin, not a LAN address.
+
+**What is being changed:** the `dev:lan` script in both `package.json` files, the README section that documents reaching Echo from a phone, ENG-008's task entry, and the mobile lines in the WEB-003 and WEB-004 acceptance text. ADR-013 records the decision so a later session does not re-add the script. **What is deliberately kept:** `apps/web/src/lib/recording/secure-context.ts`, its call site in `recorder.tsx` and its four tests. The guard is not a mobile feature — it refuses capture before the microphone opens on any origin without `crypto.subtle`, which is exactly the ADR-010 self-hosted-over-HTTP case the deployment work is heading into. Only its `dev:lan` advice is rewritten. No test is deleted.
+
+**Not done yet:** verification, and the WEB-004 branch still carries its own mobile acceptance wording — see the ENG-009 handoff in TASKS.md.
 
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
