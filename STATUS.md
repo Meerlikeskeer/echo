@@ -18,7 +18,9 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **Not this task:** mobile capture acceptance (its own task, once a deployed origin exists), WEB-004's browser acceptance, and any server-side storage decision.
 
-**ENG-011 — the first production deployment failed, and the cause is fixed on `eng/ENG-011-vercel-dev-dependencies`.** `npx vercel --prod` at `318c356` returned only `Command "npm run build" exited with 1`. Reproduced in a clean clone: Vercel sets `NODE_ENV=production` for the install, npm reads that as `--omit=dev`, and ENG-010's `npm ci` therefore installed 26 packages instead of 373 — without `typescript`, `tailwindcss` or `@tailwindcss/postcss`, all of which `next build` needs. `vercel.json` now uses `npm ci --include=dev`, verified by reproducing the failure and the fix locally. **No local suite could have caught this:** `npm run check`, CI and the container build all install with `NODE_ENV` unset. Merge that branch before deploying again. See the ENG-011 handoff in TASKS.md.
+**ENG-012 — the deployment failure is diagnosed from the build log and fixed on `eng/ENG-012-vercel-build-output`.** Vercel's build compiled, type-checked and generated pages successfully, then died in Vercel's own `onBuildComplete` hook: `ENOENT … apps/web/.next/next-server.js.nft.json`. With `output: "standalone"` the trace file that hook reads is not where it looks. `next.config.ts` now sets `output` from `process.env.VERCEL` — standalone everywhere Echo is self-hosted, absent on Vercel, which does its own tracing — and `vercel.json` drops `outputDirectory`. **ADR-010 is unchanged and the container path is intact**, which is why this is conditional rather than a removal. Guarded by `apps/web/tests/next-config.test.ts`, verified to fail without the fix. Unit count 69 → **72**. Merge before deploying again; see the ENG-012 handoff in TASKS.md.
+
+**ENG-011 was merged but was not the cause, and its record is corrected.** It attributed the failure to Vercel installing without devDependencies. The real build log disproves that: Vercel reported `added 378 packages`, the full tree. The local reproduction recreated a condition the platform does not create, and the conclusion was drawn before the build log was read. `npm ci --include=dev` is kept as correct and explicit, but it fixed nothing. **The lesson is cheap to write down and was expensive to learn: for a build that passes locally and fails on the platform, read the platform's log before changing anything.**
 
 **WEB-004 merged underneath this branch (PR #9, `main` @ `6cee6fd`) and is folded in here.** Echo now saves completed audio containers in browser-local IndexedDB. That does not change ENG-010's scope, but it raises the stakes of deploying correctly: recorded audio now persists in the browser, and `checksum()` still needs `crypto.subtle`, so a deployed origin must be HTTPS for the queue to work at all. WEB-004's own remaining item — native browser acceptance of the IndexedDB path — is untouched by this task and still outstanding.
 
@@ -89,18 +91,20 @@ Overlap stitching, incremental processing during capture, history, speaker label
 
 ## Verification snapshot
 
-Run from the repository root. **Rows below were re-run on merged `main` @ `318c356` — not copied forward from the ENG-010 branch: 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6.**
+Run from the repository root. **Rows below are the ENG-012 run on `eng/ENG-012-vercel-build-output`, off `main` @ `617a385`: 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** Every command was executed here; nothing is copied forward.
 
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **69 unit tests, 69 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **72 unit tests, 72 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run test:deployed -- http://127.0.0.1:3131` | 0 | Against a local `next start` production server built from `main`: gate challenged, wrong credentials refused, page served to the owner, **9 compiled assets each refused unauthenticated and served to the owner**, **both `/diagnostics/capture` and WEB-004's `/diagnostics/queue` 404 for the authenticated owner**, `POST /api/recordings` refused anonymously and 503 to an empty authorized body. Noted providers unconfigured and that loopback does not verify transport |
-| `npm run doctor` (fixture mode) | not run | Not executed for ENG-010; this change touches no provider code |
-| `selfhost-container` CI job | not run locally | Docker is unavailable on this machine; last passed in CI on 2026-09-08 |
-| Against a **hosted** deployment | **not run** | The Vercel project is linked and its variables are set, but no deployment has been created. `vercel.json` has never been built by Vercel and the script has never met a CDN or a real certificate |
-| Native IndexedDB/capture diagnostics (WEB-004) | **not verified** | Inherited from WEB-004 and not this task's to close: no browser has run `/diagnostics/queue` |
+| `VERCEL=1 CI=1 npm run build` | 0 | Simulates the hosted build: emits `apps/web/.next/next-server.js.nft.json` — the file Vercel's `onBuildComplete` hook reads — and **no** `standalone` directory |
+| Normal `npm run build` (inside `check`) | 0 | Still emits `.next/standalone`, so ADR-010's container path is intact |
+| `npm run test:deployed -- http://127.0.0.1:3131` | 0 | Against a local `next start` production server built from `main`: gate challenged, wrong credentials refused, **9 compiled assets each refused unauthenticated and served to the owner**, both diagnostics pages 404 for the authenticated owner, `POST /api/recordings` refused anonymously and 503 to an empty authorized body |
+| `npm run doctor` (fixture mode) | not run | Touches no provider code |
+| `selfhost-container` CI job | not run locally | Docker unavailable on this machine; last passed in CI 2026-09-08 |
+| **Vercel production build** | **failed at `617a385`** | `ENOENT … next-server.js.nft.json` in Vercel's `onBuildComplete`. The fix above is not confirmed against the platform; only a deployment shows that |
+| Native IndexedDB/capture diagnostics (WEB-004) | **not verified** | Inherited; no browser has run `/diagnostics/queue` |
 
 **Negative controls — the deployed check was made to fail on purpose, six ways.** A check that has only ever passed proves nothing:
 
@@ -113,7 +117,7 @@ Run from the repository root. **Rows below were re-run on merged `main` @ `318c3
 | Unreachable origin | 1 | *"nothing answered … (ECONNREFUSED)"*, not an undici stack trace |
 | Missing `ECHO_OWNER_*` in the environment | 2 | Usage error naming both variables |
 
-Counts only ever rise: **33 → 46 → 52 → 53 → 69 unit** and **4 → 6 → 7 production HTTP**, plus 4 self-host parity and 16 controller. ENG-010 adds no test to `npm run check` and removes none: `test:deployed` is deliberately outside the gate because it needs a live URL and real credentials, so CI cannot run it and must not appear to.
+Counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 unit** and **4 → 6 → 7 production HTTP**, plus 4 self-host parity and 16 controller. ENG-012 adds the three `next-config` assertions. ENG-010 adds no test to `npm run check` and removes none: `test:deployed` is deliberately outside the gate because it needs a live URL and real credentials, so CI cannot run it and must not appear to.
 
 `npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
 

@@ -329,7 +329,9 @@ Next.js 16 provides `--experimental-https`, which generates a locally trusted ce
 
 ## ENG-011 — The first production deployment failed: Vercel installs without devDependencies
 
-**Status:** Fixed and verified by local reproduction; **not yet confirmed against Vercel** · **Branch:** `eng/ENG-011-vercel-dev-dependencies`, off `main` @ `318c356` · **Decisions:** none changed
+**Status:** Merged, but **it was not the cause** — corrected by ENG-012 · **Branch:** `eng/ENG-011-vercel-dev-dependencies`, off `main` @ `318c356` · **Decisions:** none changed
+
+> **Correction, 2026-09-08.** The build log from the real deployment disproves the diagnosis below. Vercel's install reported `added 378 packages` — the full tree, devDependencies included — so Vercel does **not** set `NODE_ENV=production` for the install step and a plain `npm ci` was never the problem. The local reproduction was real but recreated a condition the platform does not create, and the conclusion was drawn from it before the build log was read. `--include=dev` is kept: it is correct, explicit and harmless. The actual cause is in **ENG-012**.
 
 **Symptom.** The first `npx vercel --prod` failed at `318c356` with `Command "npm run build" exited with 1` and nothing else. The same commit builds cleanly on the development machine, and CI is green, so the failure was invisible to every check the repository had.
 
@@ -345,6 +347,32 @@ Next.js 16 provides `--experimental-https`, which generates a locally trusted ce
 - **Verified by reproduction, in a clean clone of `318c356` with no environment file:** `NODE_ENV=production npm ci` installed 26 packages, `typescript` and `tailwindcss` absent, and `npm run build` exited **1** with the PostCSS resolution failure — the reported symptom. The same clone with `NODE_ENV=production npm ci --include=dev` installed 373 packages and `npm run build` exited **0**.
 - **Not verified:** that Vercel now builds. Only a real deployment shows that, and `npx vercel` cannot run from an agent sandbox (npm cache permissions). The owner runs `npx vercel` after merging this.
 - **If the build still fails**, the next suspects are the Root Directory setting on the Vercel project and `output: "standalone"` in `next.config.ts`, which ENG-002 requires for ADR-010 and which Vercel handles differently from a self-hosted bundle. Neither was implicated in this failure; get the build log from the deployment's Inspect URL before changing either.
+
+## ENG-012 — `output: "standalone"` breaks Vercel's build hook
+
+**Status:** Fixed and locally verified on both build paths; **not yet confirmed against Vercel** · **Branch:** `eng/ENG-012-vercel-build-output`, off `main` @ `617a385` · **Decisions:** ADR-010 unchanged and the reason this is conditional rather than removed
+
+**Symptom, from the deployment build log.** Install succeeded with all 378 packages, `next build` compiled successfully in 5.1 s, TypeScript finished, static pages generated — then:
+
+```
+Running onBuildComplete from Vercel
+> Build error occurred
+Error: ENOENT: no such file or directory, open
+  '/vercel/path0/apps/web/.next/next-server.js.nft.json'
+```
+
+**Cause.** `onBuildComplete` is Vercel's own hook, not Next's, and it reads `.next/next-server.js.nft.json`. Vercel applies its `modifyConfig` to the project first (the log says so), and with `output: "standalone"` the trace file is not where the hook looks. Everything before it passes, so the failure arrives after a successful build and reads as a code error. It is not one: the same commit builds and runs locally, in CI and in the container.
+
+**Fix.** `apps/web/next.config.ts` sets `output` from `process.env.VERCEL`: `standalone` everywhere Echo is self-hosted, absent on Vercel, which does its own output tracing. `vercel.json` also drops `outputDirectory`; the Next.js builder locates its own output and naming one competed with it. ADR-010 is untouched — the container path still gets exactly what it needs, which is why this is conditional rather than a removal.
+
+**Guarded, because this class of bug is invisible locally.** `apps/web/tests/next-config.test.ts` asserts standalone off Vercel, absent on it, and the tracing root in both. Verified the guard fails without the fix: reverting `output` to an unconditional `"standalone"` fails *"Vercel builds do not, because its build hook cannot find the trace file"*, 71 of 72 passing. Unit count 69 → **72**.
+
+### Handoff
+
+- **What changed:** `apps/web/next.config.ts`, `vercel.json` (`outputDirectory` removed), `apps/web/tests/next-config.test.ts` (new), `README.md`, `ARCHITECTURE.md`, `TASKS.md` (including a correction to ENG-011), `STATUS.md`.
+- **Verified locally, both paths:** `VERCEL=1 CI=1 npm run build` exits **0**, emits `apps/web/.next/next-server.js.nft.json` and **no** `standalone` directory — the shape Vercel's hook expects. A normal `npm run check` exits **0** with **72 unit, 7 production HTTP, 4 self-host parity**, and `.next/standalone` is still produced, so ADR-010's container path is intact. Controller **0**, 16 tests.
+- **Not verified:** that Vercel now builds. Only a deployment shows that, and the CLI cannot run from an agent sandbox.
+- **If it still fails**, the next suspect is the project's **Root Directory** setting, which lives in Vercel's dashboard rather than in Git and so is invisible from here. Get the build log again before changing anything; two diagnoses in this task have already been made without one, and one of them was wrong.
 
 ## ENG-003 — Shared status file and reading map
 

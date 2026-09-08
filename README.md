@@ -122,8 +122,7 @@ feature branch → GitHub → Vercel preview deployment
 
 ```json
 { "framework": "nextjs", "installCommand": "npm ci --include=dev",
-  "buildCommand": "npm run build", "outputDirectory": "apps/web/.next",
-  "git": { "deploymentEnabled": false } }
+  "buildCommand": "npm run build", "git": { "deploymentEnabled": false } }
 ```
 
 `--include=dev` is not optional and the first production deployment failed without it. Vercel sets `NODE_ENV=production` for the install step, and npm reads that as `--omit=dev`, so a plain `npm ci` installs 26 packages instead of 373. Everything `next build` needs to compile — `typescript`, `tailwindcss`, `@tailwindcss/postcss`, the `@types/*` packages — is a devDependency, correctly so: they are build-time tools, not runtime dependencies. The build then dies resolving `@tailwindcss/postcss` from `globals.css`, and Vercel reports only `Command "npm run build" exited with 1`. Reproduce it locally with `NODE_ENV=production npm ci && npm run build`; the same commands with `--include=dev` succeed.
