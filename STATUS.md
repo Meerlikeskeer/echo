@@ -18,7 +18,19 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **Not this task:** mobile capture acceptance (its own task, once a deployed origin exists), WEB-004's browser acceptance, and any server-side storage decision.
 
-**ENG-012 — the deployment failure is diagnosed from the build log and fixed on `eng/ENG-012-vercel-build-output`.** Vercel's build compiled, type-checked and generated pages successfully, then died in Vercel's own `onBuildComplete` hook: `ENOENT … apps/web/.next/next-server.js.nft.json`. With `output: "standalone"` the trace file that hook reads is not where it looks. `next.config.ts` now sets `output` from `process.env.VERCEL` — standalone everywhere Echo is self-hosted, absent on Vercel, which does its own tracing — and `vercel.json` drops `outputDirectory`. **ADR-010 is unchanged and the container path is intact**, which is why this is conditional rather than a removal. Guarded by `apps/web/tests/next-config.test.ts`, verified to fail without the fix. Unit count 69 → **72**. Merge before deploying again; see the ENG-012 handoff in TASKS.md.
+**ENG-012 — CONFIRMED against Vercel: the build now completes.** Merged as `main` @ `53c0851`. The 2026-09-08 deployment log shows `Running onBuildComplete from Vercel`, the route table, and **`Build Completed in /vercel/output [20s]`** — the `ENOENT … next-server.js.nft.json` failure is gone. Making `output: "standalone"` conditional on `process.env.VERCEL` was the fix, and it is now verified on the platform rather than only locally. ADR-010's container path is unaffected; `.next/standalone` is still produced off Vercel and the four self-host parity tests still pass.
+
+**Still not deployed — the failure moved to Vercel's upload step, and it is not Echo's.** After the successful build, `Deploying outputs…` ended with:
+
+```
+Cannot patch preview comments when immutable static file upload is enabled.
+Upgrade to next@v16.3.0-canary.32 or newer to resolve this.
+Error: Unexpected error. Please try again later. ()
+```
+
+**That advice does not apply:** the repository is on **Next 16.3.4**, and `16.3.0-canary.32` is a prerelease of `16.3.0`, so the installed version is already far newer. Preview comments and the Vercel Toolbar are account and project features that this repository does not configure and cannot configure — nothing in `vercel.json`, `next.config.ts` or the application touches them. The error text itself (`Unexpected error … ()`, with an empty cause) is a platform-side message.
+
+**Do not change repository code in response to this.** Three failures in a row have been the platform around the build rather than the build, and two of the three were diagnosed correctly only after reading Vercel's own log. The next steps are operational: retry, then a preview deployment to see whether it is production-specific, then disabling the Vercel Toolbar/comments for the project, then Vercel's status page. If it persists across all four it is a Vercel support matter, and the evidence to give them is the deployment ID from the Inspect URL.
 
 **ENG-011 was merged but was not the cause, and its record is corrected.** It attributed the failure to Vercel installing without devDependencies. The real build log disproves that: Vercel reported `added 378 packages`, the full tree. The local reproduction recreated a condition the platform does not create, and the conclusion was drawn before the build log was read. `npm ci --include=dev` is kept as correct and explicit, but it fixed nothing. **The lesson is cheap to write down and was expensive to learn: for a build that passes locally and fails on the platform, read the platform's log before changing anything.**
 
