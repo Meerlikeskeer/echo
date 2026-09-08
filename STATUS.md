@@ -2,21 +2,27 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-07 · **Branch:** `feat/WEB-002-recording-slice` · **Base:** `main` @ `0931376`
+**Updated:** 2026-09-08 · **Branch:** `eng/ENG-007-pull-request-workflow` · **Base:** `main` @ `71f0451`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
-**ENG-005 and WEB-003 — implemented, committed, pushed, and fully verified except in a real browser.** Everything the previous session recorded as blocked is resolved: the work is committed at `67212de`, pushed to `origin/feat/WEB-002-recording-slice`, and the working tree is clean. The full required gate passes from a clean install — exit codes and counts in the snapshot below. The dependency damage and the `.git/index.lock` failure were sandbox artifacts; neither reproduces.
+**Everything through ENG-002 is merged.** `main` is at `71f0451` and now carries ADR-009, ADR-010, ADR-011, WEB-002, ENG-003, ENG-005, ENG-006, WEB-003 and ENG-002. `main` had been fourteen commits behind; that is resolved, and ENG-007 exists so it cannot recur.
 
-**ENG-002 — self-host parity, implemented and verified on `eng/ENG-002-self-host-parity`.** Runs in parallel with the WEB-003 work above and shares no source files with it. `output: "standalone"`, an assembly step for the assets standalone omits, a `Dockerfile`, and three parity tests now inside `npm run check`. Two things are outstanding: **the container image has never been built** — no Docker here, and the CI job that would build it is recorded in `TASKS.md` for the owner to add by hand rather than committed, because GitHub gates `.github/workflows/` behind a scope agents here do not hold — and **`.env.example` could not be updated** because the sandbox forbids writing any `.env*` path. That branch is based on `cbd216b`, not `main`; see its `TASKS.md` handoff.
+**ENG-007 — pull request workflow, in flight on `eng/ENG-007-pull-request-workflow`.** A pull request template and the `AGENTS.md` rules that make agents open pull requests and never merge. **Branch protection itself is owner-applied** — it lives in GitHub settings and cannot be committed. Required approvals must stay at **zero**: GitHub does not allow approving your own pull request, so requiring one deadlocks a single-owner repository. Not done until the owner applies the rule and confirms a direct push to `main` is refused.
 
-**What remains before ENG-005 or WEB-003 can be marked Done:**
+**WEB-003 browser acceptance — Codex is working on it**, on `feat/WEB-002-recording-slice`. Commit `6067b9b` adds `apps/web/src/app/diagnostics/capture/`, a harness that drives the real capture path with synthetic oscillator audio so no microphone permission is needed. Do not edit that branch. As of this writing it was **committed but not pushed**; confirm it reached `origin` before relying on it.
 
-1. **Browser validation for WEB-003 — its acceptance criteria require it, and it has never happened.** No `MediaRecorder` call, permission prompt, codec negotiation or auto-stop has ever run in a real browser. The riskiest untested assumption is the recorder relay itself: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
-2. **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Not reachable today because the dev and start scripts bind `127.0.0.1`. Log it against ENG-002.
-3. **Owner review and merge.** Merging this branch also merges ADR-009, ADR-010, ENG-003, ENG-006, ENG-005 and WEB-003. The owner has accepted it as one reviewable unit; `AGENTS.md` § *Version control discipline* forbids repeating the pattern.
+**What still blocks WEB-003:**
+
+1. **No browser has ever run the capture path.** The harness above is the fix, but it has not been run and reviewed. The riskiest untested assumption is the relay: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
+2. **Microphone permission and mobile capture cannot be automated** by the synthetic-audio approach. Those stay manual owner checks.
+
+**Two carried-over gaps, neither blocking:**
+
+- **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Unreachable today because `dev` and `start` bind `127.0.0.1`. Logged against ENG-002.
+- **The container image has never been built.** The `selfhost-container` CI job exists on `main` as of `71f0451` but has not been observed green. `npm run check` proves the standalone bundle, not the image. Do not describe the container as verified until that job passes.
 
 Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
 
@@ -56,7 +62,8 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`. O
 | ADR-009 / ADR-010 provider ports and deployment portability | Accepted, **not on `main`** | `docs/ADR-009-provider-selection` @ `93ec5b5` |
 | WEB-002 Short recording vertical slice | Implemented, verified live, **awaiting owner review** | `feat/WEB-002-recording-slice` |
 | ENG-003 Status file and reading map | Done | `feat/WEB-002-recording-slice` |
-| ENG-002 Self-host parity verification | Implemented and verified; **container image never built** | `eng/ENG-002-self-host-parity` |
+| ENG-002 Self-host parity verification | Merged to `main`; **container image unverified until the CI job is observed green** | `main` |
+| ENG-007 Pull request workflow | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
 | ENG-005 Provider doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
 | WEB-003 Session and playable chunk model | Implemented and verified by test; **browser validation outstanding** | `feat/WEB-002-recording-slice` |
 

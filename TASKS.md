@@ -125,6 +125,25 @@ Baselines of 46 unit and 5 production HTTP tests are unchanged; the 4 self-host 
 
 **Carried in from WEB-003:** `checksum()` in `apps/web/src/lib/recording/session.ts` calls `crypto.subtle.digest`, which browsers expose only in a secure context. A self-hosted deployment reached over plain HTTP on a LAN leaves `crypto.subtle` undefined and capture fails as a generic "Capture incomplete". This is not fixed here — it is a WEB-003 code path — but it is a self-hosting failure and belongs on this list until it is handled.
 
+## ENG-007 — Pull request workflow and branch protection
+
+**Status:** Implemented; branch protection is owner-applied · **Branch:** `eng/ENG-007-pull-request-workflow` · **Dependencies:** None
+
+**Acceptance:** `main` accepts changes only through a reviewed pull request whose checks pass. Agents open pull requests and never merge. A template makes the verification evidence and the unverified remainder a required part of every submission.
+
+**Rationale:** The workflow already said "owner reviews, then merges", but nothing enforced it, so the merge step silently never happened and `main` fell **fourteen commits** behind. That is not a tidiness problem. It made branching from `main` impossible — ENG-002 could not even be defined from `main`, because `main` had no `STATUS.md`, no `check:tracked` and no ENG-002 entry — so every task stacked on the previous unmerged branch, compounding the review burden and making any single task impossible to revert alone. Branch protection converts a documented intention into one the system will not let anyone skip.
+
+**Scope delivered**
+
+- `.github/pull_request_template.md` — task ID and branch base, a verification table for observed exit codes and counts, explicit confirmation that no count went down and no check was weakened, a mandatory *Not verified* section, and credential/stack/reversibility checks.
+- `AGENTS.md` § *Version control discipline* gains four rules: finish with a pull request and never merge to `main`; branch from `main` and disclose it when you cannot; agents cannot change CI and must hand the YAML to the owner; and the push rule now names the two times it has already been violated.
+
+**Owner-applied settings, not in this branch.** Branch protection lives in GitHub settings and cannot be committed. On `main`: require a pull request before merging; require status checks (`verify`, adding `selfhost-container` once it has been observed green); require branches to be up to date; forbid force pushes and deletion. **Leave required approvals at zero** — GitHub does not permit approving your own pull request, so requiring one would permanently deadlock a single-owner repository. Leave bypass allowed so the owner retains an escape hatch; agents have none because they cannot click it. Prefer "Create a merge commit" over squash, so the per-commit reasoning is preserved.
+
+**Verification:** documentation and template only; no code path changes. `npm run check` and the controller tests were run to confirm nothing regressed — numbers in `STATUS.md`. The protection rule itself is verified by observing that a direct push to `main` is refused once the owner has applied it.
+
+**Next step:** owner applies the branch protection rule, then confirms a direct push to `main` is rejected. From that point every task ends in a pull request.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
