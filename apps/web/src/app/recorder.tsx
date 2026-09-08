@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderStatus } from "../lib/providers/status";
-import type { RecordingResult } from "../lib/recording/pipeline";
 import { DisclosureNotice, RecordingOutcome } from "./recording-result";
 import { captureSession } from "../lib/recording/capture";
-import type { AudioChunk, PlayableChunk } from "../lib/recording/session";
+import type { PlayableChunk } from "../lib/recording/session";
 import { describeSecureContextProblem, readEnvironment } from "../lib/recording/secure-context";
+
+import { useAudioQueue } from "./use-audio-queue";
+import { chunkKey, incompleteSessions, storageFailure } from "../lib/recording/queue";
 
 const TARGET_MIN_MS = 30_000;
 const MAX_MS = 60_000;
@@ -45,12 +47,13 @@ function clock(ms: number): string {
 export function Recorder({ status }: { status: ProviderStatus }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [recorder, setRecorder] = useState<ReturnType<typeof captureSession> | null>(null);
-  const [chunks, setChunks] = useState<PlayableChunk[]>([]);
   const [overlapMs, setOverlapMs] = useState(1000);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [result, setResult] = useState<RecordingResult | null>(null);
-  const [outcomes, setOutcomes] = useState<Record<number, RecordingResult>>({});
+  const queue = useAudioQueue(phase === "recording" || phase === "starting");
+  const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
+  const outcomes = queue.entries.filter((entry) => entry.result);
+  const gaps = incompleteSessions(queue.entries);
   const generation = useRef(0);
   useEffect(() => () => { generation.current++; }, []);
 
@@ -65,47 +68,9 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     return () => clearInterval(timer);
   }, [phase]);
 
-  const upload = useCallback(async (clip: Blob, durationMs: number, metadata: AudioChunk) => {
-    setFailure(null);
-    setResult(null);
-    setPhase("processing");
-    const body = new FormData();
-    // The extension matters: transcription services classify audio by filename.
-    body.append("audio", clip, `recording.${clip.type.includes("ogg") ? "ogg" : clip.type.includes("mp4") ? "m4a" : "webm"}`);
-    body.append("durationMs", String(durationMs));
-    body.append("chunk", JSON.stringify(metadata));
-    // Same-origin request: the browser reuses the owner credentials it already
-    // holds for this page. No credential is ever read by client code.
-    const response = await fetch("/api/recordings", { method: "POST", body, cache: "no-store" });
-    if (response.ok) {
-      const outcome = (await response.json()) as RecordingResult;
-      setResult(outcome);
-      setOutcomes((previous) => ({ ...previous, [metadata.sequence]: outcome }));
-      setPhase("done");
-      return true;
-    }
-    if (response.status === 401) {
-      setFailure({ title: "Private access required", detail: "Reload the page and sign in again.", retryable: false });
-      setPhase("idle");
-      return false;
-    }
-    const payload = await response.json().catch(() => null);
-    const error = payload && typeof payload === "object" && "error" in payload ? (payload as { error: { message?: unknown; retryable?: unknown; port?: unknown } }).error : null;
-    setFailure({
-      title: error?.port === "notes" ? "Notes could not be generated" : error?.port === "transcription" ? "The recording could not be transcribed" : "Echo could not process the recording",
-      detail: typeof error?.message === "string" ? error.message : "The server rejected the recording.",
-      retryable: error?.retryable === true,
-    });
-    setPhase("idle");
-    return false;
-  }, []);
-
   async function start() {
     const attempt = ++generation.current;
     setFailure(null);
-    setResult(null);
-    setChunks([]);
-    setOutcomes({});
     setElapsedMs(0);
     setPhase("starting");
 
@@ -126,6 +91,13 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       return;
     }
 
+    try { await queue.prepare(); }
+    catch (cause) {
+      setFailure({ title: "Recording cannot be saved", detail: storageFailure(cause), retryable: true });
+      setPhase("idle");
+      return;
+    }
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -138,7 +110,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     let active: ReturnType<typeof captureSession>;
     try {
-      active = captureSession(stream, { chunkMs: 30_000, overlapMs });
+      active = captureSession(stream, { chunkMs: 30_000, overlapMs }, undefined, queue.persist);
     } catch {
       stream.getTracks().forEach((track) => track.stop());
       setFailure({ title: "Recording could not start", detail: "This browser could not open an audio recorder. Try a different browser or device.", retryable: false });
@@ -150,22 +122,11 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     setPhase("recording");
     void active.finished.then(async (captured) => {
       if (attempt !== generation.current) return;
-      setChunks(captured.chunks);
       setPhase("done");
       if (captured.session.captureStatus === "failed") {
-        setFailure({ title: "Capture incomplete", detail: "Some chunk boundaries or audio could not be captured. Available clips remain below; nothing was uploaded.", retryable: false });
-      } else {
-        // Processing starts only after capture ends. Incremental upload and
-        // stitching remain separate tasks; each chunk keeps its own result.
-        for (const chunk of captured.chunks) {
-          if (attempt !== generation.current) break;
-          try { if (!await upload(chunk.audio, chunk.metadata.endMs - chunk.metadata.startMs, chunk.metadata)) break; } catch {
-          setFailure({ title: "Echo could not reach the server", detail: "The clip remains available below. Try again.", retryable: true });
-          setPhase("done");
-          break;
-          }
-        }
+        setFailure({ title: "Capture incomplete", detail: "Capture or local saving failed. Saved and unsaved clips are shown below. Download unsaved audio before leaving.", retryable: false });
       }
+      queue.finished();
     });
   }
 
@@ -193,7 +154,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     );
   }
 
-  const busy = phase === "starting" || phase === "processing";
+  const busy = phase === "starting" || phase === "processing" || queue.working || !queue.ready;
   return (
     <div>
       <section aria-labelledby="record-title" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
@@ -205,7 +166,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             </button>
           ) : (
             <button type="button" onClick={start} disabled={busy} aria-busy={busy} className="flex h-28 w-28 items-center justify-center rounded-full bg-teal-700 text-lg font-semibold text-white shadow-lg transition hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none">
-              {phase === "processing" ? "Working" : phase === "starting" ? "Starting" : result ? "Again" : "Record"}
+              {phase === "processing" ? "Working" : phase === "starting" ? "Starting" : chunks.length ? "Again" : "Record"}
             </button>
           )}
 
@@ -240,14 +201,21 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Overlapping words are not merged yet, so they appear in both chunks.</p>
       </section>
 
+      <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
+        <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>
+        <p>All clips are local-only: no verified remote audio copy exists. Processing does not remove audio.</p>
+        <p>{queue.space?.persistent ? "Browser persistence granted." : "Browser storage may be evicted."} Keep this tab open while recording. Backgrounding or closing can lose the unfinished chunk and pauses retries.</p>
+        {queue.space?.nearFull ? <p role="alert">Storage nearly full. Export clips; new recording is paused. Echo will not delete audio to free space.</p> : null}
+        {!queue.locksAvailable ? <p role="alert">This browser cannot safely coordinate retries across tabs. Use a current browser with Web Locks.</p> : null}
+        {queue.error ? <p role="alert">{queue.error}</p> : null}
+        {gaps.length ? <p role="alert">Missing or inconsistent chunks in {gaps.length} sessions. Available clips remain recoverable; continuity is not verified.</p> : null}
+        {queue.entries.some((entry) => entry.error) ? <p role="alert">Some processing attempts failed. Audio is retained; retry after reconnecting or checking server access.</p> : null}
+        <button type="button" className="rounded border px-3 py-1 disabled:opacity-50" disabled={busy || phase === "recording" || !queue.online} onClick={() => { void queue.sync(true); }}>Retry pending processing</button>
+      </section>
+
       {chunks.length ? <section className="mt-6 space-y-4" aria-label="Session chunks">
-        <p className="text-sm text-slate-600">Clips remain in this page only. Reloading or recording again loses them. Overlapping speech is not stitched yet; each result belongs to the selected chunk.</p>
-        {chunks.map((chunk) => <ChunkPlayer key={chunk.metadata.id} chunk={chunk} disabled={busy} onTranscribe={() => {
-          void upload(chunk.audio, chunk.metadata.endMs - chunk.metadata.startMs, chunk.metadata).catch(() => {
-            setFailure({ title: "Echo could not reach the server", detail: "The clip is still available below. Try again.", retryable: true });
-            setPhase("done");
-          });
-        }} />)}
+        <p className="text-sm text-slate-600">Saved clips recover on this same origin and browser when the page is available again. Export unsaved clips before leaving. Overlapping speech is not stitched.</p>
+        {chunks.map((chunk) => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some((entry) => chunkKey(entry) === chunkKey(chunk))} disabled={busy || phase === "recording"} onSave={() => { void queue.persist(chunk).then(queue.finished).catch(() => {}); }} />)}
       </section> : null}
 
       {failure ? (
@@ -258,22 +226,26 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         </div>
       ) : null}
 
-      {Object.entries(outcomes).map(([sequence, outcome]) => <div key={sequence}><p className="mt-6 text-sm">Result for chunk {Number(sequence) + 1}</p><RecordingOutcome result={outcome} /></div>)}
-      {!Object.keys(outcomes).length ? <div className="mt-6"><DisclosureNotice disclosures={status.disclosures} /></div> : null}
+      {outcomes.map((entry) => <div key={chunkKey(entry)}><p className="mt-6 text-sm">Session {entry.metadata.sessionId.slice(0, 8)} · chunk {entry.metadata.sequence + 1}</p><RecordingOutcome result={entry.result!} /></div>)}
+      {!outcomes.length ? <div className="mt-6"><DisclosureNotice disclosures={status.disclosures} /></div> : null}
     </div>
   );
 }
 
-function ChunkPlayer({ chunk, disabled, onTranscribe }: { chunk: PlayableChunk; disabled: boolean; onTranscribe: () => void }) {
+function ChunkPlayer({ chunk, saved, disabled, onSave }: { chunk: PlayableChunk; saved: boolean; disabled: boolean; onSave: () => void }) {
   const audio = useRef<HTMLAudioElement>(null);
+  const download = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
     const objectUrl = URL.createObjectURL(chunk.audio);
     if (audio.current) audio.current.src = objectUrl;
+    if (download.current) download.current.href = objectUrl;
     return () => URL.revokeObjectURL(objectUrl);
   }, [chunk.audio]);
   return <div className="rounded-xl border border-slate-200 p-4">
-    <p className="mb-2 text-sm">Chunk {chunk.metadata.sequence + 1} · {clock(chunk.metadata.startMs)}–{clock(chunk.metadata.endMs)} · overlap {chunk.metadata.overlapMs} ms</p>
+    <p className="mb-2 text-sm">Session {chunk.metadata.sessionId.slice(0, 8)} · chunk {chunk.metadata.sequence + 1} · {clock(chunk.metadata.startMs)}–{clock(chunk.metadata.endMs)} · overlap {chunk.metadata.overlapMs} ms</p>
     <audio ref={audio} controls className="w-full" />
-    <button type="button" disabled={disabled || !chunk.audio.size} onClick={onTranscribe} className="mt-2 rounded border px-3 py-1 disabled:opacity-50">Transcribe this chunk</button>
+    <p className="my-2 text-sm">{saved ? "Saved locally" : "Not saved — download before leaving"}</p>
+    <a ref={download} download={`${chunk.metadata.sessionId}-${chunk.metadata.id}.${chunk.audio.type.includes("mp4") ? "m4a" : chunk.audio.type.includes("ogg") ? "ogg" : "webm"}`} className="underline">Download audio</a>
+    {!saved ? <button type="button" disabled={disabled || !chunk.audio.size} onClick={onSave} className="ml-3 rounded border px-3 py-1 disabled:opacity-50">Retry saving</button> : null}
   </div>;
 }

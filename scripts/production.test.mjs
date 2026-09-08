@@ -9,7 +9,7 @@ const username = "synthetic-owner";
 const password = "synthetic-production-password-123456789";
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 const PAGE_MARKER = /Record a note/;
-const PRIVATE_PATHS = ["/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/_next/static/missing.js", "/?_rsc=probe"];
+const PRIVATE_PATHS = ["/diagnostics/queue", "/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/_next/static/missing.js", "/?_rsc=probe"];
 
 // Every provider variable is blanked explicitly so a developer's real
 // apps/web/.env.local can never configure a server under test, and no test can
@@ -169,5 +169,11 @@ test("capture diagnostics are unavailable in production even to the owner", { ti
     const response = await fetch(`${base}/diagnostics/capture`, { headers: { authorization } });
     assert.equal(response.status, 404);
     assert.doesNotMatch(await response.text(), /Run browser acceptance/);
+  });
+});
+
+ test("queue diagnostics are absent from production even for the owner", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    assert.equal((await fetch(`${base}/diagnostics/queue`, { headers: { authorization } })).status, 404);
   });
 });
