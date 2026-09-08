@@ -6,6 +6,7 @@
   "scripts": {
     "doctor": "npm run doctor --workspace @echo/web",
     "dev": "npm run dev --workspace @echo/web",
+    "dev:lan": "npm run dev:lan --workspace @echo/web",
     "start": "npm run start --workspace @echo/web",
     "lint": "npm run lint --workspace @echo/web",
     "typecheck": "npm run typecheck --workspace @echo/web",

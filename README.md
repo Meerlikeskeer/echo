@@ -78,6 +78,23 @@ npm run dev
 
 Open `http://127.0.0.1:3000` and enter the owner credentials in the browser Basic authentication prompt. Missing/invalid configuration returns HTTP 503, including in development. Wrong/missing credentials return 401. No provider keys are needed for this shell. The app binds to loopback by default. Use a TLS reverse proxy before any access beyond localhost; Basic credentials require encrypted transport. This is a single-owner baseline with no logout/session management or multi-user support. Future data and mutation boundaries must enforce owner access independently.
 
+### Testing from a phone or another device
+
+`npm run dev` binds `127.0.0.1`, so nothing else on the network can reach it. That is the safe default and it stays that way. To test from a phone:
+
+```sh
+npm run dev:lan
+```
+
+This serves HTTPS on every interface using Next.js's built-in `--experimental-https`, which generates a locally trusted certificate with `mkcert`. Open `https://<your-machine-ip>:3000` on the device.
+
+**HTTPS is not optional here, and this is the reason.** Echo checksums every recorded chunk with `crypto.subtle`, which browsers expose only in a secure context — HTTPS, or `localhost`. Over plain HTTP from another device `crypto.subtle` is `undefined` and recording cannot work at all. Echo now detects this before opening the microphone and says so, naming the address, rather than failing afterwards as a generic capture error.
+
+Two things to expect:
+
+- **The phone will warn about the certificate.** `mkcert`'s authority is trusted on the machine that generated it, not on your phone. Accept the warning to continue; the origin is still HTTPS and still a secure context. Install the `mkcert` root certificate on the device if you would rather not see it each time.
+- **`dev:lan` exposes Echo to your local network.** The owner access gate still applies to every route, and HTTPS means the Basic credentials are encrypted in transit rather than sent in the clear. Use it on networks you trust, and stop the server when you are finished.
+
 Run each check from the repository root:
 
 ```sh
