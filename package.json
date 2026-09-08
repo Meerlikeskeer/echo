@@ -1,7 +1,14 @@
 {
-  "name": "echo", "version": "0.1.0", "private": true,
-  "workspaces": ["apps/web"],
-  "engines": { "node": ">=22 <23", "npm": ">=10 <11" },
+  "name": "echo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10 <11"
+  },
   "packageManager": "npm@10.9.8",
   "scripts": {
     "doctor": "npm run doctor --workspace @echo/web",
@@ -17,6 +24,8 @@
     "test:selfhost": "node --test scripts/selfhost.test.mjs",
     "check:tracked": "node scripts/check-source-tracked.mjs",
     "test:deployed": "node scripts/deployed-smoke.mjs",
-    "check": "npm run check:tracked && npm run lint && npm run typecheck && npm test && npm run build && npm run test:production && npm run test:selfhost"
+    "check": "npm run check:tracked && npm run status:check && npm run lint && npm run typecheck && npm test && npm run build && npm run test:production && npm run test:selfhost",
+    "status:table": "node scripts/status-table.mjs",
+    "status:check": "node scripts/status-table.mjs --check"
   }
 }

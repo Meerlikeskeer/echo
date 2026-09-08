@@ -208,6 +208,32 @@ The deeper problem is sequencing. Mobile capture was being treated as an accepta
 
 **Reversing this needs an ADR.** Turning `deploymentEnabled` back on, per-branch or globally, is a reversal of this decision and must be recorded as one — including the reasoning about the plan's allowance that made it safe.
 
+## ADR-015 — Per-task status files; STATUS.md holds only what is shared
+
+**Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-014 · **Refines:** the `STATUS.md` convention established by ENG-003
+
+**Context:** `STATUS.md` is the one file every session reads, and its update protocol requires **every** task to write the same three regions: the *In flight* section, one row of a shared task table, and the verification snapshot. Git merges cleanly when branches touch different regions of a file and conflicts when they touch the same ones, so the protocol did not merely permit collisions — it mandated them. The measurements at the time of this decision: **29 of the 61 commits on `main` touched `STATUS.md`** (48%), and the two volatile sections were **92 of its 192 lines** (also 48%). Half the file was the half everyone had to rewrite.
+
+The cost was not usually visible as conflict markers. It was paid instead by **stacking branches to avoid the conflict** — DOC-003 under ENG-013 under DOC-004 under ENG-014, four deep — which `AGENTS.md` separately warns against, because a stacked branch inherits the review burden of its base and cannot be reverted alone. One rule in the repository was pushing directly against another.
+
+A second, quieter failure came from the same shape. Because the *In flight* section was shared and append-friendly, finished work accumulated in it instead of being moved somewhere durable. It reached 51 lines and simultaneously contained a paragraph reading "provisioning started, nothing deployed yet" and, three paragraphs later, "ECHO IS DEPLOYED". A session reading top to bottom would have believed the first.
+
+**Decision:** `STATUS.md` keeps only content that is genuinely shared and changes rarely — the reading map, the vocabulary, what exists and does not exist, the verification **floor**, and the update protocol. The three volatile regions move:
+
+1. **In flight → `status/in-flight/<TASK-ID>.md`,** one file per active task, created before work starts and **deleted in the pull request that finishes the task.** Separate files never conflict. Deletion on merge is what prevents the rot described above, so anything durable must be moved to a source-of-truth document *before* the file is deleted.
+2. **The verification snapshot splits in two.** The **floor** — currently 72 unit, 7 production HTTP, 4 self-host parity, 16 controller — stays in `STATUS.md`, changes rarely, and changes deliberately: a count going down is still a regression, not a cleanup. The **numbers from a particular run** belong to the task that ran them, and go in its in-flight file and its pull request body.
+3. **The task table is generated, not written.** `scripts/status-table.mjs` builds it from the `**Status:**` lines already present in each `TASKS.md` entry, and `npm run check` fails when the committed table does not match. `TASKS.md` was already the source of truth for task state; the table was a hand-maintained copy of it, and a copy that fifteen branches all edit is a conflict generator with no compensating benefit.
+
+**Consequences.** Parallel branches stop competing for `STATUS.md`, which removes the main reason to stack branches and makes "branch from `main`" the easy path rather than the expensive one. `STATUS.md` gets shorter and stops carrying stale narrative, so the file every session is required to read stays cheap to read — the reason ENG-003 created it. Task state now has exactly one writable home, `TASKS.md`, and one generated view. The cost is one more directory and a script inside `npm run check`; that check is what keeps the generated table honest, so weakening or removing it is not a cleanup.
+
+**What does not change.** `STATUS.md` is still the first thing every session reads and still the only file every session must read. The update protocol still applies in full: record before starting, keep it current, and a task is still not done until its `TASKS.md` handoff says so. The counts are still a floor. None of the version-control discipline in `AGENTS.md` is relaxed — this ADR changes where status is written, not whether it is.
+
+**Rejected: a union merge driver on `STATUS.md`.** Marking the file `merge=union` in `.gitattributes` makes Git take both sides instead of failing. That suits an append-only changelog. `STATUS.md` is edited, not appended — rows are flipped, paragraphs are corrected, stale claims are deleted — and a union merge would silently keep both the old claim and its correction. Applied to the example above, it would have preserved "nothing deployed yet" alongside "ECHO IS DEPLOYED" and reported success. Turning a loud failure into a quiet wrong answer is the wrong trade for a file whose purpose is to be believed.
+
+**Rejected: relaxing the update protocol instead.** The discipline is not the problem and it was expensive to learn — `main` once fell fourteen commits behind, and a Route Handler was once excluded from every commit while every check passed green. Those rules stay. The file layout was an incidental choice from ENG-003, not one of those lessons, and it is the part that was generating friction.
+
+**Reversing this needs an ADR.** Moving *In flight* back into `STATUS.md`, or hand-maintaining the task table again, reverses this decision and must be recorded as one.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.

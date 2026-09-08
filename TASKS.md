@@ -414,6 +414,38 @@ Error: ENOENT: no such file or directory, open
 - **Not verified here:** the deployed run itself was the owner's, not this session's — an agent sandbox cannot reach the platform. It is recorded as the owner's run and marked as such in the snapshot. The URL is deployment-specific rather than a project alias; a future alias should be re-checked rather than assumed.
 - **Next:** open mobile capture acceptance as its own task (ADR-013's precondition is now met), finish WEB-004's four native browser checks, and decide the proposed `status/in-flight/<TASK-ID>.md` split, which needs an ADR.
 
+## ENG-014 — Stop STATUS.md from causing merge conflicts
+
+**Status:** Done · **Branch:** `eng/ENG-014-status-per-task-files`, branched off `docs/DOC-004-deployed-check-passes` @ `96a1b2a` and since merged with `main` @ `5402d30`, which now contains that work · **Decisions:** ADR-015 accepted
+
+**Acceptance:** Two parallel task branches can each follow the update protocol in full without touching the same lines of any file. `STATUS.md` stops carrying per-task content, and the task table can no longer drift from `TASKS.md` without a check failing.
+
+**The problem, measured.** `STATUS.md`'s update protocol required **every** task to write the same three regions: the *In flight* section, one row of a shared fifteen-row table, and the verification snapshot. Git conflicts when branches touch the same region, so the protocol did not merely permit collisions — it mandated them. **29 of the 61 commits on `main` touched `STATUS.md`** (48%), and the two volatile sections were **92 of its 192 lines** (also 48%). Half the file was the half everyone had to rewrite.
+
+**The cost was mostly invisible**, because the usual escape was stacking branches rather than resolving conflicts: DOC-003 under ENG-013 under DOC-004 under this task, four deep. `AGENTS.md` warns against stacking for unrelated and better reasons — a stacked branch inherits its base's review burden and cannot be reverted alone. One rule in the repository was pushing directly against another.
+
+**A second failure came from the same shape.** Because *In flight* was shared and easy to append to, finished work accumulated there instead of moving somewhere durable. It reached 51 lines and simultaneously contained "provisioning started, nothing deployed yet" and, three paragraphs later, "ECHO IS DEPLOYED". Removing it surfaced a second stale claim that had been sitting in the task table: a row asserting ADR-009 and ADR-010 were "Accepted, **not on `main`**" when both have been on `main` for some time.
+
+**Scope delivered**
+
+- `status/in-flight/<TASK-ID>.md`, one file per active task, with a `README.md` stating the convention and — more importantly — what must **not** go in these files, since they are deleted on merge.
+- `scripts/status-table.mjs` and `npm run status:table` / `npm run status:check`. The table in `STATUS.md` is generated from the `**Status:**` lines already in `TASKS.md` and lives between two HTML comment markers. `npm run check` now runs `status:check` second, right after `check:tracked`.
+- `STATUS.md` restructured: *In flight* becomes a pointer, the per-run verification snapshot becomes a **verification floor**, and the durable content that was buried in *In flight* moves into *What exists today* and a new *Standing facts and hard-won lessons* section. **Nothing was dropped except claims that were false.**
+- **ADR-015** in `DECISIONS.md`, and the update protocol rewritten in `STATUS.md`, `AGENTS.md` and `CLAUDE.md` to match.
+
+**What deliberately did not change.** None of the version-control discipline in `AGENTS.md` is relaxed. `STATUS.md` is still the first and only file every session must read. The protocol still applies in full — record before starting, keep it current, a task is not done until its `TASKS.md` handoff says so — and the counts are still a floor. This task changed *where* status is written, not *whether* it is.
+
+### Handoff
+
+- **What changed:** `STATUS.md`, `TASKS.md`, `AGENTS.md`, `CLAUDE.md`, `DECISIONS.md` (ADR-015), `package.json`, `scripts/status-table.mjs` (new), `status/in-flight/README.md` (new), `status/in-flight/ENG-014.md` (new), `status/in-flight/WEB-004.md` (new). **No application source is touched.**
+- **Verified, 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6**, on `eng/ENG-014-status-per-task-files` @ `3858bd9`. `check:tracked` 0 · **`status:check` 0 (29 tasks)** · lint 0 · typecheck 0 · **72 unit, 71 pass, 1 fail** · production build 0 · **7 production HTTP, 7 pass** · **4 self-host parity, 4 pass** · **16 controller tests, OK**.
+- **The single unit failure is the known worktree one and nothing else.** It is `output file tracing still points at the repository root in both cases`, which asserts the checkout is named `echo`; this branch was verified inside `.claude/worktrees/doc-004-deployed-check-passes`. Because `npm run check` halts on it, the four steps after it were run individually and all passed — that is where the build, HTTP, parity and controller numbers above come from. **This branch changes nothing under `apps/`** — `git diff --stat 96a1b2a HEAD -- apps/` is empty — so the unit suite is byte-identical to DOC-004's, which ran **72 pass, 0 fail** in a checkout named `echo`. **The 72/7/4/16 floor holds.**
+- **The new check was made to fail on purpose, two ways**, because a check that has only ever passed proves nothing. Editing a generated row by hand: **exit 1**, naming `TASKS.md` as the source of truth and `npm run status:table` as the fix. Removing a marker from `STATUS.md`: **exit 2**, naming the missing marker. Restored, and `status:check` returns to exit 0 on 28 tasks.
+- **The base was not `main` when this branch started, and that is declared.** At the time, `main` lacked DOC-004 and ENG-013 (pull requests #20 and #19), and restructuring `STATUS.md` from `main` would have conflicted with both across most of the file — the exact problem this task removes, and a fourth instance of it. **Both have since been merged**, so `main` @ `5402d30` now contains them; this branch was merged with that `main` and the merge was clean, because the content was already in its history. **No stacking remains: this pull request stands alone against `main`.**
+- **Transitional, and worth knowing:** branches that were already in flight when ADR-015 landed have no `status/in-flight/` file. `test/WEB-004-browser-acceptance` was migrated here by hand so its content was not lost with the old section. **WEB-005 on `feat/WEB-005-incremental-upload` has not been**, deliberately — another contributor owns it, and writing their in-flight file would both guess at their state and break the rule that a task's file is its own. They should add it.
+- **Not verified:** nothing about the running application changed, so no application behaviour was re-checked beyond the full suite. The generator parses the `**Status:**` line format that all 28 current entries share; an entry written in a different shape would silently fall back to `Todo`, which `status:check` would then show as a mismatch rather than a wrong row.
+- **Next:** the one-line ENG-012 fix so `npm run check` passes inside a worktree; opening mobile capture acceptance as its own task; WEB-004's four browser checks.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
