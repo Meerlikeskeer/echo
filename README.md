@@ -86,15 +86,20 @@ npm run typecheck       # Next route type generation, then strict TypeScript
 npm test                # synthetic access-policy and empty-state behavior tests
 npm run build           # actual Next production compilation
 npm run test:production # requires build; starts/stops two loopback production servers
-npm run check           # all five checks above, in order
+npm run test:selfhost   # requires build; boots the standalone bundle a container would run
+npm run check           # every check above, in order, plus the tracked-source guard
 npm start               # serve the production build on 127.0.0.1:3000
 ```
 
 The committed `package-lock.json` pins dependencies; `npm ci` installs it without rewriting resolution. Production tests supply synthetic credentials, exercise absent-config and unauthorized denial on page/API/static/RSC paths, check an old middleware-bypass header, then verify authorized HTML/RSC and emitted JS/CSS. They require permission to bind loopback sockets. No external provider calls or recording fixtures are used. Unit tests use Node's built-in test runner via `tsx`; production tests use it directly and fail on assertions/server startup failure.
 
-GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to `main`, with read-only repository permissions and no secrets. Remote CI execution and branch protection must be configured/observed after pushing; this change does not merge or deploy anything.
+GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to `main`, with read-only repository permissions and no secrets. A second `selfhost-container` job is specified in the ENG-002 handoff in `TASKS.md` but is **not yet in `.github/workflows/pull-request.yml`**: it builds the self-hosted image, asserts no environment file is inside it, runs it with a synthetic per-run password, and smoke-checks it with `scripts/container-smoke.mjs`. It is separate from the main gate because it needs a container runtime, which development machines on this project may not have. Until it is added, **the container image is unverified** — `npm run check` proves the bundle, not the image. Remote CI execution and branch protection must be configured/observed after pushing; this change does not merge or deploy anything.
 
 ## Deployment
+
+Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified, neither is provisioned.
+
+### Vercel (primary target)
 
 Vercel is Echo's intended deployment target (ADR-008). The intended workflow is:
 
@@ -104,6 +109,37 @@ feature branch → GitHub → Vercel preview deployment
 ```
 
 **Nothing is deployed today.** No Vercel project, environment variables, or preview deployments have been configured. Before any hosted use, provision `ECHO_OWNER_USERNAME` and a random 32+ character `ECHO_OWNER_PASSWORD` as server-side environment variables and serve over HTTPS — Basic credentials require encrypted transport. Keep future feature branches compatible with preview deployments.
+
+### Self-hosted container (ADR-010)
+
+REQ-009 makes self-hosted deployment an architectural baseline, so Echo must run without Vercel using only the configuration already documented. ENG-002 verifies that rather than asserting it.
+
+```sh
+docker build -t echo .
+docker run --rm -p 3000:3000 --env-file apps/web/.env.local echo
+```
+
+The image contains no configuration. `ECHO_OWNER_USERNAME`, `ECHO_OWNER_PASSWORD` and the provider variables are read from the environment when the server starts, so one image serves any deployment and the image itself holds no secret. `.dockerignore` keeps every environment file out of the build context, and CI asserts that no `.env*` file exists inside the built image.
+
+To smoke-check a container you have started:
+
+```sh
+ECHO_OWNER_USERNAME=... ECHO_OWNER_PASSWORD=... node scripts/container-smoke.mjs http://127.0.0.1:3000
+```
+
+**Two things self-hosting has to handle that Vercel handles for you**, both from ADR-010:
+
+- **Static assets.** `output: "standalone"` deliberately omits `.next/static` and `public/`, because on Vercel a CDN serves them. A bundle started without them returns 200 for the page and 404 for every stylesheet and script — it looks like a styling bug, not a deployment bug. `npm run selfhost:assemble` copies them, the `Dockerfile` runs it, and `npm run test:selfhost` fails if it was skipped.
+- **Build-time versus runtime configuration.** Nothing is inlined at build time. `npm run test:selfhost` builds once and boots the same bytes twice — configured and unconfigured — and asserts the behavior differs. Echo has no `NEXT_PUBLIC_*` variables, and provider credentials must never become one.
+
+Without a container runtime you can still run the exact bundle the image would:
+
+```sh
+npm run build && npm run selfhost:assemble
+PORT=3000 HOSTNAME=127.0.0.1 npm run selfhost:start
+```
+
+Serve behind a TLS reverse proxy for any access beyond localhost; Basic credentials require encrypted transport.
 
 ## Unresolved setup and automation
 

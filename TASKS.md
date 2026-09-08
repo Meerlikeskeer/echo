@@ -18,11 +18,112 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 ## ENG-002 — Self-host parity verification
 
-**Status:** Todo · **Dependencies:** WEB-001 (satisfied)
+**Status:** Implemented and verified, except the container build itself · **Branch:** `eng/ENG-002-self-host-parity` · **Dependencies:** WEB-001 (satisfied)
 
 **Acceptance:** Demonstrate that Echo runs outside Vercel as required by ADR-010 and REQ-009. Add a container build using the Next.js standalone server, document the self-hosted run command and required configuration, and extend verification with a production smoke check against the container equivalent to the existing production HTTP tests. Static asset serving and build-time versus runtime environment variables must be handled explicitly, not assumed.
 
 **Rationale:** REQ-009 makes self-hosted deployment an architectural baseline, but nothing verifies it. Proving parity is cheapest now, while the application is a single page and an access proxy, and before WEB-004/WEB-005/WEB-010 introduce queues, scheduled work and object storage — the point at which platform-specific primitives would otherwise be adopted silently. Must not weaken any existing check.
+
+### Handoff (2026-09-07)
+
+**Branch base — read this before merging.** This branch is based on `feat/WEB-002-recording-slice` @ `cbd216b`, **not** on `main`. `main` is six commits behind and does not contain `STATUS.md`, the ENG-006 tracked-source guard, `npm run doctor`, the recording slice, or this task's own entry in `TASKS.md` — ENG-002 could not be defined, let alone verified against the current gate, from `main`. Merging this branch therefore also merges everything on the WEB-002 branch. If that branch is not being accepted, stop before merging this one.
+
+**Scope delivered**
+
+- `apps/web/next.config.ts` sets `output: "standalone"` and `outputFileTracingRoot` to the repository root. The root is the load-bearing part: Echo is an npm workspace with hoisted dependencies, so tracing from `apps/web` emits a bundle whose imports resolve to nothing — and that bundle builds cleanly and only fails on boot.
+- `scripts/selfhost-assemble.mjs` — the single definition of assembling a self-hosted bundle. Copies `.next/static`, and `public/` when it exists (it does not today, which is why its absence is reported rather than fatal). Called by both the test and the `Dockerfile` so the tested layout and the shipped layout cannot drift.
+- `scripts/selfhost.test.mjs` — four tests that boot the assembled bundle, not `next start`. Added to `npm run check`. One of them copies the bundle outside the repository and starts it with `cwd` and a relative `server.js` path matching the `Dockerfile`'s `WORKDIR` and `CMD`, with nothing inherited from the shell. That is the closest check to the container that needs no container runtime, and it is the only one that proves the bundle is not quietly resolving imports up into the workspace `node_modules` it otherwise sits inside.
+- `Dockerfile` and `.dockerignore` — multi-stage build on `node:22.23.2-alpine`, non-root runtime user, no configuration and no environment file inside the image.
+- `scripts/container-smoke.mjs` — checks a running container; reads credentials from the environment and never prints them.
+- A `selfhost-container` CI job is **specified but not committed** — see *CI job, pending owner action* below.
+- Documentation: `README.md` gains a self-hosted deployment section; `ARCHITECTURE.md` gains an *ENG-002 self-host parity boundaries* section and updated hosting/testing tables.
+
+#### CI job, pending owner action
+
+The container job is **not** in `.github/workflows/pull-request.yml`. GitHub requires a separate `workflow` OAuth scope to create or modify anything under `.github/workflows/`, because those files execute code in CI with access to repository secrets, and the development token here does not hold it. Rather than grant an agent standing write access to CI configuration, the job is recorded here for the owner to add by hand. Until it is added, **the container image is unverified**: `npm run check` proves the bundle, not the image.
+
+Append verbatim to `.github/workflows/pull-request.yml`, at the same indentation as the existing `verify:` job:
+
+```yaml
+  # ENG-002 / ADR-010. `npm run check` already proves the standalone bundle runs
+  # self-hosted, and it runs anywhere. This job proves the container around that
+  # bundle also builds and runs, which needs a container runtime that most
+  # development machines in this project do not have. It is a separate job so a
+  # container failure is legible on its own rather than buried in the main gate.
+  selfhost-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Synthetic, generated per run, and never a real credential. Only ever
+      # passed to the container and to the smoke check.
+      ECHO_OWNER_USERNAME: synthetic-owner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Generate a synthetic owner password for this run
+        run: echo "ECHO_OWNER_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Build the self-hosted image
+        run: docker build -t echo:ci .
+
+      - name: Confirm the image contains no environment file
+        # A stray .env in the build context would ship a credential inside the
+        # image. .dockerignore excludes them; this asserts it rather than
+        # trusting it.
+        run: |
+          if docker run --rm --entrypoint sh echo:ci -c 'ls -A /app; find /app -maxdepth 3 -name ".env*" -print' | grep -q '\.env'; then
+            echo "An environment file was found inside the image."
+            exit 1
+          fi
+
+      - name: Run the container
+        run: |
+          docker run -d --name echo-ci -p 3000:3000 \
+            -e ECHO_OWNER_USERNAME="$ECHO_OWNER_USERNAME" \
+            -e ECHO_OWNER_PASSWORD="$ECHO_OWNER_PASSWORD" \
+            echo:ci
+
+      - name: Smoke-check the running container
+        run: node scripts/container-smoke.mjs http://127.0.0.1:3000
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs echo-ci || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f echo-ci || true
+```
+
+It introduces no secret: `ECHO_OWNER_PASSWORD` is generated per run and discarded with the container.
+
+**Why a separate suite rather than extending `scripts/production.test.mjs`.** That file runs against `next start`, which reads the whole workspace and the whole `node_modules`, so it passes even when the standalone bundle is broken. It was deliberately left untouched — it owns the access matrix, duplicating it would mean two copies to keep in step, and leaving it alone also keeps this branch from conflicting with WEB-003 work happening in parallel.
+
+**The failure mode was reproduced, not assumed.** With `.next/static` removed from the assembled bundle, the standalone server returns **200 for the page and 404 for all nine linked assets** — a deployment that looks healthy and is not. `scripts/selfhost.test.mjs` fails on the first asset in that state.
+
+**Checks and outcomes** — run from the repository root, Node 22.23.2 / npm 10.9.8:
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm ci` | 0 | Clean install, 0 vulnerabilities |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests pass** · production build succeeded · **5 production HTTP tests pass** · **4 self-host parity tests pass** |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (unchanged by this task) |
+
+Baselines of 46 unit and 5 production HTTP tests are unchanged; the 4 self-host tests are new. No existing assertion was removed or relaxed.
+
+**Limitations and blockers**
+
+- **The container image has never been built.** Docker is not installed in this development environment, so the `Dockerfile`, `.dockerignore` and `container-smoke.mjs` are unexecuted end to end. The relocation test covers the bundle contract the image depends on — the `COPY` source, the `WORKDIR`, the relative `CMD` path, and that the bundle carries its own dependencies — but not the base image, layer copy, file ownership or the non-root user. **The CI job that would verify it is not committed** (see *CI job, pending owner action* above). Do not describe the container as verified until that job exists and passes.
+- **`.env.example` was not updated**, and this branch's copy is the older `main` version. The development sandbox forbids writing any `.env*` path, so the file could not be edited or checked out. Self-hosted configuration is documented in `README.md` instead. Someone with write access should reconcile `.env.example` and consider whether it should mention the container.
+- Nothing is deployed. No registry, no host, no TLS. `ECHO_OWNER_PASSWORD` must be a random 32+ character value and the container must sit behind a TLS reverse proxy for any access beyond localhost.
+- Self-hosted image-optimisation caching is untouched because Echo serves no images yet. It becomes real work when it does.
+
+**Next step:** owner reviews; CI runs the `selfhost-container` job to verify the image; then merge with the WEB-002 branch. The ADR-010 constraint this protects — no platform-specific primitive without an ADR — binds WEB-004, WEB-005 and WEB-010.
+
+**Carried in from WEB-003:** `checksum()` in `apps/web/src/lib/recording/session.ts` calls `crypto.subtle.digest`, which browsers expose only in a secure context. A self-hosted deployment reached over plain HTTP on a LAN leaves `crypto.subtle` undefined and capture fails as a generic "Capture incomplete". This is not fixed here — it is a WEB-003 code path — but it is a self-hosting failure and belongs on this list until it is handled.
 
 ## ENG-003 — Shared status file and reading map
 

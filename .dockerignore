@@ -1,0 +1,51 @@
+# Keep the build context small, reproducible, and free of anything secret.
+# Everything the image needs is installed from package-lock.json and built
+# inside the container.
+
+.git
+.github
+.claude
+
+node_modules
+apps/web/node_modules
+.next
+apps/web/.next
+out
+dist
+build
+coverage
+*.tsbuildinfo
+
+# Never send local credentials into a build context. .env.example is the only
+# environment file in the repository and the image does not need it.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets/
+
+# Recordings and local data must never enter an image.
+recordings/
+uploads/
+local-data/
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.ogg
+*.flac
+*.sqlite
+*.sqlite3
+*.db
+
+__pycache__/
+*.pyc
+.agent-runs/
+
+.DS_Store
+.idea/
+.vscode/
+*.log

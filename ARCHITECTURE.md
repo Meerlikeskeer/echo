@@ -31,10 +31,30 @@ shadcn/ui is the approved base component system and enters the repository when a
 | Technology | Responsibility | Status |
 | --- | --- | --- |
 | Vercel | Primary web hosting and deployment target | Approved (ADR-008); **not yet provisioned** |
+| Next.js standalone output + container | Portable self-hosted deployment | Approved (ADR-010); verified by ENG-002, **not yet provisioned** |
 
 The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments.
 
 **Vercel is a deployment target, not Echo's runtime (ADR-010).** REQ-009 makes self-hosted deployment an architectural baseline, so Echo must also run as a container using the Next.js standalone server. Application code targets portable primitives; introducing a platform-specific service — managed blob storage, queue, workflow, cron, KV or edge-config binding — requires an ADR stating how self-hosted deployments satisfy the same need. GPU-backed inference is always reached as a configured HTTP endpoint, never co-located with the web application. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured, and hosted use still requires provisioned owner credentials and HTTPS (ADR-007).
+
+#### ENG-002 self-host parity boundaries
+
+ADR-010's promise is verified continuously rather than asserted.
+
+| Piece | Responsibility |
+| --- | --- |
+| `apps/web/next.config.ts` | `output: "standalone"` plus `outputFileTracingRoot` set to the repository root. The root matters: Echo is an npm workspace with hoisted dependencies, and tracing from `apps/web` emits a bundle whose imports resolve to nothing — a failure invisible until the emitted server is started. |
+| `scripts/selfhost-assemble.mjs` | The single definition of "assemble a self-hosted bundle": copies `.next/static`, and `public/` when it exists. Both the test and the `Dockerfile` call it, so the tested layout and the shipped layout cannot drift. |
+| `scripts/selfhost.test.mjs` | Boots the assembled bundle — not `next start` — and asserts it serves every asset it links, still enforces the access gate, is configured purely at runtime, and runs correctly when relocated outside the repository the way the container relocates it. Runs inside `npm run check`. |
+| `Dockerfile` / `.dockerignore` | The portable deployment artifact. Carries no configuration and no environment file. |
+| `scripts/container-smoke.mjs` | Checks a running container: gate enforced, page served, compiled assets served from inside the image. CI only, because it needs a container runtime. |
+
+**The two failure modes this exists to catch**, both named in ADR-010's consequences:
+
+- **Static asset serving.** `output: "standalone"` deliberately omits `.next/static` and `public/`, because Vercel serves them from a CDN. A bundle started without them answers 200 for the page and 404 for every stylesheet and script, which reads as a styling bug rather than a packaging bug.
+- **Build-time versus runtime configuration.** `scripts/selfhost.test.mjs` builds once and boots identical bytes twice, configured and unconfigured, asserting the behavior differs. That is what makes one image deployable anywhere and proves no credential is baked in at build time. Echo has no `NEXT_PUBLIC_*` variables and provider credentials must never become one.
+
+**Why this is not folded into `scripts/production.test.mjs`.** That file owns the full access matrix against `next start`, which reads the whole workspace and the whole `node_modules`, so it passes even when the standalone bundle is broken. The two suites cover different artifacts; the self-host suite asserts only what the deployment shape can break.
 
 ### Initial Backend
 
@@ -83,11 +103,12 @@ Documented from what is actually present in the repository. Do not claim a frame
 | `next typegen` + `tsc --noEmit` | Generated route types, then strict type checking |
 | Node built-in test runner via `tsx` | Unit/behavior tests in `apps/web/tests/` |
 | Node built-in test runner (`node --test`) | Production HTTP tests in `scripts/production.test.mjs` against a real production build |
-| `next build` | Real production compilation |
+| Node built-in test runner (`node --test`) | Self-host parity tests in `scripts/selfhost.test.mjs` against the standalone bundle a container runs (ENG-002) |
+| `next build` | Real production compilation, emitting the standalone bundle |
 | Python `unittest` | Bounded-controller tests in `tests/test_agent_loop.py` |
-| GitHub Actions | `.github/workflows/pull-request.yml` runs `npm ci` and `npm run check` on pull requests and pushes to `main`, read-only permissions, no secrets |
+| GitHub Actions | `.github/workflows/pull-request.yml` runs `npm ci` and `npm run check` on pull requests and pushes to `main`, read-only permissions, no secrets. A `selfhost-container` job covering the image is specified in the ENG-002 handoff in `TASKS.md` and not yet added; see that handoff for why |
 
-There is **no** Vitest, Jest, Playwright, Cypress, or Testing Library in this repository. ESLint is pinned to `9.39.5` because the current Next React lint plugin crashes under ESLint 10; upgrading remains a maintenance requirement.
+There is **no** Vitest, Jest, Playwright, Cypress, or Testing Library in this repository. The container smoke check is a plain Node script driven by CI, not a browser-automation framework; adding one would be a stack change requiring an ADR. ESLint is pinned to `9.39.5` because the current Next React lint plugin crashes under ESLint 10; upgrading remains a maintenance requirement.
 
 ### External AI Services
 

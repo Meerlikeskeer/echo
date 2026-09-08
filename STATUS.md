@@ -10,7 +10,9 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **ENG-005 and WEB-003 — implemented, committed, pushed, and fully verified except in a real browser.** Everything the previous session recorded as blocked is resolved: the work is committed at `67212de`, pushed to `origin/feat/WEB-002-recording-slice`, and the working tree is clean. The full required gate passes from a clean install — exit codes and counts in the snapshot below. The dependency damage and the `.git/index.lock` failure were sandbox artifacts; neither reproduces.
 
-**What remains before either task can be marked Done:**
+**ENG-002 — self-host parity, implemented and verified on `eng/ENG-002-self-host-parity`.** Runs in parallel with the WEB-003 work above and shares no source files with it. `output: "standalone"`, an assembly step for the assets standalone omits, a `Dockerfile`, and three parity tests now inside `npm run check`. Two things are outstanding: **the container image has never been built** — no Docker here, and the CI job that would build it is recorded in `TASKS.md` for the owner to add by hand rather than committed, because GitHub gates `.github/workflows/` behind a scope agents here do not hold — and **`.env.example` could not be updated** because the sandbox forbids writing any `.env*` path. That branch is based on `cbd216b`, not `main`; see its `TASKS.md` handoff.
+
+**What remains before ENG-005 or WEB-003 can be marked Done:**
 
 1. **Browser validation for WEB-003 — its acceptance criteria require it, and it has never happened.** No `MediaRecorder` call, permission prompt, codec negotiation or auto-stop has ever run in a real browser. The riskiest untested assumption is the recorder relay itself: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
 2. **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Not reachable today because the dev and start scripts bind `127.0.0.1`. Log it against ENG-002.
@@ -54,7 +56,7 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`. O
 | ADR-009 / ADR-010 provider ports and deployment portability | Accepted, **not on `main`** | `docs/ADR-009-provider-selection` @ `93ec5b5` |
 | WEB-002 Short recording vertical slice | Implemented, verified live, **awaiting owner review** | `feat/WEB-002-recording-slice` |
 | ENG-003 Status file and reading map | Done | `feat/WEB-002-recording-slice` |
-| ENG-002 Self-host parity verification | Todo — independent of the WEB sequence | — |
+| ENG-002 Self-host parity verification | Implemented and verified; **container image never built** | `eng/ENG-002-self-host-parity` |
 | ENG-005 Provider doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
 | WEB-003 Session and playable chunk model | Implemented and verified by test; **browser validation outstanding** | `feat/WEB-002-recording-slice` |
 
@@ -66,6 +68,7 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`. O
 - One page — the recorder — and one Route Handler, `POST /api/recordings`.
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
+- A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and three parity tests inside `npm run check` that boot the standalone bundle a container would run. The bundle is verified; **the image itself has never been built** — no Docker in the development environment.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
 
@@ -80,9 +83,10 @@ Run from the repository root. Last run 2026-09-07 on `feat/WEB-002-recording-sli
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **5 production HTTP tests, 5 pass, 0 fail** |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **5 production HTTP tests, 5 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
 | `npm run doctor` (fixture mode) | 0 | Both ports PASS; no credential file read |
+| `docker build` / `scripts/container-smoke.mjs` | not run | Docker is not installed in the development environment, and the CI job that would run it is **not committed** — GitHub gates `.github/workflows/` behind a scope agents here do not hold. The job is recorded in the ENG-002 handoff in `TASKS.md` for the owner to add |
 
 Previous green baseline: **33 unit, 4 production HTTP, 16 Python tests**. Every one still exists; ENG-005 and WEB-003 added 13 unit tests and one production HTTP test, and no assertion was removed or relaxed. The 2026-09-06 `EPERM` / `exit 127` snapshot recorded a sandbox failure, not a code failure, and does not reproduce.
 
