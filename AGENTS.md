@@ -13,8 +13,9 @@ STATUS.md is a cache. `PROJECT_CONTEXT.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`
 - Choose a task ID and focused branch such as `feat/WEB-001-web-shell` or `docs/project-foundation`.
 - Inspect current status and existing work first. Never discard another contributor's edits, rewrite shared history, force-push, or commit unrelated files.
 - Alternate agents on clean commits. Before handing off, record task status, commit/branch, checks, open questions, and next step in the task entry or PR. A chat transcript is not a required dependency.
-- **Record work in `STATUS.md` before starting it, not after finishing it.** Write the *In flight* section first: the task, the branch, what you are attempting, and what is not done yet. Keep it current as you go. A session can stop at any moment — context exhausted, a crash, an interruption — and what it wrote down is all the next one gets. **If you are running low on context, stop and update `STATUS.md` before doing anything else.** An interrupted task with an accurate note is recoverable; finished work nobody recorded is not.
-- **Update `STATUS.md` in the same commit** as any change to task status, the verification snapshot, an accepted ADR, or what does and does not exist. A task is not done until its `TASKS.md` handoff and `STATUS.md` both say so. This applies to Codex, Claude Code and human contributors equally — it is what lets the next session start cheaply.
+- **Record work before starting it, not after finishing it.** Create `status/in-flight/<TASK-ID>.md` first: the task, the branch and its base, what you are attempting, and what is not done yet. Keep it current as you go. A session can stop at any moment — context exhausted, a crash, an interruption — and what it wrote down is all the next one gets. **If you are running low on context, stop and update that file before doing anything else.** An interrupted task with an accurate note is recoverable; finished work nobody recorded is not. One file per task (**ADR-015**) — see `status/in-flight/README.md`.
+- **Update `STATUS.md` in the same commit** as any change to an accepted ADR, the verification floor, or what does and does not exist. **Task status goes in `TASKS.md`**, whose `**Status:**` lines generate `STATUS.md`'s table — run `npm run status:table` and never edit that table by hand. A task is not done until its `TASKS.md` handoff says so. This applies to Codex, Claude Code and human contributors equally — it is what lets the next session start cheaply.
+- **Finishing a task deletes its `status/in-flight/` file, in the same pull request.** Move anything durable — a fact about what exists, a decision, a lesson that cost a day — into `STATUS.md` or the document that owns it **before** deleting, or it is gone. This is the step that gets skipped.
 - Write for a reader who is not deep in this codebase today. Expand an identifier the first time it appears in a handoff, and prefer plain words to jargon; `STATUS.md` has a vocabulary table for the recurring terms.
 - If contributors work concurrently, use separate branches/worktrees and avoid competing edits to the same files. Resolve integration explicitly; do not share one mutable checkout.
 - Use small descriptive commits with task IDs where applicable. Update acceptance criteria only when scope changes are documented. Mark complete only with evidence.
@@ -39,7 +40,7 @@ Every failure this section prevents has already happened once in this repository
 
 **A substitute is not verification.** A fallback runner, a subset of tests, or a partial suite does not stand in for the required commands. Report the required command's real exit code, or report explicitly that it did not run and why.
 
-**Do not edit a file another contributor has in flight.** Check `git status` before editing shared documents such as `STATUS.md`, `TASKS.md` or `.gitignore`. If another agent's uncommitted work touches a file you need, work on a separate branch and hand the merge to the owner rather than competing for the same lines.
+**Do not edit a file another contributor has in flight.** Check `git status` before editing shared documents such as `STATUS.md`, `TASKS.md` or `.gitignore`, and never edit another task's `status/in-flight/` file. If another agent's uncommitted work touches a file you need, work on a separate branch and hand the merge to the owner rather than competing for the same lines. **ADR-015 removed the worst case of this**: `STATUS.md` used to require every task to rewrite the same three regions, so parallel branches collided there by design and the usual escape was stacking branches — which this section warns against for unrelated and better reasons.
 
 ## Engineering
 
@@ -77,13 +78,15 @@ Run from the repository root and report exactly what ran:
 
 ```sh
 npm ci
-npm run check   # lint → typecheck → unit tests → production build → production HTTP tests
+npm run check   # tracked-source guard → generated-table check → lint → typecheck → unit tests → production build → production HTTP tests → self-host parity
 python3 -m unittest discover -s tests   # bounded-controller tests only
 ```
 
+**`npm run check` cannot pass inside a git worktree** until ENG-012's `next-config.test.ts` is fixed: it asserts the repository directory is named `echo`, and a worktree's root is `.claude/worktrees/<branch>`. Run the suite from a checkout named `echo` for a true result, or expect exactly one failure named `output file tracing still points at the repository root in both cases`.
+
 Do not weaken or remove existing verification: lint checks, TypeScript checks, unit tests, production HTTP tests, GitHub Actions checks, and the authentication guards. Do not report tests as passing unless they actually executed successfully; if something cannot run in your environment, say so explicitly instead of inferring success.
 
-The `STATUS.md` verification snapshot records the current exit codes and test counts. Treat those counts as a floor: **a count going down is a regression, not a cleanup.** Record the numbers you actually observed, never a previous run's numbers, and write `not run` for anything you did not execute.
+`STATUS.md` § *Verification floor* records the counts every change must still meet. Treat them as a floor: **a count going down is a regression, not a cleanup.** The numbers from a particular run belong to the task that ran them — its `status/in-flight/` file and its pull request body — not to `STATUS.md` (ADR-015). Record the numbers you actually observed, never a previous run's numbers, and write `not run` for anything you did not execute.
 
 This repository uses **Next.js 16**, whose APIs and conventions differ from model training data. Consult `node_modules/next/dist/docs/` before assuming an API exists. Nested `AGENTS.md`/`CLAUDE.md` generation is disabled in `apps/web/next.config.ts` (`agentRules: false`) so the root files stay the only agent instructions; do not re-enable it.
 

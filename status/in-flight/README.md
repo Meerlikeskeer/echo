@@ -4,6 +4,8 @@
 
 This directory exists because `STATUS.md` had a single *In flight* section that every task had to rewrite, so every pair of parallel branches collided on the same lines. Separate files never conflict. See **ADR-015**.
 
+**Your file is branch-local working state, not a project-wide activity feed.** Its one job is recoverability: if your session stops without warning, the next one picks up your branch and reads it. Because a task that begins and finishes inside one pull request deletes its file there, `main` carries only work that is **started but not finished across merges** — WEB-004, whose code is merged while its browser acceptance is not, is the current example. To see everything in progress, read the open pull requests instead.
+
 ## What goes in your file
 
 The next session's recovery information, and nothing else:
