@@ -115,6 +115,14 @@ async function runCase(context: AudioContext, overlapMs: number, signal: AbortSi
       { name: "Every SHA-256 checksum matches", pass: chunks.length >= 3 && chunks.every(c => c.checksumMatches), detail: "Fresh checksum(blob) compared with capture metadata for every chunk." },
       { name: "Measured overlap tolerance", pass: windows.length >= 2 && windows.every(w => w.driftMs !== null && Math.abs(w.driftMs) <= TOLERANCE_MS),
         detail: `Native state interval tolerance ±${TOLERANCE_MS} ms, including zero-overlap handoff; signed drift shown below.` },
+      // Measured on Chrome 150: start events lag their start() call by 50-120 ms.
+      // State timing hides this — it showed +1 ms of overlap while the audio was
+      // already gone — so only the event windows can prove continuity.
+      { name: "No unrecorded gap between chunks", pass: windows.length >= 2 && windows.every(w => w.eventOverlapMs !== null && w.eventOverlapMs > 0),
+        detail: "MediaRecorder does not begin capturing when start() returns; its start event lags. Where the previous recorder's stop event precedes the next one's start event, nothing captured the audio in between and it is permanently lost. A negative eventOverlapMs below is measured audio loss at that boundary." },
+      { name: "Decoded audio accounts for the session", pass: chunks.length >= 3 && result.session.endedAt !== null
+          && chunks.reduce((total, c) => total + (c.decoded.durationMs ?? 0), 0) - (windows.length * overlapMs) >= (result.session.endedAt - result.session.startedAt) - TOLERANCE_MS,
+        detail: `Sum of decoded chunk durations, minus the deliberately duplicated overlap, against the session length. A shortfall beyond ±${TOLERANCE_MS} ms is audio that was recorded by nothing.` },
     ];
     return { overlapMs, checks, evidence: { sessionDurationMs: result.session.endedAt === null ? null : result.session.endedAt - result.session.startedAt,
       chunkMs: CHUNK_MS, toleranceMs: TOLERANCE_MS, observations, windows, chunks } };
@@ -186,12 +194,20 @@ export function CaptureDiagnostics() {
       <button className="rounded border px-4 py-2" onClick={() => active.current?.abort()}>Cancel</button>
     </div>
     <p role="status">{status}</p><p className="break-words text-sm">{browser}</p>
-    {reports.map(report => <section key={report.overlapMs} className="space-y-3 rounded border bg-white p-5">
-      <h2 className="text-xl font-semibold">{report.overlapMs} ms overlap — {report.checks.every(check => check.pass) ? "PASS" : "FAIL"}</h2>
+    {reports.map(report => {
+      // A backgrounded tab throttles timers, so the run's timing is unusable —
+      // that is not the same as the capture being wrong, and labelling both
+      // "FAIL" sends someone hunting a bug that is not there.
+      const foreground = report.checks.find(check => check.name === "Capture completed in foreground");
+      const verdict = foreground && !foreground.pass ? "INVALID — rerun with the tab visible"
+        : report.checks.every(check => check.pass) ? "PASS" : "FAIL";
+      return <section key={report.overlapMs} className="space-y-3 rounded border bg-white p-5">
+      <h2 className="text-xl font-semibold">{report.overlapMs} ms overlap — {verdict}</h2>
       <ul className="space-y-2">{report.checks.map(check => <li key={check.name}><strong>{check.pass ? "PASS" : "FAIL"}: {check.name}</strong><p>{check.detail}</p></li>)}</ul>
       <details open><summary>Measured evidence (all times in ms unless named otherwise)</summary>
         <pre className="overflow-x-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(report.evidence, null, 2)}</pre>
       </details>
-    </section>)}
+    </section>;
+    })}
   </main>;
 }
