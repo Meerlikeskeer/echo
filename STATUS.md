@@ -8,7 +8,9 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 ## In flight
 
-**ENG-005 and WEB-003 — implemented, committed, pushed, and fully verified except in a real browser.** Everything the previous session recorded as blocked is resolved: the work is committed at `67212de`, pushed to `origin/feat/WEB-002-recording-slice`, and the working tree is clean. The full required gate passes from a clean install — exit codes and counts in the snapshot below. The dependency damage and the `.git/index.lock` failure were sandbox artifacts; neither reproduces.
+**WEB-003 browser acceptance harness (2026-09-07):** development-only, owner-gated `/diagnostics/capture` implemented around shipped `captureSession`, with native recorder timing, independent decoding and metadata/checksum assertions at 0/1000/2000 ms overlap. **Harness unverified; no browser evidence collected.** Required commands were attempted below. Dependency repair remains out of scope. Owner review and browser acceptance remain outstanding.
+
+**Prior verified baseline (before this harness change): ENG-005 and WEB-003 — implemented, committed, pushed, and fully verified except in a real browser.** Everything the previous session recorded as blocked is resolved: the work is committed at `67212de`, pushed to `origin/feat/WEB-002-recording-slice`, and the working tree is clean. The full required gate passes from a clean install — exit codes and counts in the snapshot below. The dependency damage and the `.git/index.lock` failure were sandbox artifacts; neither reproduces.
 
 **What remains before either task can be marked Done:**
 
@@ -63,7 +65,7 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`. O
 ## What exists today
 
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
-- One page — the recorder — and one Route Handler, `POST /api/recordings`.
+- The recorder page, development-only owner-gated `/diagnostics/capture`, and one Route Handler, `POST /api/recordings`.
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
@@ -75,14 +77,18 @@ Overlap stitching, incremental processing during capture, **saving anything at a
 
 ## Verification snapshot
 
-Run from the repository root. Last run 2026-09-07 on `feat/WEB-002-recording-slice` @ `67212de`, Node 22.23.2 / npm 10.9.8.
+Latest harness verification attempt: 2026-09-07 local time (2026-09-08 UTC), from the repository root, Node 22.23.2. These results do not replace or dispute the owner-verified clean-install baseline at `67212de` below.
 
-| Command | Exit | Result |
+| Command | Exit | Observed result for harness change |
 | --- | --- | --- |
-| `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **5 production HTTP tests, 5 pass, 0 fail** |
-| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run doctor` (fixture mode) | 0 | Both ports PASS; no credential file read |
+| `npm ci` | 255 | `EPERM` removing `apps/web/node_modules/.bin`; same result on unsandboxed retry; no dependency repair attempted |
+| `npm run check` | 127 | `check:tracked` passed; lint could not find `eslint`; unit tests, production build and HTTP tests **did not run** |
+| `python3 -m unittest discover -s tests` | 1 | Python 3.9 unittest error reporting raised `RecursionError`; no completed test count; same result on unsandboxed retry |
+| Browser harness | not run | Dev launch exited 127: `next: command not found`; no recorder/codec/decode measurements collected |
+
+The harness change preserves all existing tests and adds one production HTTP test (expected floor now 46 unit / 6 HTTP); that is a source count, **not a passing run**. No check was weakened. `git diff --check` passed.
+
+**Historical owner-verified baseline, 2026-09-07, `67212de`, Node 22.23.2 / npm 10.9.8:** `npm ci` exit 0, 0 vulnerabilities; `npm run check` exit 0, 46/46 unit and 5/5 production HTTP tests; Python exit 0, 16 tests; fixture doctor exit 0, both ports PASS. Doctor was not rerun for this harness change.
 
 Previous green baseline: **33 unit, 4 production HTTP, 16 Python tests**. Every one still exists; ENG-005 and WEB-003 added 13 unit tests and one production HTTP test, and no assertion was removed or relaxed. The 2026-09-06 `EPERM` / `exit 127` snapshot recorded a sandbox failure, not a code failure, and does not reproduce.
 
