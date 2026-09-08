@@ -24,3 +24,54 @@ jobs:
           NEXT_TELEMETRY_DISABLED: '1'
           ECHO_OWNER_USERNAME: ''
           ECHO_OWNER_PASSWORD: ''
+ # ENG-002 / ADR-010. `npm run check` already proves the standalone bundle runs
+  # self-hosted, and it runs anywhere. This job proves the container around that
+  # bundle also builds and runs, which needs a container runtime that most
+  # development machines in this project do not have. It is a separate job so a
+  # container failure is legible on its own rather than buried in the main gate.
+  selfhost-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Synthetic, generated per run, and never a real credential. Only ever
+      # passed to the container and to the smoke check.
+      ECHO_OWNER_USERNAME: synthetic-owner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Generate a synthetic owner password for this run
+        run: echo "ECHO_OWNER_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Build the self-hosted image
+        run: docker build -t echo:ci .
+
+      - name: Confirm the image contains no environment file
+        # A stray .env in the build context would ship a credential inside the
+        # image. .dockerignore excludes them; this asserts it rather than
+        # trusting it.
+        run: |
+          if docker run --rm --entrypoint sh echo:ci -c 'ls -A /app; find /app -maxdepth 3 -name ".env*" -print' | grep -q '\.env'; then
+            echo "An environment file was found inside the image."
+            exit 1
+          fi
+
+      - name: Run the container
+        run: |
+          docker run -d --name echo-ci -p 3000:3000 \
+            -e ECHO_OWNER_USERNAME="$ECHO_OWNER_USERNAME" \
+            -e ECHO_OWNER_PASSWORD="$ECHO_OWNER_PASSWORD" \
+            echo:ci
+
+      - name: Smoke-check the running container
+        run: node scripts/container-smoke.mjs http://127.0.0.1:3000
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs echo-ci || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f echo-ci || true
