@@ -169,7 +169,7 @@ CI is unaffected: `.github/workflows/pull-request.yml` still runs `npm run check
 
 It also confirms the things only a real origin can confirm: HTTPS (Basic credentials travel in every request, and `crypto.subtle` — which checksums every recorded chunk — is undefined without a secure context), that wrong credentials are refused rather than merely absent ones, that `/diagnostics/*` does not exist in production even for the owner, that `POST /api/recordings` guards itself independently of the proxy, and that neither the page nor any compiled asset contains the owner password.
 
-**This script has not yet been run against a hosted deployment**, because none exists. It has been run against a local production server, which exercises every check except the transport itself, and it has been deliberately broken to confirm it fails: with a proxy serving `/_next/static` without credentials in front of that server — the CDN case above — it fails on the first asset rather than passing.
+**This script has not yet been run against a hosted deployment**, though one now exists as of 2026-09-08 — running it against the production URL is the outstanding step. It has been run against a local production server, which exercises every check except the transport itself, and it has been deliberately broken to confirm it fails: with a proxy serving `/_next/static` without credentials in front of that server — the CDN case above — it fails on the first asset rather than passing.
 
 #### After the first successful deployment
 
