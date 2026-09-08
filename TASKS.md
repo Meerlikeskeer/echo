@@ -422,11 +422,43 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 ## WEB-004 — Durable offline queue
 
-**In flight:** `feat/WEB-004-durable-queue` from `main` @ `a032a01`. ADR-012 recorded before implementation. Native IndexedDB, no dependency or server storage selection; capture callback requires a narrow `capture.ts` change, `session.ts` stays unchanged. Implementation/native browser verification and required commands not run yet.
-
-**Status:** In progress — not Done · **Dependencies:** WEB-003
+**Status:** Implemented; native browser/local verification and owner acceptance pending — **NOT Done** · **Dependencies:** WEB-003
 
 **Acceptance:** Persist chunks before upload; recover after reload and disconnect, retry on reconnect without data duplication, expose quota errors and unsynced status. Document mobile background limits.
+
+### Handoff (2026-09-08)
+
+- **Branch/base/PR:** `feat/WEB-004-durable-queue`, from `main` @ `a032a01`; [PR #9](https://github.com/Meerlikeskeer/echo/pull/9), implementation `5e4b9bc`, checker fixes `64ba19b`, documentation handoff in the following commit. All are pushed. Do not merge automatically.
+- **Decision first:** ADR-012 committed as `c31c4de` before code. Native IndexedDB with no new dependency; browser-local storage only, no server object/audio storage choice. Alternatives, browser quota/eviction risks, Safari budget and explicit limits are recorded in DECISIONS.md and ARCHITECTURE.md.
+- **Implemented:** atomic Blob/metadata/state commits; existing `(sessionId, id)` identity and unique session sequence; normalized media types at persistence and HTTP boundaries; checksum verification before save/upload and after recovery; out-of-order recovery with gap notice; bounded reconnect/reload retries under Web Locks; persisted results; explicit local-only/pending/unsaved status, capacity/persistence warnings and audio downloads. Raw audio is never deleted, including after HTTP 200, because RET-002 through RET-006 cannot yet be satisfied.
+- **Collision-sensitive change:** `capture.ts` must invoke persistence at each completed container, because its former design materialized chunks only at session stop. `finished` now waits for those callbacks; failure stops capture and retains available chunks. Existing runtime/timing behavior stays covered. `session.ts` is unchanged.
+- **Independent checker:** found and then confirmed fixes for playback resetting on every IndexedDB refresh, permanent provider failures being retried, and server-side MIME whitespace mismatch. Focused regression tests added; no remaining serious code defect reported at `64ba19b`. The disabled bounded loop was not enabled; this was a manual read-only checker review.
+
+**Required command results, not substituted:**
+
+| Environment / command | Exit | Observed result |
+| --- | --- | --- |
+| Original root `npm ci` | 255 | EPERM removing workspace node_modules/.bin, including escalated retry. |
+| Original root `npm run check` | 127 | Source tracking passed; eslint missing after failed install. Tests/build did not execute. |
+| Original root `python3 -m unittest discover -s tests`, system Python 3.9 | 1 | RecursionError during cleanup, no final count. |
+| Original root same Python command, Python 3.12 selected in PATH | 1 | 16 tests, 16 cleanup errors (rmdir EPERM); not green. |
+| Isolated checkout `npm ci --cache /private/tmp/echo-web004-npm-cache` | 0 | Installed same locked dependencies, 0 vulnerabilities, cleanup warnings. Environment files excluded by policy. |
+| Isolated checkout `npm run check`, final code | 1 | lint/types pass; 68 unit, 68 pass, 0 fail; build EPERM deleting .next/types. HTTP/self-host did not run locally. |
+| CI `npm ci` and `npm run check` | 0 / 0 | [Run 34191686984](https://github.com/Meerlikeskeer/echo/actions/runs/34191686984) on `64ba19b`: 68 unit, 7 production HTTP, 4 self-host parity, all pass; build passes. Container build/smoke job also passes. CI does not certify the Python command. |
+
+**Local dependency repair:** `npm rebuild` returned 0 but did not restore the missing eslint executable. `npm install --ignore-scripts` also failed (exit 255, filesystem permission error). The original checkout therefore still needs its generated dependency tree restored; no dependency manifest or lockfile changed.
+
+**Native test artifact, not a claimed pass:** `/diagnostics/queue` executes the production IndexedDB adapter in the browser, including Blob roundtrip/checksums, simultaneous duplicate offers, sequence conflict, out-of-order recovery, a quota-budget abort preserving the earlier commit, and abort after native request success. Separate buttons exercise real capture persistence before session stop and pending recovery after page reload. A new production HTTP test ensures the page is unavailable in production; the existing unauthorized route matrix includes it. Safari displayed the page (HTTP 200), but automation lost the page view / returned `elementHasNoFrame` and `noWindowsAvailable`; no native PASS result was observed. Budget injection tests do not certify real disk exhaustion.
+
+**Human still must verify:**
+
+1. On a development server, open `/diagnostics/queue` in Chrome and Safari. Run native storage tests; require all PASS lines. Reload, then select Recover pending clips; require 3 pending chunks with verified checksums. Run Test capture persistence; require a commit before session stop and all completed Blobs recovered. Use synthetic data only.
+2. In the real recorder, record, disconnect, stop and reload/reopen the same origin when reachable. Pending audio must recover; reconnect must process once locally, retain raw Blobs/results and not reset playback every five seconds. Repeat with two tabs and an interrupted response; remote provider work may repeat because no durable server job ledger exists.
+3. Exercise actual browser quota exhaustion/private mode and a mid-recording write failure. Confirm capture stops, previous commits remain, unsaved audio can be downloaded, and no raw copy is automatically deleted. Diagnostic budget/abort tests are only deterministic coverage of that path.
+4. Physical mobile: microphone Allow/Deny, interruption/background/lock-screen, force-close and reopen, low storage and persistent-storage refusal. Only complete committed containers survive; the active container can be lost. Timers/uploads stop when suspended or closed. The application shell is not cached for an offline hard navigation; data recovers when the same origin is available. HTTPS LAN phone certificate trust remains an owner check.
+5. Rerun all three required commands in an environment that allows dependency/build/temp-directory cleanup. Keep WEB-004 pending acceptance until native-browser evidence and remaining checks are reviewed.
+
+**Next:** owner reviews PR #9 and completes the native/manual checks above. No CI change is needed; no workflows were edited. No server copy, retention deletion, background upload or exactly-once provider execution is claimed.
 
 ## WEB-005 — Incremental upload and transcription
 
