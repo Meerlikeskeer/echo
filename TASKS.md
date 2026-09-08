@@ -350,7 +350,9 @@ Next.js 16 provides `--experimental-https`, which generates a locally trusted ce
 
 ## ENG-012 — `output: "standalone"` breaks Vercel's build hook
 
-**Status:** Fixed and locally verified on both build paths; **not yet confirmed against Vercel** · **Branch:** `eng/ENG-012-vercel-build-output`, off `main` @ `617a385` · **Decisions:** ADR-010 unchanged and the reason this is conditional rather than removed
+**Status:** **Confirmed against Vercel — the build completes.** Merged as `main` @ `53c0851` · **Branch:** `eng/ENG-012-vercel-build-output`, off `main` @ `617a385` · **Decisions:** ADR-010 unchanged and the reason this is conditional rather than removed
+
+> **Confirmed 2026-09-08.** The deployment at `53c0851` logged `Running onBuildComplete from Vercel`, the full route table and `Build Completed in /vercel/output [20s]`. The `ENOENT` is gone and the diagnosis held. Deployment then failed at Vercel's *upload* step, which is a separate matter recorded in STATUS.md and not a repository defect: `Cannot patch preview comments when immutable static file upload is enabled. Upgrade to next@v16.3.0-canary.32 or newer` — advice that does not apply, since the repository runs Next **16.3.4** and `16.3.0-canary.32` is a prerelease of `16.3.0`. Preview comments and the Vercel Toolbar are account/project features this repository neither sets nor can set.
 
 **Symptom, from the deployment build log.** Install succeeded with all 378 packages, `next build` compiled successfully in 5.1 s, TypeScript finished, static pages generated — then:
 
