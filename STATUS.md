@@ -2,21 +2,23 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-06 · **Branch:** `feat/WEB-002-recording-slice` · **Base:** `main` @ `0931376`
+**Updated:** 2026-09-07 · **Branch:** `feat/WEB-002-recording-slice` · **Base:** `main` @ `0931376`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
-**ENG-005 and WEB-003 — implemented, verification blocked on `feat/WEB-002-recording-slice`.** Doctor, session metadata, complete-container overlap capture, playback and upload metadata are written. Independent review fixes are applied. The fallback runner passed 41 non-React tests, and fixture doctor passed both ports; these do not replace the required checks below. Browser codec validation and production HTTP checks remain unverified. Dependency repair was interrupted after producing no output; dependency installation remains incomplete. Owner explicitly authorized continuing before WEB-002 merges; no merge is authorized. Resume with the TASKS.md handoffs, restore dependencies in an environment permitting directory operations, then run the full checks and browser validation. Do not mark either task complete yet.
+**ENG-005 and WEB-003 — implemented, committed, pushed, and fully verified except in a real browser.** Everything the previous session recorded as blocked is resolved: the work is committed at `67212de`, pushed to `origin/feat/WEB-002-recording-slice`, and the working tree is clean. The full required gate passes from a clean install — exit codes and counts in the snapshot below. The dependency damage and the `.git/index.lock` failure were sandbox artifacts; neither reproduces.
 
-**Handoff is uncommitted on base `56346ab`.** Scoped Git staging could not create `.git/index.lock`, including escalation. All implementation and documentation changes remain in the working tree. Final independent review found no additional code blockers; full verification remains required.
+**What remains before either task can be marked Done:**
 
-Previously recorded provider environment blocker:
+1. **Browser validation for WEB-003 — its acceptance criteria require it, and it has never happened.** No `MediaRecorder` call, permission prompt, codec negotiation or auto-stop has ever run in a real browser. The riskiest untested assumption is the recorder relay itself: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
+2. **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Not reachable today because the dev and start scripts bind `127.0.0.1`. Log it against ENG-002.
+3. **Owner review and merge.** Merging this branch also merges ADR-009, ADR-010, ENG-003, ENG-006, ENG-005 and WEB-003. The owner has accepted it as one reviewable unit; `AGENTS.md` § *Version control discipline* forbids repeating the pattern.
+
+Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
 
 **Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
-
-Worth building when someone next touches this area: a `npm run doctor` command that makes one cheap authenticated call per configured service and reports pass/fail per port **without printing the key**, so a bad key is a five-second check instead of a log hunt.
 
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
@@ -42,7 +44,7 @@ Short definitions so nobody has to reconstruct them from context.
 
 ## Where the project is
 
-Echo is a private-first web AI note taker. Three tasks are merged into `main`; the fourth is implemented and awaiting review.
+Echo is a private-first web AI note taker. Three tasks are merged into `main`. One feature branch, `feat/WEB-002-recording-slice`, carries everything since: WEB-002, ENG-003, ENG-006, ENG-005 and WEB-003, plus ADR-009 and ADR-010. It is green and awaiting owner review as a single unit.
 
 | Task | Status | Where |
 | --- | --- | --- |
@@ -53,8 +55,8 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`; t
 | WEB-002 Short recording vertical slice | Implemented, verified live, **awaiting owner review** | `feat/WEB-002-recording-slice` |
 | ENG-003 Status file and reading map | Done | `feat/WEB-002-recording-slice` |
 | ENG-002 Self-host parity verification | Todo — independent of the WEB sequence | — |
-| ENG-005 Provider doctor | Implemented; full verification blocked | `feat/WEB-002-recording-slice` |
-| WEB-003 Session and playable chunk model | Implemented; full/browser verification blocked | `feat/WEB-002-recording-slice` |
+| ENG-005 Provider doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
+| WEB-003 Session and playable chunk model | Implemented and verified by test; **browser validation outstanding** | `feat/WEB-002-recording-slice` |
 
 `feat/WEB-002-recording-slice` is branched from the ADR commit, not from `main`, because ADR-009 and ADR-010 were never merged. Merging WEB-002 merges those two ADRs with it.
 
@@ -62,7 +64,7 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`; t
 
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
 - One page — the recorder — and one Route Handler, `POST /api/recordings`.
-- The WEB-002 slice plus unverified WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. No stitched session output yet.
+- The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
@@ -73,21 +75,22 @@ Overlap stitching, incremental processing during capture, **saving anything at a
 
 ## Verification snapshot
 
-Run from the repository root. Last run 2026-09-06 on `feat/WEB-002-recording-slice`.
+Run from the repository root. Last run 2026-09-07 on `feat/WEB-002-recording-slice` @ `67212de`, Node 22.23.2 / npm 10.9.8.
 
 | Command | Exit | Result |
 | --- | --- | --- |
-| `npm ci` | 255 | `EPERM` removing dependency directories; escalation also failed; install incomplete |
-| `npm run check` | 127 | lint cannot start: `eslint` missing; remaining stages **not run** |
-| `python3 -m unittest discover -s tests` | 1 | default Python 3.9 crashes during cleanup/error reporting; no passing count certified |
+| `npm ci` | 0 | Clean install, 0 vulnerabilities |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **5 production HTTP tests, 5 pass, 0 fail** |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
+| `npm run doctor` (fixture mode) | 0 | Both ports PASS; no credential file read |
 
-Previous green baseline (before this change): **33 unit, 4 production HTTP, 16 Python tests**. All existing tests remain. Added 13 unit tests and one production HTTP test; the full new suite has not run. Independent fallback verification: **41 non-React tests passed**, fixture doctor both ports passed, focused strict types for capture/session/doctor passed. Full React tests, lint, full typecheck, build and production HTTP tests remain unverified. Python 3.12 retry ran 16 tests with 16 filesystem-cleanup errors. Details and reproducible fallback commands are in TASKS.md.
+Previous green baseline: **33 unit, 4 production HTTP, 16 Python tests**. Every one still exists; ENG-005 and WEB-003 added 13 unit tests and one production HTTP test, and no assertion was removed or relaxed. The 2026-09-06 `EPERM` / `exit 127` snapshot recorded a sandbox failure, not a code failure, and does not reproduce.
 
 `npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
 
 **Live service check — 2026-09-06, first one ever performed.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in **1.4 s**, correct transcript, sensible notes and action items, timestamps normalized. This retires the previous "no live vendor call has ever been made" caveat. REQ-006 targets 5–10 s from stop to result; 1.4 s for a 7-second clip is inside it, but that is one measurement of one short clip on one connection, not a measured latency claim.
 
-**Still not verified:** microphone permission prompts, the 60-second auto-stop, independent browser decoding and mobile capture. A synthetic Safari probe was attempted, but the local file could not be opened; a local HTTP server was also denied by the environment. No long clip has been timed.
+**Still not verified:** microphone permission prompts, the 60-second auto-stop, independent browser decoding and mobile capture. An earlier synthetic Safari probe was blocked by sandbox filesystem and socket restrictions; that limit was environment-specific and `npm run dev` starts normally here. No long clip has been timed.
 
 ## Reading map
 
