@@ -2,19 +2,21 @@
 
 **Read this file first, then follow the reading map.** Repository source documents win over this cache; current owner instructions can change scope.
 
-**Updated:** 2026-09-08 · **Branch:** `feat/WEB-004-durable-queue` · **Base:** `main` @ `a032a01`
+**Updated:** 2026-09-09 · **Branch:** `feat/WEB-004-durable-queue` · **Base:** `main` @ `f234040`
+
+STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
 **WEB-004 — implemented, verification incomplete, NOT Done.** [PR #9](https://github.com/Meerlikeskeer/echo/pull/9) contains only WEB-004. Code at `64ba19b` adds native IndexedDB persistence and recovery, identity-preserving retries, quota/unsaved notices, download and native-browser diagnostics. ADR-012 precedes implementation. No dependency or server-side storage choice. `capture.ts` necessarily adds an awaited per-complete-container callback because it previously built chunks only at session end; `session.ts` is unchanged. Independent read-only checker reviewed the fixes at `64ba19b` and found no remaining serious code defect; this is not browser acceptance.
 
-**Remaining:** native browser test results, physical mobile acceptance and a green local controller command. Safari loaded the owner-gated diagnostic page with HTTP 200, but automation lost its page view and returned `elementHasNoFrame` / `noWindowsAvailable` on interaction. No native test PASS was observed. Do not claim IndexedDB/browser acceptance from unit tests or from the earlier WEB-003 capture evidence. Exact manual steps and remaining limits are in the WEB-004 handoff in TASKS.md.
+**Remaining: native browser test results, and nothing else.** Safari loaded the owner-gated diagnostic page with HTTP 200, but automation lost its page view and returned `elementHasNoFrame` / `noWindowsAvailable` on interaction. No native test PASS was observed. Do not claim IndexedDB/browser acceptance from unit tests or from the earlier WEB-003 capture evidence. Exact manual steps are in the WEB-004 handoff in TASKS.md. The two other items this section previously listed are closed: **physical mobile acceptance is deferred by ADR-013**, and the **local controller command is green** — see the verification snapshot.
 
-**GitHub contribution works:** task commits are pushed and the automatically opened PR is reviewable. No merge performed. CI at `64ba19b` passed full application checks and the container job. Local execution has filesystem restrictions described below; these are not GitHub authentication failures.
+**GitHub contribution works:** task commits are pushed and the automatically opened PR is reviewable. No merge performed. CI at `64ba19b` passed full application checks and the container job, and every required command now also passes locally.
 
 **Existing browser evidence:** WEB-003 validated ADR-011 on Chrome 150 and Safari 26.4. Complete chunks decoded independently and checksums matched. Reuse TASKS.md's *Browser evidence* measurements: Safari ~153 KB/6 s vs Chrome ~96 KB/6 s; MIME parameter whitespace differs. Mandatory product overlap is 1 or 2 seconds. Do not re-derive these measurements. WEB-003's physical microphone/mobile checks remain manual.
 
-**Merged base:** `a032a01` includes ENG-008 secure-context diagnosis and HTTPS LAN development, plus the earlier WEB-003 browser fixes. The old STATUS claims that no browser had run capture and that the secure-context diagnosis was missing were stale and are removed here. Phone certificate trust remains unverified. The existing provider-key diagnostic note was historical; use the opt-in doctor when investigating provider access, without reading or printing credentials.
+**Merged base:** `f234040` merges ENG-009 (PR #10) and with it **ADR-013**: nothing in the repository binds a non-loopback interface, `dev` and `start` bind `127.0.0.1`, and `dev:lan` is gone. Mobile capture is therefore **deferred, not outstanding** — it returns as its own task against a deployed HTTPS origin, and deployment now precedes it. This branch's earlier pre-decision mobile wording is corrected here, closing the follow-up ENG-009 left open. The base also includes ENG-008's secure-context diagnosis (its HTTPS LAN development server is what ADR-013 withdrew), plus the earlier WEB-003 browser fixes. The old STATUS claims that no browser had run capture and that the secure-context diagnosis was missing were stale and are removed here. Phone certificate trust remains unverified. The existing provider-key diagnostic note was historical; use the opt-in doctor when investigating provider access, without reading or printing credentials.
 
 ## What exists and what does not
 
@@ -22,24 +24,26 @@ The approved Next.js application remains behind the owner access gate. WEB-004 s
 
 No server audio storage, relational database, production user accounts, stitched transcript, incremental upload during capture, authenticated offline application-shell cache, background worker, history product, research/reminder export or hardware is introduced. Browser storage can be evicted or cleared. Abrupt termination can lose the unfinished container; a closed/suspended page cannot upload. Offline hard navigation must wait until the same origin's application is reachable. Exactly-once remote provider processing after an ambiguous response requires later server work; retries do not duplicate local chunk identities/results.
 
+**No network access to Echo, by decision (ADR-013).** Echo is reachable only from the machine running it, so capture cannot be exercised from a phone or a second device until a deployed origin exists. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR.
+
+**`crypto.subtle` secure-context gap — diagnosed, not solved.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP — an ADR-010 baseline — makes it `undefined`. ENG-008's `secure-context` module refuses capture up front and says why, and it is unreachable in development because `dev` and `start` bind `127.0.0.1`. Serving a deployed origin over HTTPS is the actual fix and belongs to the deployment task.
+
 ## Verification snapshot
 
-**Observed for code `64ba19b`, Node 22.23.2 locally. Local results and CI are separate evidence.** Logs are summarized in TASKS.md; no substituted command is reported as the required command passing.
+**Observed on 2026-09-09 at the merge of `origin/main` @ `f234040` into this branch, from the repository root, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** All four required commands were executed here; nothing is copied forward.
 
-| Location / command | Exit | Observed result |
+| Command | Exit | Observed result |
 | --- | --- | --- |
-| Original repository root: `npm ci` | 255 | EPERM removing `apps/web/node_modules/.bin`; escalated retry also failed. Dependency repair is recorded in TASKS.md. |
-| Original repository root: `npm run check` | 127 | Source tracking passed; eslint executable missing after failed install. No unit, HTTP or self-host tests ran in this attempt. |
-| Original root: `python3 -m unittest discover -s tests` (system Python 3.9) | 1 | RecursionError during cleanup; no final count. |
-| Original root: same Python command with Python 3.12 selected through PATH | 1 | 16 tests ran; 16 cleanup errors from forbidden rmdir in temporary repositories. Not a pass. |
-| Isolated checkout: `npm ci --cache /private/tmp/echo-web004-npm-cache` | 0 | Installed dependencies, 0 vulnerabilities; cleanup warnings. Same committed application sources; denied environment paths omitted. |
-| Isolated checkout: `npm run check` | 1 | Source tracking, lint, types and **68 unit tests: 68 pass, 0 fail**. Build blocked by EPERM removing `.next/types`; production HTTP and self-host tests **not run locally**. Escalated attempt previously had the same failure. |
-| GitHub Actions: `npm ci` | 0 | [Run 34191686984](https://github.com/Meerlikeskeer/echo/actions/runs/34191686984), code `64ba19b`. |
-| GitHub Actions: `npm run check` | 0 | Same run: **68 unit, 7 production HTTP, 4 self-host parity; all pass, 0 fail**. Production build passed. |
-| GitHub Actions: `selfhost-container` | 0 | Same run: container build and smoke check passed. |
-| Native IndexedDB/capture persistence diagnostics | not verified | Page loaded in Safari; automation could not obtain a test result. |
+| `npm ci` | 0 | 373 packages installed, 0 vulnerabilities |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **69 unit tests, 69 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
+| `npm run doctor` | not run | Not executed; this branch touches no provider code |
+| GitHub Actions at `64ba19b` | 0 | [Run 34191686984](https://github.com/Meerlikeskeer/echo/actions/runs/34191686984): `npm ci`, `npm run check` and `selfhost-container` all passed, pre-merge |
+| Native IndexedDB/capture persistence diagnostics | not verified | Page loaded in Safari; automation could not obtain a test result |
 
-The owner's incoming floor was 48 unit, 6 production HTTP and 4 self-host parity tests. Current main actually contributed 54 unit tests (including ENG-008); WEB-004 adds 14. No previous assertion or check was removed or weakened. Controller baseline remains 16 tests, but the local run is not green. Docker, live providers and provider doctor were not run locally for WEB-004.
+**The earlier `EPERM` / exit 127 / exit 255 rows are removed: they did not reproduce.** They recorded a broken agent sandbox in a prior session — filesystem access to the repository was lost mid-session — not a defect in the repository. `npm ci`, the full `npm run check` including the production build, and the bounded controller all pass from the original repository root. The prior workaround of an isolated checkout is no longer needed.
+
+Counts only ever rise. This branch measured **68 unit** before the merge; merging `main` brought ENG-009's added `secure-context` test, giving the **69** observed above. Also **7 production HTTP**, 4 self-host parity, 16 controller. Nothing was removed or relaxed; if a count goes down, that is a regression, not a cleanup. Docker and live providers were not run locally.
 
 ## Vocabulary
 

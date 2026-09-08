@@ -156,20 +156,6 @@ Validation also established that **overlap cannot be optional**. `MediaRecorder`
 
 The recorder no longer offers zero overlap, and a test asserts every offered value is at least 1000 ms. `captureSession` still accepts `overlapMs: 0`, because the port itself is not wrong — the product choice is. WEB-006 stitching cannot recover audio that nothing recorded, so this must stay a capture-time guarantee rather than a downstream repair.
 
-## Open decisions
-
-Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
-
-- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice.
-- **Object/audio storage:** undecided. Large audio must not be stored in relational database rows; object/blob storage will likely be required. Constrained by ADR-010: prefer an S3-compatible interface so self-hosted deployments can satisfy it.
-- **Transcription provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `TranscriptionProvider`.
-- **LLM / notes-generation provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `NotesProvider`.
-- **Diarization provider:** undecided. Kept behind a separate session-scoped `DiarizationProvider` (ADR-009). Depends on object storage; not required before WEB-005.
-- **Background job and long-running processing infrastructure:** undecided; see ADR-008 for when a split becomes justified, and ADR-010 for the constraint that the chosen mechanism must be self-hostable.
-- **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
-
-Also select supported mobile browsers/codecs, chunk/overlap durations, the retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.
-
 ## ADR-012 — Browser-local durable queue (WEB-004)
 
 **Status:** Accepted for implementation; owner acceptance pending · **Date:** 2026-09-08
@@ -187,3 +173,37 @@ Echo imposes a conservative 64 MiB audio budget and warns with less than 4 MiB r
 **Retry and retention:** Persist pending/attempt/backoff/result state. Serialize drains across same-origin tabs using Web Locks; fail closed for automatic processing when locks are unavailable. Retry while the page is active, after reconnect/reload, with capped backoff. Reuse existing chunk identity; completed local results skip later requests. The stateless endpoint cannot guarantee exactly-once provider execution after a lost HTTP response; retries can repeat processing, but never create a second local chunk/result. No server durable-copy claim is made. All raw Blobs remain local even after HTTP 200; no deletion API is implemented because RET-002 through RET-006 cannot yet be satisfied.
 
 **Limits:** Mobile backgrounding may suspend capture, transactions, timers and network; closed pages cannot upload. Only committed complete containers survive; the active unfinished container can be lost on abrupt termination. An offline hard navigation still needs the application shell available; this task persists data, not an authenticated service-worker shell. Reopen the same origin when reachable to recover. Physical mobile background, termination, disk pressure and private-mode behavior require owner testing.
+
+## ADR-013 — Echo binds loopback only; mobile waits for a deployed origin
+
+**Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-009 · **Supersedes:** the `dev:lan` half of ENG-008
+
+**Context:** ENG-008 added `npm run dev:lan`, which served the development server over HTTPS on `0.0.0.0` so a phone on the same Wi-Fi could reach Echo and satisfy WEB-003's remaining mobile acceptance check. It was opt-in, separately named, and never run. The owner reviewed it and declined the exposure: a development server that holds owner credentials and opens a live microphone should not be reachable from whatever network the laptop has joined — campus, café or otherwise. The access gate is not the mitigation being questioned; being on the network at all is.
+
+The deeper problem is sequencing. Mobile capture was being treated as an acceptance requirement for tasks whose product path is not yet deployed or proven, which made a security-relevant exposure look like a prerequisite for finishing ordinary work.
+
+**Decision:**
+
+1. **Echo binds `127.0.0.1` and nothing else.** `dev` and `start` keep the loopback bind and no script binds another interface. Reaching Echo from a second device is a property of a **deployed** origin with a real certificate, never of the development server. The container image (`Dockerfile`) still sets `HOSTNAME=0.0.0.0` because a container binds inside its own namespace and its publication is the operator's explicit choice; that is not the same as a laptop listening on a shared LAN.
+
+2. **Mobile capture is paused as an acceptance requirement.** No current task is blocked on a physical phone. WEB-003 and WEB-004 keep their mobile items as *deferred*, not *outstanding*, and neither counts as incomplete for lacking one. Mobile acceptance returns as its own task once the laptop path is deployed and working end to end, and it will then run against that deployed HTTPS origin.
+
+3. **The secure-context guard stays.** `apps/web/src/lib/recording/secure-context.ts` and its tests are kept. It was written alongside `dev:lan` but does not depend on it: it refuses capture before the microphone opens on any origin lacking `crypto.subtle`, which is exactly the ADR-010 self-hosted-over-plain-HTTP case that deployment work will meet. Only its advice changed, from `npm run dev:lan` to loopback or a properly served origin.
+
+**Consequences:** Recording can be exercised only on the machine running Echo until deployment exists, so WEB-003's manual microphone checks and WEB-004's browser acceptance are desktop-only for now. That is accepted. Deployment moves ahead of mobile in priority; ADR-008 (Vercel) and ADR-010 (portability) already govern how it is done and neither changes here. No dependency, framework, host or storage decision is made or reversed by this ADR.
+
+**Reversing this needs an ADR, not a convenience commit.** Re-adding a script that binds a non-loopback interface, or reinstating mobile as a blocking acceptance criterion before a deployed origin exists, is a reversal of this decision and must be recorded as one. A test in `apps/web/tests/secure-context.test.ts` asserts that no user-facing refusal message advertises such a script.
+
+## Open decisions
+
+Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
+
+- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice.
+- **Object/audio storage:** undecided. Large audio must not be stored in relational database rows; object/blob storage will likely be required. Constrained by ADR-010: prefer an S3-compatible interface so self-hosted deployments can satisfy it.
+- **Transcription provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `TranscriptionProvider`.
+- **LLM / notes-generation provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `NotesProvider`.
+- **Diarization provider:** undecided. Kept behind a separate session-scoped `DiarizationProvider` (ADR-009). Depends on object storage; not required before WEB-005.
+- **Background job and long-running processing infrastructure:** undecided; see ADR-008 for when a split becomes justified, and ADR-010 for the constraint that the chosen mechanism must be self-hostable.
+- **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
+
+Also select supported mobile browsers/codecs, chunk/overlap durations, the retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.

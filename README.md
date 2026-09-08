@@ -78,22 +78,13 @@ npm run dev
 
 Open `http://127.0.0.1:3000` and enter the owner credentials in the browser Basic authentication prompt. Missing/invalid configuration returns HTTP 503, including in development. Wrong/missing credentials return 401. No provider keys are needed for this shell. The app binds to loopback by default. Use a TLS reverse proxy before any access beyond localhost; Basic credentials require encrypted transport. This is a single-owner baseline with no logout/session management or multi-user support. Future data and mutation boundaries must enforce owner access independently.
 
-### Testing from a phone or another device
+### Echo does not listen on the network, and that is deliberate
 
-`npm run dev` binds `127.0.0.1`, so nothing else on the network can reach it. That is the safe default and it stays that way. To test from a phone:
+`npm run dev` and `npm start` both bind `127.0.0.1`. Only the machine running Echo can reach it. There is no script that binds any other interface, and adding one needs the stack-change procedure and an ADR, not a convenience commit — see **ADR-013**.
 
-```sh
-npm run dev:lan
-```
+An earlier `dev:lan` script (ENG-008) served HTTPS on every interface so a phone on the same Wi-Fi could open Echo. It was withdrawn on 2026-09-08: putting a development server carrying a live microphone and owner credentials on whatever network the laptop happens to join is not a trade the owner wants to make, and the access gate is not the point — the exposure is. Reaching Echo from another device is a property of a **deployed** origin with a real certificate, not of the development server.
 
-This serves HTTPS on every interface using Next.js's built-in `--experimental-https`, which generates a locally trusted certificate with `mkcert`. Open `https://<your-machine-ip>:3000` on the device.
-
-**HTTPS is not optional here, and this is the reason.** Echo checksums every recorded chunk with `crypto.subtle`, which browsers expose only in a secure context — HTTPS, or `localhost`. Over plain HTTP from another device `crypto.subtle` is `undefined` and recording cannot work at all. Echo now detects this before opening the microphone and says so, naming the address, rather than failing afterwards as a generic capture error.
-
-Two things to expect:
-
-- **The phone will warn about the certificate.** `mkcert`'s authority is trusted on the machine that generated it, not on your phone. Accept the warning to continue; the origin is still HTTPS and still a secure context. Install the `mkcert` root certificate on the device if you would rather not see it each time.
-- **`dev:lan` exposes Echo to your local network.** The owner access gate still applies to every route, and HTTPS means the Basic credentials are encrypted in transit rather than sent in the clear. Use it on networks you trust, and stop the server when you are finished.
+Recording therefore works only on the machine running Echo until deployment exists. Echo checksums every recorded chunk with `crypto.subtle`, which browsers expose only in a secure context — HTTPS, or `localhost`. On any other origin served over plain HTTP it is `undefined` and recording cannot work at all; Echo detects this before opening the microphone and says so, naming the address, rather than failing afterwards as a generic capture error.
 
 Run each check from the repository root:
 

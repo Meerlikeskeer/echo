@@ -3,10 +3,16 @@
  *
  * `checksum()` in session.ts calls `crypto.subtle.digest`. Browsers expose
  * `crypto.subtle` only in a secure context: HTTPS, or `localhost`/`127.0.0.1`.
- * Reached over plain HTTP on any other host — the exact shape of testing from a
- * phone, and of the self-hosted LAN deployment ADR-010 requires — it is
+ * Reached over plain HTTP on any other host — the shape of the self-hosted
+ * deployment ADR-010 requires, if it is ever served without TLS — it is
  * `undefined`, checksumming throws, and the failure surfaces as the generic
  * "Capture incomplete" message with nothing pointing at the cause.
+ *
+ * ENG-009 withdrew the `dev:lan` script this module was originally written
+ * alongside, so the advice below no longer names a local command: Echo binds
+ * loopback only, and any other origin reaching a browser is a deployed one
+ * whose TLS is a deployment concern (ADR-013). The check itself is kept
+ * because it guards the deployed case, which is where Echo is heading.
  *
  * This is deliberately a check the caller runs *before* opening a recorder,
  * rather than an error mapped afterwards. Once capture has started, the
@@ -57,7 +63,7 @@ export function describeSecureContextProblem(environment: SecureContextEnvironme
       title: "This address is not secure enough to record",
       detail:
         `Echo is being served over plain HTTP from ${environment.hostname}. Browsers only allow the cryptography Echo uses to verify recordings over HTTPS, or on localhost. ` +
-        "Open Echo over HTTPS — from the repository root, `npm run dev:lan` serves the development server with a certificate — or use it directly on the machine running it.",
+        "Use Echo on the machine running it, at http://127.0.0.1:3000, or serve this origin over HTTPS.",
       retryable: false,
     };
   }
