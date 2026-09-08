@@ -2,42 +2,21 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `eng/ENG-009-withdraw-lan-exposure` · **Base:** `main` @ `a032a01`
+**Updated:** 2026-09-08 · **Branch:** `eng/ENG-010-deploy-hosted-origin` · **Base:** `main` @ `f234040`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
 
-**Everything through ENG-007 is merged.** `main` is at `3d0e87e` and carries ADR-009 through ADR-011, WEB-002, ENG-002, ENG-003, ENG-005, ENG-006, WEB-003 and ENG-007. `main` had been fourteen commits behind; that is resolved, and the pull request workflow exists so it cannot recur.
+**ENG-010 — deploy Echo to a hosted HTTPS origin. In progress on `eng/ENG-010-deploy-hosted-origin`, off `main` @ `f234040`.** This is the task ADR-013 put ahead of mobile: nothing is deployed, so nothing outside the machine running Echo has ever reached it, and the `crypto.subtle` secure-context gap has no fix until a real certificate exists.
 
-**The container image is verified.** On 2026-09-08 the `selfhost-container` CI job built the image and its smoke check passed — the first confirmed build of Echo's Docker image, and the last open item on ENG-002.
+**Scope.** Make a deployment reproducible from the repository rather than from a dashboard click-path, and make "it is deployed" a check rather than a claim. Three deliverables: a committed `vercel.json` so the build is defined in version control; `scripts/deployed-smoke.mjs`, which verifies a live origin over HTTPS without printing credentials; and a README runbook naming the exact provisioning steps and environment variables. No new dependency, framework, host or storage decision — ADR-008 and ADR-010 already govern this and neither changes.
 
-**WEB-003 — ADR-011 validated on Chrome 150 and Safari 26.4.** Both engines ran the harness clean: two `MediaRecorder` instances recording concurrently on one `MediaStream`, every container decoding independently, every checksum matching, overlap drift 0–4.8 ms against a ±250 ms tolerance. Full measurements are in the TASKS.md *Browser evidence* section.
+**What this task cannot do.** Provisioning needs the owner's Vercel account and the owner's secrets. An agent cannot run `vercel login`, create the project, or set `ECHO_OWNER_PASSWORD`. So this task ends with everything the owner needs and an unrun smoke check; the first real deployment and the first green `npm run test:deployed` are the owner's step, and until they happen **Echo is still not deployed.**
 
-**The first browser run found that `captureSession` had never worked in any browser.** `capture.ts` assigned `setTimeout`/`clearTimeout` straight onto its runtime object, so `io.schedule()` set `this` to that object and every browser threw `TypeError: Illegal invocation`. Forty-six unit tests missed it because every one injects a fake runtime — the default object was constructed by no test at all. Fixed, with a regression test that reproduces the browser rule in Node and was verified to fail without the fix.
+**The risk this exists to catch.** `apps/web/src/proxy.ts` deliberately gates every path with no exclusions, and `scripts/production.test.mjs` proves that against `next start`. A hosted platform serves `/_next/static` from a CDN, which may answer before the proxy runs. If it does, compiled assets are public on the deployed origin while every local check stays green. `deployed-smoke.mjs` fetches each linked asset unauthenticated and fails if any returns 200. This is unverified until it runs against a real deployment.
 
-**Overlap is now mandatory (ADR-011 amended).** Chrome's `MediaRecorder` takes 61–82 ms to start, so at zero overlap ~52 ms per boundary was captured by nothing; Safari starts in 0–2 ms and lost nothing. The same setting was correct on one browser and lossy on another. The recorder now offers 1 s and 2 s only, guarded by a test verified to fail when zero is reintroduced.
-
-**Not finished:** microphone permission, the 60-second auto-stop and chunk playback in the real recorder, and mobile capture — all manual, none coverable by synthetic audio.
-**What still blocks WEB-003:**
-
-1. **No browser has ever run the capture path.** The harness above is the fix, but it has not been run and reviewed. The riskiest untested assumption is the relay: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
-2. **Microphone permission and mobile capture cannot be automated** by the synthetic-audio approach. Those stay manual owner checks.
-
-**One carried-over gap, not blocking:**
-
-- **`crypto.subtle` secure-context gap — diagnosed, not solved.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP — an ADR-010 baseline — makes it `undefined`. ENG-008's `secure-context` module now refuses capture up front and says why, so this no longer surfaces as a generic "Capture incomplete"; it is unreachable in development because `dev` and `start` bind `127.0.0.1`. Serving a deployed origin over HTTPS is the actual fix and belongs to the deployment task.
-Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
-
-**Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
-
-**ENG-009 — DONE on `eng/ENG-009-withdraw-lan-exposure`, off `main` @ `a032a01`. Awaiting review; not merged.** Owner decision, 2026-09-08, recorded as **ADR-013**: serving Echo on every network interface is not wanted, so ENG-008's `dev:lan` script was removed rather than kept as an opt-in. Nothing in the repository now binds a non-loopback interface; `dev` and `start` bind `127.0.0.1`. The README section documenting phone access is replaced by one stating the loopback-only bind and why.
-
-**Mobile capture is paused as an acceptance requirement.** No current task is blocked on a physical phone. WEB-003's mobile item is now *deferred*, not *outstanding*, and WEB-003 is not incomplete for lacking it. Mobile returns as its own task against a **deployed** HTTPS origin, once the laptop path is deployed and working end to end. Deployment therefore moves ahead of mobile in priority; ADR-008 and ADR-010 already govern how it is done and neither changed.
-
-**Kept deliberately:** `apps/web/src/lib/recording/secure-context.ts`, its call site and its tests. The guard is not a mobile feature — it refuses capture before the microphone opens on any origin without `crypto.subtle`, the ADR-010 self-hosted-over-HTTP case deployment is heading into. Only its advice changed. The file went from 4 tests to **5**: the new one fails if any user-facing message ever advertises `dev:lan`, `0.0.0.0` or `--experimental-https` again.
-
-**Open follow-up:** `feat/WEB-004-durable-queue` (PR #9) still carries pre-decision mobile wording in its own `STATUS.md` and `TASKS.md`. ADR-013 supersedes it; mark it deferred when that branch merges. This branch deliberately does not edit another task's lane. See the ENG-009 handoff in TASKS.md.
+**Not this task:** mobile capture acceptance (its own task, once a deployed origin exists), WEB-004's browser acceptance, and any server-side storage decision.
 
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
