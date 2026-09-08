@@ -20,17 +20,13 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **ENG-012 — CONFIRMED against Vercel: the build now completes.** Merged as `main` @ `53c0851`. The 2026-09-08 deployment log shows `Running onBuildComplete from Vercel`, the route table, and **`Build Completed in /vercel/output [20s]`** — the `ENOENT … next-server.js.nft.json` failure is gone. Making `output: "standalone"` conditional on `process.env.VERCEL` was the fix, and it is now verified on the platform rather than only locally. ADR-010's container path is unaffected; `.next/standalone` is still produced off Vercel and the four self-host parity tests still pass.
 
-**Still not deployed — the failure moved to Vercel's upload step, and it is not Echo's.** After the successful build, `Deploying outputs…` ended with:
+**ECHO IS DEPLOYED — 2026-09-08.** The first hosted origin exists, over HTTPS, behind the owner gate, with the owner's own credentials working in a browser. The upload-step failure that followed the successful build was Vercel's **preview comments / Vercel Toolbar** feature: `Cannot patch preview comments when immutable static file upload is enabled`, followed by an empty `Unexpected error`. Its advice to upgrade Next was inapplicable — the repository is on 16.3.4 and `16.3.0-canary.32` is a prerelease of `16.3.0`. **Disabling the Vercel Toolbar for the project resolved it.** No repository change was involved, and none should be made in response to that error if it recurs; three deployment failures in a row were the platform around the build rather than the build.
 
-```
-Cannot patch preview comments when immutable static file upload is enabled.
-Upgrade to next@v16.3.0-canary.32 or newer to resolve this.
-Error: Unexpected error. Please try again later. ()
-```
+**What this unblocks.** ADR-013 deferred mobile capture until a deployed HTTPS origin existed. It exists, so **mobile capture acceptance can now be opened as its own task.** The `crypto.subtle` secure-context gap is closed on that origin for the same reason: HTTPS means `checksum()` works, so WEB-004's durable queue can operate somewhere other than the development machine.
 
-**That advice does not apply:** the repository is on **Next 16.3.4**, and `16.3.0-canary.32` is a prerelease of `16.3.0`, so the installed version is already far newer. Preview comments and the Vercel Toolbar are account and project features that this repository does not configure and cannot configure — nothing in `vercel.json`, `next.config.ts` or the application touches them. The error text itself (`Unexpected error … ()`, with an empty cause) is a platform-side message.
+**Not yet done, and this is the immediate next step: `npm run test:deployed` has still never run against the hosted origin.** Provisioning, building and browsing all succeeded, but none of them is the check. Until it runs, the CDN asset question ENG-010 exists to answer is open — whether Vercel's edge serves `/_next/static` before the gate, leaving compiled assets public while every local suite stays green. Run it against the production URL and record the result here.
 
-**Do not change repository code in response to this.** Three failures in a row have been the platform around the build rather than the build, and two of the three were diagnosed correctly only after reading Vercel's own log. The next steps are operational: retry, then a preview deployment to see whether it is production-specific, then disabling the Vercel Toolbar/comments for the project, then Vercel's status page. If it persists across all four it is a Vercel support matter, and the evidence to give them is the deployment ID from the Inspect URL.
+**Secrets were entered by hand in the Vercel dashboard**, not by script. A scripted `vercel env add` pipeline was tried and did not land the values correctly. For a one-time setup, the dashboard is the recommended path; `npm run test:deployed` reports whether the provider group is actually configured, which is the check that matters.
 
 **ENG-011 was merged but was not the cause, and its record is corrected.** It attributed the failure to Vercel installing without devDependencies. The real build log disproves that: Vercel reported `added 378 packages`, the full tree. The local reproduction recreated a condition the platform does not create, and the conclusion was drawn before the build log was read. `npm ci --include=dev` is kept as correct and explicit, but it fixed nothing. **The lesson is cheap to write down and was expensive to learn: for a build that passes locally and fails on the platform, read the platform's log before changing anything.**
 
@@ -77,7 +73,7 @@ Echo is a private-first web AI note taker. Everything through WEB-004 is merged 
 | ENG-008 Secure-context diagnosis | **Done** — merged; its `dev:lan` half was withdrawn by ADR-013 | `main` |
 | ENG-009 Withdraw LAN exposure; pause mobile | **Done** — merged (PR #10); recorded ADR-013 | `main` |
 | WEB-004 Browser-local durable queue | Merged (PR #9); **native browser acceptance outstanding** and it is the only thing still open | `main` |
-| ENG-010 Reproducible deployment and deployed-origin check | **Done** — merged; project linked and variables set, but **nothing is deployed yet** | `main` |
+| ENG-010 Reproducible deployment and deployed-origin check | **Done** — merged; **Echo is deployed and reachable over HTTPS**, `npm run test:deployed` not yet run against it | `main` |
 
 
 ## What exists today
@@ -95,7 +91,7 @@ Echo is a private-first web AI note taker. Everything through WEB-004 is merged 
 
 ## What does not exist
 
-Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts. **No hosted origin exists.** The Vercel project is created and its Production and Preview environment variables are set, but no deployment has been run, so there is still nothing to browse to and nothing for `npm run test:deployed` to check.
+Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts. **A hosted origin now exists** (2026-09-08) and the owner reaches it over HTTPS with their own credentials — but it has not been checked by `npm run test:deployed`, so nothing here asserts that its CDN respects the gate.
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 
