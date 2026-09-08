@@ -136,11 +136,99 @@ Baselines of 46 unit and 5 production HTTP tests are unchanged; the 4 self-host 
 **Scope delivered**
 
 - `.github/pull_request_template.md` — task ID and branch base, a verification table for observed exit codes and counts, explicit confirmation that no count went down and no check was weakened, a mandatory *Not verified* section, and credential/stack/reversibility checks.
+- A workflow that opens the pull request automatically on push, specified below under *Automatic pull request creation, pending owner action* — agents cannot reach `api.github.com`, so GitHub does it for them.
 - `AGENTS.md` § *Version control discipline* gains four rules: finish with a pull request and never merge to `main`; branch from `main` and disclose it when you cannot; agents cannot change CI and must hand the YAML to the owner; and the push rule now names the two times it has already been violated.
 
 **Owner-applied settings, not in this branch.** Branch protection lives in GitHub settings and cannot be committed. On `main`: require a pull request before merging; require status checks (`verify`, adding `selfhost-container` once it has been observed green); require branches to be up to date; forbid force pushes and deletion. **Leave required approvals at zero** — GitHub does not permit approving your own pull request, so requiring one would permanently deadlock a single-owner repository. Leave bypass allowed so the owner retains an escape hatch; agents have none because they cannot click it. Prefer "Create a merge commit" over squash, so the per-commit reasoning is preserved.
 
 **Verification:** documentation and template only; no code path changes. `npm run check` and the controller tests were run to confirm nothing regressed — numbers in `STATUS.md`. The protection rule itself is verified by observing that a direct push to `main` is refused once the owner has applied it.
+
+#### Automatic pull request creation, pending owner action
+
+Agents cannot open pull requests. Their sandboxes cannot reach `api.github.com` — TLS interception breaks certificate verification — and giving an agent a token that could would also let it approve its own work. GitHub opens the pull request instead, on push, using the repository's own scoped token.
+
+**This requires a change to the existing workflow as well, and skipping it breaks the checks.** A pull request opened by `GITHUB_TOKEN` deliberately does **not** trigger further workflow runs; GitHub does this to prevent recursive automation. `.github/workflows/pull-request.yml` currently runs on `pull_request` and on pushes to `main` only, so an auto-opened pull request would arrive with **no checks at all** — and branch protection would then block it forever, waiting for a check that can never start. Changing the trigger to plain `push` fixes it: every push runs the checks, and because GitHub attaches check runs to the commit SHA, the pull request displays them and required status checks are satisfied.
+
+**1. Change the trigger** in `.github/workflows/pull-request.yml`. Replace:
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+```
+
+with:
+
+```yaml
+on:
+  push:
+```
+
+**2. Add** `.github/workflows/open-pull-request.yml`:
+
+```yaml
+name: Open pull request
+
+# ENG-007. Agents cannot open pull requests: their sandboxes cannot reach
+# api.github.com, and a token that could would also let an agent approve its own
+# work. GitHub opens it instead, with a token scoped to this repository.
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'eng/**'
+      - 'docs/**'
+      - 'int/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: open-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  open-pull-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open a pull request if one is not already open
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "A pull request is already open for $BRANCH; it picks up this push automatically."
+            exit 0
+          fi
+          # The agents' commit messages already carry the task ID, the exact
+          # commands run, and what stayed unverified. That is the review
+          # material, so it becomes the pull request body verbatim.
+          {
+            echo "Opened automatically on push. The body is the latest commit message."
+            echo
+            echo "---"
+            echo
+            git log -1 --pretty=%B
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$(git log -1 --pretty=%s)" \
+            --body-file "$RUNNER_TEMP/pr-body.md"
+```
+
+**3. Two repository settings**, both required, both under *Settings → Actions → General*:
+
+- **Workflow permissions** → *Read and write permissions*. A workflow cannot grant itself more than the repository default, so `pull-requests: write` is ignored while the default is read-only.
+- **Allow GitHub Actions to create and approve pull requests** → checked. Without it `gh pr create` fails with a permissions error even when the token is otherwise correct.
+
+One pull request is opened per branch and later pushes update it rather than opening another. Branches named outside the `feat/ eng/ docs/ int/` convention get no pull request, which is a useful forcing function for the naming rule.
 
 **Next step:** owner applies the branch protection rule, then confirms a direct push to `main` is rejected. From that point every task ends in a pull request.
 
