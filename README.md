@@ -121,9 +121,12 @@ feature branch → GitHub → Vercel preview deployment
 `vercel.json` at the repository root defines the build in version control:
 
 ```json
-{ "framework": "nextjs", "installCommand": "npm ci", "buildCommand": "npm run build",
-  "outputDirectory": "apps/web/.next", "git": { "deploymentEnabled": false } }
+{ "framework": "nextjs", "installCommand": "npm ci --include=dev",
+  "buildCommand": "npm run build", "outputDirectory": "apps/web/.next",
+  "git": { "deploymentEnabled": false } }
 ```
+
+`--include=dev` is not optional and the first production deployment failed without it. Vercel sets `NODE_ENV=production` for the install step, and npm reads that as `--omit=dev`, so a plain `npm ci` installs 26 packages instead of 373. Everything `next build` needs to compile — `typescript`, `tailwindcss`, `@tailwindcss/postcss`, the `@types/*` packages — is a devDependency, correctly so: they are build-time tools, not runtime dependencies. The build then dies resolving `@tailwindcss/postcss` from `globals.css`, and Vercel reports only `Command "npm run build" exited with 1`. Reproduce it locally with `NODE_ENV=production npm ci && npm run build`; the same commands with `--include=dev` succeed.
 
 Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** — answer `./` when the CLI asks where your code is located — and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
 
