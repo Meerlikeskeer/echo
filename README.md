@@ -121,15 +121,16 @@ feature branch → GitHub → Vercel preview deployment
 `vercel.json` at the repository root defines the build in version control:
 
 ```json
-{ "framework": "nextjs", "installCommand": "npm ci", "buildCommand": "npm run build", "outputDirectory": "apps/web/.next" }
+{ "framework": "nextjs", "installCommand": "npm ci", "buildCommand": "npm run build",
+  "outputDirectory": "apps/web/.next", "git": { "deploymentEnabled": false } }
 ```
 
-Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
+Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** — answer `./` when the CLI asks where your code is located — and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
 
 #### Provisioning runbook
 
 1. **Generate an owner password.** `openssl rand -hex 24` gives 48 characters; the gate refuses anything under 32. Keep it in a password manager. It is never committed and never printed by any script here.
-2. **Create the project.** `npx vercel@latest login`, then `npx vercel link` from the repository root. This is interactive and cannot be done by an agent.
+2. **Create the project.** `npx vercel@latest login`, then `npx vercel link` from the repository root. This is interactive and cannot be done by an agent. When it asks **"In which directory is your code located?"** answer `./` — the repository root, for the workspace reason above. Do not run `npx vercel git connect`; see *Deployments are explicit* below.
 3. **Set the environment variables, server-side, for every environment you will use** (Production, Preview, Development):
    - `ECHO_OWNER_USERNAME` — any name without a colon.
    - `ECHO_OWNER_PASSWORD` — the value from step 1.
@@ -139,7 +140,7 @@ Echo is an npm workspace whose application lives in `apps/web` while `package-lo
    Set them as plain (encrypted, server-side) environment variables. **Never prefix any of them with `NEXT_PUBLIC_`** — that would place the value in the browser bundle. Echo has no `NEXT_PUBLIC_*` variables and `scripts/deployed-smoke.mjs` fails if one appears in the served page.
 
    Until the provider group is complete Echo still deploys and still gates correctly; it disables recording and names the missing variables, by design.
-4. **Deploy a preview first.** `npx vercel` builds a preview URL. Do not deploy to production before step 5 passes against that preview.
+4. **Deploy a preview first.** `npx vercel` builds a preview URL. Nothing deploys on its own (ADR-014), so this command is the only thing that produces one. Do not deploy to production before step 5 passes against that preview.
 5. **Verify the deployed origin.** From the repository root, with the same credentials you configured:
 
    ```sh
@@ -149,6 +150,14 @@ Echo is an npm workspace whose application lives in `apps/web` while `package-lo
 
    It exits non-zero on the first failure and prints what failed. It reads credentials from the environment, never prints them, and refuses to accept them inside the URL.
 6. **Promote to production** — `npx vercel --prod` — and run step 5 again against the production URL. A preview passing does not verify production: they carry different environment variables.
+
+#### Deployments are explicit (ADR-014)
+
+`vercel.json` sets `"git": { "deploymentEnabled": false }`. A push to any branch builds nothing on Vercel, and a connected repository stays connected without spending the plan's build allowance on ordinary version-control activity — several pushes an hour across parallel task branches would otherwise exhaust it, and the deployed origin would disappear for reasons unrelated to the code.
+
+Deploying is therefore always a command you run: `npx vercel` for a preview, `npx vercel --prod` for production. **`main` moving does not change what is live**, so *merged* and *deployed* are separate states — check which commit is deployed before concluding anything from a deployed origin.
+
+CI is unaffected: `.github/workflows/pull-request.yml` still runs `npm run check` and the container job on every push. Verification did not weaken; only the automatic builds went away. Turning this back on is a reversal of ADR-014 and needs its own ADR.
 
 #### What the deployed check proves that the local suites cannot
 

@@ -63,7 +63,7 @@ ENG-010 makes deploying Echo reproducible and verifiable. It provisions nothing:
 
 | Piece | Responsibility |
 | --- | --- |
-| `vercel.json` | The build, in version control: `framework`, `installCommand`, `buildCommand`, `outputDirectory`. Echo is an npm workspace with a root lockfile and hoisted dependencies, so the Vercel Root Directory stays at the repository root and these commands make the hosted install match `npm ci` locally. A dashboard-only arrangement would be invisible to Git and unreviewable. |
+| `vercel.json` | The build, in version control: `framework`, `installCommand`, `buildCommand`, `outputDirectory`, and `git.deploymentEnabled: false` so a push never triggers a build (ADR-014). Echo is an npm workspace with a root lockfile and hoisted dependencies, so the Vercel Root Directory stays at the repository root and these commands make the hosted install match `npm ci` locally. A dashboard-only arrangement would be invisible to Git and unreviewable. |
 | `scripts/deployed-smoke.mjs` | Verifies a live origin: HTTPS, the gate, wrong-credential refusal, every linked compiled asset refused without credentials, unknown paths private, `/diagnostics/*` absent in production, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Reads credentials from the environment and never prints them. |
 | `npm run test:deployed` | Runs it. Deliberately **not** part of `npm run check`: it needs a live URL and real credentials, so a CI gate cannot run it and must not appear to. |
 
