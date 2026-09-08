@@ -2,7 +2,7 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `eng/ENG-010-deploy-hosted-origin` · **Base:** `main` @ `f234040`
+**Updated:** 2026-09-08 · **Branch:** `eng/ENG-010-deploy-hosted-origin` · **Base:** `main` @ `6cee6fd`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
@@ -17,6 +17,8 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 **The risk this exists to catch, and proof the check is not vacuous.** `apps/web/src/proxy.ts` deliberately gates every path with no exclusions, and `scripts/production.test.mjs` proves that against `next start`. A hosted platform serves `/_next/static` from a CDN, which may answer before the proxy runs. If it does, compiled assets are public on the deployed origin while every local check stays green. `deployed-smoke.mjs` fetches each linked asset unauthenticated and fails if any returns 200 — and on 2026-09-08 that assertion was **demonstrated to fire** against a deliberately broken origin: a local proxy standing in for a CDN edge, serving `/_next/static` without credentials and passing everything else through. The script failed on the first asset with the intended message. Five other negative controls behaved correctly; see the verification snapshot.
 
 **Not this task:** mobile capture acceptance (its own task, once a deployed origin exists), WEB-004's browser acceptance, and any server-side storage decision.
+
+**WEB-004 merged underneath this branch (PR #9, `main` @ `6cee6fd`) and is folded in here.** Echo now saves completed audio containers in browser-local IndexedDB. That does not change ENG-010's scope, but it raises the stakes of deploying correctly: recorded audio now persists in the browser, and `checksum()` still needs `crypto.subtle`, so a deployed origin must be HTTPS for the queue to work at all. WEB-004's own remaining item — native browser acceptance of the IndexedDB path — is untouched by this task and still outstanding.
 
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
@@ -42,7 +44,7 @@ Short definitions so nobody has to reconstruct them from context.
 
 ## Where the project is
 
-Echo is a private-first web AI note taker. Everything through ENG-009 is merged into `main` @ `f234040`. Two branches are open: `feat/WEB-004-durable-queue` (PR #9, conflict-free, awaiting owner merge) and this one.
+Echo is a private-first web AI note taker. Everything through WEB-004 is merged into `main` @ `6cee6fd`. One branch is open: this one.
 
 | Task | Status | Where |
 | --- | --- | --- |
@@ -58,7 +60,7 @@ Echo is a private-first web AI note taker. Everything through ENG-009 is merged 
 | WEB-003 Session and playable chunk model | **Done** — merged; ADR-011 validated on Chrome 150 and Safari 26.4 | `main` |
 | ENG-008 Secure-context diagnosis | **Done** — merged; its `dev:lan` half was withdrawn by ADR-013 | `main` |
 | ENG-009 Withdraw LAN exposure; pause mobile | **Done** — merged (PR #10); recorded ADR-013 | `main` |
-| WEB-004 Browser-local durable queue | Implemented; **native browser acceptance outstanding** and it is the only thing blocking | `feat/WEB-004-durable-queue` (PR #9) |
+| WEB-004 Browser-local durable queue | Merged (PR #9); **native browser acceptance outstanding** and it is the only thing still open | `main` |
 | ENG-010 Reproducible deployment and deployed-origin check | Implemented and locally verified; **nothing is deployed** — provisioning is the owner's step | `eng/ENG-010-deploy-hosted-origin` |
 
 
@@ -71,28 +73,32 @@ Echo is a private-first web AI note taker. Everything through ENG-009 is merged 
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
+- Browser-local durable storage (WEB-004): each completed audio container and its metadata are saved in IndexedDB, recovered and checksummed after a reload, and retried while the page is active, with a 64 MiB audio budget and a 4 MiB warning reserve. Results never delete raw audio and no HTTP response is counted as a verified remote copy. Development-only, owner-gated `/diagnostics/queue` exercises the adapter natively. **No browser has yet run that acceptance.**
 - A deployment defined in version control (ENG-010): `vercel.json`, and `npm run test:deployed` → `scripts/deployed-smoke.mjs`, which verifies a live origin over its real certificate — the gate, wrong-credential refusal, every linked compiled asset refused without credentials, `/diagnostics/*` absent, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Host-agnostic by design (ADR-010): it checks an origin, not a platform. **It has never met a hosted deployment.**
 - The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
 
 ## What does not exist
 
-Overlap stitching, incremental processing during capture, **saving anything at all**, offline queue, history, speaker labels, research, reminders, background processing, hardware. No database, file storage, or real user accounts. Sessions/chunks exist only in page memory (WEB-004 changes that, and is not merged). **Nothing is deployed:** no Vercel project, no environment variables, no hosted origin — ENG-010 added the procedure and the check, not a running service.
+Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts. **Nothing is deployed:** no Vercel project, no environment variables, no hosted origin — ENG-010 added the procedure and the check, not a running service.
+
+**What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 
 **No network access to Echo, by decision (ADR-013).** `dev` and `start` bind `127.0.0.1` and no script binds any other interface, so Echo is reachable only from the machine running it. Capture therefore cannot be exercised from a phone or any second device, and mobile acceptance is deferred until a deployed HTTPS origin exists. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR.
 
 ## Verification snapshot
 
-Run from the repository root. **Rows below are the ENG-010 run: 2026-09-08 on `eng/ENG-010-deploy-hosted-origin` @ `main` `f234040` + this branch, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** Every command was executed here; nothing is copied forward.
+Run from the repository root. **Rows below are the ENG-010 run after merging `main` @ `6cee6fd` (which brought WEB-004) into this branch: 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** Every command was executed here; nothing is copied forward.
 
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **53 unit tests, 53 pass, 0 fail** · production build succeeded · **6 production HTTP tests, 6 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **69 unit tests, 69 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run test:deployed -- http://127.0.0.1:3111` | 0 | Against a local `next start` production server built from this branch: gate challenged, wrong credentials refused, page served to the owner, **9 compiled assets each refused unauthenticated and served to the owner**, diagnostics 404 for the owner, `POST /api/recordings` refused anonymously and answered 503 to an empty authorized body. Noted providers unconfigured and that loopback does not verify transport |
+| `npm run test:deployed -- http://127.0.0.1:3121` | 0 | Against a local `next start` production server built from this merged tree: gate challenged, wrong credentials refused, page served to the owner, **9 compiled assets each refused unauthenticated and served to the owner**, **both `/diagnostics/capture` and WEB-004's `/diagnostics/queue` 404 for the authenticated owner**, `POST /api/recordings` refused anonymously and 503 to an empty authorized body. Noted providers unconfigured and that loopback does not verify transport |
 | `npm run doctor` (fixture mode) | not run | Not executed for ENG-010; this change touches no provider code |
 | `selfhost-container` CI job | not run locally | Docker is unavailable on this machine; last passed in CI on 2026-09-08 |
 | Against a **hosted** deployment | **not run** | No deployment exists. `vercel.json` has never been built by Vercel and the script has never met a CDN or a real certificate |
+| Native IndexedDB/capture diagnostics (WEB-004) | **not verified** | Inherited from WEB-004 and not this task's to close: no browser has run `/diagnostics/queue` |
 
 **Negative controls — the deployed check was made to fail on purpose, six ways.** A check that has only ever passed proves nothing:
 
@@ -105,7 +111,7 @@ Run from the repository root. **Rows below are the ENG-010 run: 2026-09-08 on `e
 | Unreachable origin | 1 | *"nothing answered … (ECONNREFUSED)"*, not an undici stack trace |
 | Missing `ECHO_OWNER_*` in the environment | 2 | Usage error naming both variables |
 
-Counts only ever rise: **33 → 46 → 52 → 53 unit** and **4 → 6 production HTTP**, plus 4 self-host parity. ENG-010 adds no test to `npm run check` and removes none: `test:deployed` is deliberately outside the gate because it needs a live URL and real credentials, so CI cannot run it and must not appear to. `feat/WEB-004-durable-queue` carries 69 unit / 7 production HTTP and will raise this floor when it merges.
+Counts only ever rise: **33 → 46 → 52 → 53 → 69 unit** and **4 → 6 → 7 production HTTP**, plus 4 self-host parity and 16 controller. ENG-010 adds no test to `npm run check` and removes none: `test:deployed` is deliberately outside the gate because it needs a live URL and real credentials, so CI cannot run it and must not appear to.
 
 `npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
 

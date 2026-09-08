@@ -6,6 +6,8 @@ import { ProviderError } from "../../../lib/providers/errors";
 import type { AudioClip } from "../../../lib/providers/types";
 import { checksum, isAudioChunk, type AudioChunk } from "../../../lib/recording/session";
 
+import { normalizeMime } from "../../../lib/recording/media-type";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -47,7 +49,7 @@ export async function POST(request: Request): Promise<Response> {
     if (metadata !== null) {
       if (typeof metadata !== "string") throw new Error("Invalid metadata");
       const parsed: unknown = JSON.parse(metadata);
-      if (!isAudioChunk(parsed) || parsed.size !== audio.size || parsed.mimeType !== audio.type ||
+      if (!isAudioChunk(parsed) || parsed.size !== audio.size || normalizeMime(parsed.mimeType) !== normalizeMime(audio.type) ||
           parsed.endMs - parsed.startMs !== declared || parsed.checksum !== await checksum(audio)) throw new Error("Invalid metadata");
       chunk = parsed;
     }

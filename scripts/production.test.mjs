@@ -9,7 +9,7 @@ const username = "synthetic-owner";
 const password = "synthetic-production-password-123456789";
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 const PAGE_MARKER = /Record a note/;
-const PRIVATE_PATHS = ["/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/_next/static/missing.js", "/?_rsc=probe"];
+const PRIVATE_PATHS = ["/diagnostics/queue", "/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/_next/static/missing.js", "/?_rsc=probe"];
 
 // Every provider variable is blanked explicitly so a developer's real
 // apps/web/.env.local can never configure a server under test, and no test can
@@ -29,6 +29,8 @@ test("chunk uploads validate checksum and normalize transcription into session t
     const result = await response.json();
     assert.deepEqual(result.chunk, metadata);
     assert.ok(result.transcript.segments[0].startMs >= 29000);
+    const spaced = syntheticClip(); spaced.append("chunk", JSON.stringify({ ...metadata, mimeType: "audio/webm; codecs=opus" }));
+    assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: spaced })).status, 200);
     const invalid = syntheticClip(); invalid.append("chunk", JSON.stringify({ ...metadata, checksum: "0".repeat(64) }));
     assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: invalid })).status, 400);
   });
@@ -169,5 +171,11 @@ test("capture diagnostics are unavailable in production even to the owner", { ti
     const response = await fetch(`${base}/diagnostics/capture`, { headers: { authorization } });
     assert.equal(response.status, 404);
     assert.doesNotMatch(await response.text(), /Run browser acceptance/);
+  });
+});
+
+ test("queue diagnostics are absent from production even for the owner", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    assert.equal((await fetch(`${base}/diagnostics/queue`, { headers: { authorization } })).status, 404);
   });
 });

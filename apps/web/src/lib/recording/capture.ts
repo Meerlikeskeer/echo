@@ -11,7 +11,7 @@ export interface CaptureRuntime {
 }
 
 /** Each recorder owns a complete container. Never split MediaRecorder byte fragments. */
-export function captureSession(stream: MediaStream, options: CaptureOptions, runtime?: CaptureRuntime) {
+export function captureSession(stream: MediaStream, options: CaptureOptions, runtime?: CaptureRuntime, onChunk?: (chunk: PlayableChunk) => Promise<void>) {
   validateCaptureOptions(options);
   const mimeType = runtime ? "" : PREFERRED_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
   if (!runtime && !mimeType) throw new Error("No supported recording codec");
@@ -29,7 +29,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   };
   const origin = io.now();
   const session: Session = { id: crypto.randomUUID(), startedAt: Date.now(), endedAt: null, captureStatus: "recording" };
-  const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; stopping: boolean; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout> }[] = [];
+  const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; stopping: boolean; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout>; ready?: Promise<PlayableChunk> }[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let stopped = false;
   let failed = false;
@@ -74,7 +74,22 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
         recorder.onerror = () => { failed = true; entry.settle(new Blob()); void stop(); };
       });
       recorder.start();
+      const sequence = entries.length;
       entries.push(entry);
+      // A complete container is available at its own stop event, not only at
+      // session end. WEB-004 persists here; finished waits for every commit.
+      entry.ready = entry.done.then(async (audio) => {
+        const chunk: PlayableChunk = { audio, metadata: {
+          sessionId: session.id, id: entry.id, sequence, startMs: entry.startMs, endMs: entry.endMs,
+          overlapMs: sequence ? Math.max(0, entries[sequence - 1].endMs - entry.startMs) : 0,
+          mimeType: audio.type, size: audio.size, checksum: await checksum(audio),
+        } };
+        try { await onChunk?.(chunk); }
+        catch { failed = true; void stop(); }
+        return chunk;
+      });
+      // Stop on checksum failure too; the rejection is handled immediately.
+      void entry.ready.catch(() => { failed = true; void stop(); });
       schedule(() => {
         // Start the next complete container before stopping the previous one.
         begin();
@@ -92,13 +107,8 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
     const endedAt = session.startedAt + elapsed();
     completion = (async () => {
       const chunks: PlayableChunk[] = [];
-      for (const [sequence, entry] of entries.entries()) {
-        const audio = await entry.done;
-        chunks.push({ audio, metadata: {
-          sessionId: session.id, id: entry.id, sequence, startMs: entry.startMs, endMs: entry.endMs,
-          overlapMs: sequence ? Math.max(0, entries[sequence - 1].endMs - entry.startMs) : 0,
-          mimeType: audio.type, size: audio.size, checksum: await checksum(audio),
-        } });
+      for (const entry of entries) {
+        if (entry.ready) chunks.push(await entry.ready);
       }
       try { validateChunkOrder(chunks.map((chunk) => chunk.metadata)); } catch { failed = true; }
       return { session: { ...session, endedAt, captureStatus: failed || !chunks.length ? "failed" as const : "stopped" as const }, chunks };

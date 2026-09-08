@@ -13,7 +13,7 @@ type FakeRecorder = {
   stop(): void;
 };
 
-function harness(overlapMs = 1000, stopThrows = false) {
+function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3]) {
   let now = 0;
   let released = 0;
   let counter = 0;
@@ -44,7 +44,7 @@ function harness(overlapMs = 1000, stopThrows = false) {
     },
   };
   const stream = { getTracks: () => [{ stop() { released++; } }] } as unknown as MediaStream;
-  const capture = captureSession(stream, { chunkMs: 30000, overlapMs }, io);
+  const capture = captureSession(stream, { chunkMs: 30000, overlapMs }, io, onChunk);
   return { capture, recorders, released: () => released, advance(target: number) {
     while (true) {
       const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
@@ -165,4 +165,29 @@ test("the default browser runtime keeps setTimeout bound to the global", async (
     globalThis.clearTimeout = realClearTimeout;
     (globalThis as Record<string, unknown>).MediaRecorder = realMediaRecorder;
   }
+});
+
+test("completed chunks reach persistence before session stop and finished awaits commits", async () => {
+  const offered: number[] = [];
+  let release!: () => void;
+  const saved = new Promise<void>((resolve) => { release = resolve; });
+  const h = harness(1000, false, async (chunk) => { offered.push(chunk.metadata.sequence); await saved; });
+  h.advance(31000);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(offered, [0]);
+  let finished = false;
+  const completion = h.capture.stop().then((value) => { finished = true; return value; });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(finished, false);
+  release();
+  assert.equal((await completion).chunks.length, 2);
+});
+test("mid-session persistence failure stops capture and retains available chunks", async () => {
+  const h = harness(1000, false, async () => { throw new DOMException("full", "QuotaExceededError"); });
+  h.advance(31000);
+  const result = await h.capture.finished;
+  assert.equal(result.session.captureStatus, "failed");
+  assert.equal(h.released(), 1);
+  assert.equal(result.chunks.length, 2);
+  assert.ok(result.chunks[0].audio.size > 0);
 });
