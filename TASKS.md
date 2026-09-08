@@ -422,7 +422,9 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 ## WEB-004 — Durable offline queue
 
-**Status:** Todo · **Dependencies:** WEB-003
+**In flight:** `feat/WEB-004-durable-queue` from `main` @ `a032a01`. ADR-012 recorded before implementation. Native IndexedDB, no dependency or server storage selection; capture callback requires a narrow `capture.ts` change, `session.ts` stays unchanged. Implementation/native browser verification and required commands not run yet.
+
+**Status:** In progress — not Done · **Dependencies:** WEB-003
 
 **Acceptance:** Persist chunks before upload; recover after reload and disconnect, retry on reconnect without data duplication, expose quota errors and unsynced status. Document mobile background limits.
 

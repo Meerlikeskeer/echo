@@ -134,6 +134,10 @@ interface DiarizationProvider {
 
 Echo's provider ports use the OpenAI `/v1/audio/transcriptions` and `/v1/chat/completions` request shapes (ADR-009), which hosted vendors and self-hosted servers both implement; switching between them is a base-URL change rather than a code change. **The permanent transcription and LLM vendors remain undecided**; ADR-009 selects prototype defaults marked Temporary. Every provider exposes machine-readable capability and disclosure descriptors, and the external-processor disclosure required by REQ-009 is derived from that data rather than from prose. Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
 
+### Browser-local storage
+
+Native IndexedDB is approved for the WEB-004 offline audio queue only (ADR-012), with native Web Locks for same-origin retry serialization. No dependency or server-side storage choice is introduced. Browser persistence is subject to quota, eviction and user clearing; no local queue entry is an independent verified remote copy.
+
 ### Data and Infrastructure Decisions Still Open
 
 These are intentionally unresolved. An agent encountering one must not silently choose; make the choice through its task and record an ADR.
@@ -267,3 +271,7 @@ Historical WEB-002 behavior; WEB-003 supersedes the one-clip capture boundary be
 `apps/web/src/proxy.ts` applies a fail-closed HTTP Basic gate to every route, including assets and RSC. `src/lib/access.ts` checks server configuration and exact credentials using constant-time digest comparison. The server page also calls the server-only `requireOwnerAccess` guard independently; future endpoints, actions, and data access must call the guard at their own boundary. There is no development bypass. This is a single-owner shell, not a multi-user identity system. No data store or external SDK exists. Server credentials are never passed to components.
 
 Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and a real production HTTP smoke suite back PR CI. Tailwind compiles locally through PostCSS with system fonts; builds do not need a font service. See ADR-007 and README for limitations and disabled agent-loop requirements. The ENG-001 controller shares this repository but is independent of the web application: its Python tests certify the controller's own control flow and do not certify `apps/web`. Its `test` and `acceptance` adapters (`scripts/run-app-tests.py`, `scripts/run-app-acceptance.py`) are not implemented, so the loop stays disabled; see ADR-006 and AGENT_WORKFLOW.md.
+
+## WEB-004 durable queue boundaries
+
+The browser adapter stores Blob + metadata + processing state atomically, preserves existing identity, verifies recovered bytes and exposes ordered pending chunks and gaps. Capture hands off each complete container before session end. Uploads await persistence and run after capture, on reconnect or on recovery, serialized with Web Locks. Results and bounded retry timing survive reload; ambiguous network completion can repeat stateless provider work. No deletion exists: HTTP success cannot satisfy RET-002. The 64 MiB audio budget and 4 MiB warning reserve use Safari measurements in TASKS.md. Mobile suspension, eviction, offline shell navigation and origin changes are not durable-copy guarantees; see ADR-012.
