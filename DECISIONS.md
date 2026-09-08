@@ -194,6 +194,20 @@ The deeper problem is sequencing. Mobile capture was being treated as an accepta
 
 **Reversing this needs an ADR, not a convenience commit.** Re-adding a script that binds a non-loopback interface, or reinstating mobile as a blocking acceptance criterion before a deployed origin exists, is a reversal of this decision and must be recorded as one. A test in `apps/web/tests/secure-context.test.ts` asserts that no user-facing refusal message advertises such a script.
 
+## ADR-014 — Deployments are explicit; a push does not deploy
+
+**Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-010 · **Refines:** ADR-008
+
+**Context:** Vercel's default behaviour is to build and deploy on every push to a connected repository, including every branch and every preview. Echo is developed by more than one agent working on separate branches, several pushes to a task branch in an hour is normal, and the account is on a free plan with a finite build allowance. The default therefore converts ordinary version-control activity into consumption of a limited resource, and the failure lands at the worst possible moment: the allowance runs out mid-day, and the deployed origin — the thing WEB-004's queue and mobile acceptance both depend on — becomes unavailable for reasons that have nothing to do with the code.
+
+**Decision:** Deployments are triggered explicitly, never by a push. `vercel.json` sets `git.deploymentEnabled` to `false`, so a connected repository produces no automatic build for any branch. Deploying is `npx vercel` for a preview and `npx vercel --prod` for production, run deliberately by the owner. `scripts/deployed-smoke.mjs` verifies whatever was deployed, and it is unaffected by this: it takes a URL and asserts on HTTP behaviour.
+
+**Consequences.** The deployed origin can lag `main`, so *deployed* and *merged* are now different states and neither implies the other — check which commit is live before drawing conclusions from a deployed origin. The workflow recorded in ADR-008 and `ARCHITECTURE.md`, feature branch → preview → verification → merge → production, still holds; the preview step becomes a command rather than a side effect of pushing. CI is untouched: `.github/workflows/pull-request.yml` still runs `npm run check` and the container job on every push, so nothing about verification weakens, and the build allowance is spent only where it buys something.
+
+**Rejected: leaving the default on and rationing by discipline.** The cost is paid by whoever pushes, not by whoever decided, and an agent following ordinary version-control instructions would spend the allowance without ever seeing it. A setting in version control is checkable; a habit is not.
+
+**Reversing this needs an ADR.** Turning `deploymentEnabled` back on, per-branch or globally, is a reversal of this decision and must be recorded as one — including the reasoning about the plan's allowance that made it safe.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
