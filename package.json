@@ -16,6 +16,7 @@
     "selfhost:start": "node apps/web/.next/standalone/apps/web/server.js",
     "test:selfhost": "node --test scripts/selfhost.test.mjs",
     "check:tracked": "node scripts/check-source-tracked.mjs",
+    "test:deployed": "node scripts/deployed-smoke.mjs",
     "check": "npm run check:tracked && npm run lint && npm run typecheck && npm test && npm run build && npm run test:production && npm run test:selfhost"
   }
 }

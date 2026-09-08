@@ -101,22 +101,68 @@ npm start               # serve the production build on 127.0.0.1:3000
 
 The committed `package-lock.json` pins dependencies; `npm ci` installs it without rewriting resolution. Production tests supply synthetic credentials, exercise absent-config and unauthorized denial on page/API/static/RSC paths, check an old middleware-bypass header, then verify authorized HTML/RSC and emitted JS/CSS. They require permission to bind loopback sockets. No external provider calls or recording fixtures are used. Unit tests use Node's built-in test runner via `tsx`; production tests use it directly and fail on assertions/server startup failure.
 
-GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to `main`, with read-only repository permissions and no secrets. A second `selfhost-container` job is specified in the ENG-002 handoff in `TASKS.md` but is **not yet in `.github/workflows/pull-request.yml`**: it builds the self-hosted image, asserts no environment file is inside it, runs it with a synthetic per-run password, and smoke-checks it with `scripts/container-smoke.mjs`. It is separate from the main gate because it needs a container runtime, which development machines on this project may not have. Until it is added, **the container image is unverified** — `npm run check` proves the bundle, not the image. Remote CI execution and branch protection must be configured/observed after pushing; this change does not merge or deploy anything.
+GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to `main`, with read-only repository permissions and no secrets. A second `selfhost-container` job in `.github/workflows/pull-request.yml` builds the self-hosted image, asserts no environment file is inside it, runs it with a synthetic per-run password, and smoke-checks it with `scripts/container-smoke.mjs`. It is separate from the main gate because it needs a container runtime, which development machines on this project may not have — `npm run check` proves the bundle, CI proves the image. Neither proves a deployed origin; `npm run test:deployed` does that, and it needs a live URL and credentials, so it runs on demand rather than in CI. Branch protection must be configured/observed after pushing; none of this merges or deploys anything.
 
 ## Deployment
 
-Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified, neither is provisioned.
+Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified as artifacts, and **neither is provisioned** — nothing is deployed. `scripts/deployed-smoke.mjs` verifies whichever one you deploy, over its real origin.
 
 ### Vercel (primary target)
 
-Vercel is Echo's intended deployment target (ADR-008). The intended workflow is:
+Vercel is Echo's intended deployment target (ADR-008). The workflow is:
 
 ```text
 feature branch → GitHub → Vercel preview deployment
   → manual + automated verification → merge → production deployment
 ```
 
-**Nothing is deployed today.** No Vercel project, environment variables, or preview deployments have been configured. Before any hosted use, provision `ECHO_OWNER_USERNAME` and a random 32+ character `ECHO_OWNER_PASSWORD` as server-side environment variables and serve over HTTPS — Basic credentials require encrypted transport. Keep future feature branches compatible with preview deployments.
+**Nothing is deployed today.** No Vercel project or environment variables have been created. `vercel.json` and the runbook below are what ENG-010 added so that provisioning is a short, repeatable procedure rather than a remembered click-path; running it is the owner's step, because it needs the owner's account and the owner's secrets.
+
+`vercel.json` at the repository root defines the build in version control:
+
+```json
+{ "framework": "nextjs", "installCommand": "npm ci", "buildCommand": "npm run build", "outputDirectory": "apps/web/.next" }
+```
+
+Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
+
+#### Provisioning runbook
+
+1. **Generate an owner password.** `openssl rand -hex 24` gives 48 characters; the gate refuses anything under 32. Keep it in a password manager. It is never committed and never printed by any script here.
+2. **Create the project.** `npx vercel@latest login`, then `npx vercel link` from the repository root. This is interactive and cannot be done by an agent.
+3. **Set the environment variables, server-side, for every environment you will use** (Production, Preview, Development):
+   - `ECHO_OWNER_USERNAME` — any name without a colon.
+   - `ECHO_OWNER_PASSWORD` — the value from step 1.
+   - `TRANSCRIPTION_PROVIDER`, `TRANSCRIPTION_BASE_URL`, `TRANSCRIPTION_API_KEY`, `TRANSCRIPTION_MODEL`
+   - `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`
+
+   Set them as plain (encrypted, server-side) environment variables. **Never prefix any of them with `NEXT_PUBLIC_`** — that would place the value in the browser bundle. Echo has no `NEXT_PUBLIC_*` variables and `scripts/deployed-smoke.mjs` fails if one appears in the served page.
+
+   Until the provider group is complete Echo still deploys and still gates correctly; it disables recording and names the missing variables, by design.
+4. **Deploy a preview first.** `npx vercel` builds a preview URL. Do not deploy to production before step 5 passes against that preview.
+5. **Verify the deployed origin.** From the repository root, with the same credentials you configured:
+
+   ```sh
+   ECHO_OWNER_USERNAME=... ECHO_OWNER_PASSWORD=... \
+     npm run test:deployed -- https://<your-preview>.vercel.app
+   ```
+
+   It exits non-zero on the first failure and prints what failed. It reads credentials from the environment, never prints them, and refuses to accept them inside the URL.
+6. **Promote to production** — `npx vercel --prod` — and run step 5 again against the production URL. A preview passing does not verify production: they carry different environment variables.
+
+#### What the deployed check proves that the local suites cannot
+
+`npm run check` exercises the application against `next start` on loopback, and `scripts/container-smoke.mjs` exercises the self-hosted image. Neither can see what a hosting platform puts *in front of* the application.
+
+`apps/web/src/proxy.ts` gates every path with no exclusions — page, RSC, API, static assets and unknown paths alike — and `scripts/production.test.mjs` proves that against a Node server. A hosting platform typically serves `/_next/static` from a CDN edge that can answer **before** the application runs. If it does, Echo's compiled assets are public on the deployed origin while every local check stays green, and nothing in the repository would notice. `scripts/deployed-smoke.mjs` fetches every asset the page links without credentials and fails if any is served.
+
+It also confirms the things only a real origin can confirm: HTTPS (Basic credentials travel in every request, and `crypto.subtle` — which checksums every recorded chunk — is undefined without a secure context), that wrong credentials are refused rather than merely absent ones, that `/diagnostics/*` does not exist in production even for the owner, that `POST /api/recordings` guards itself independently of the proxy, and that neither the page nor any compiled asset contains the owner password.
+
+**This script has not yet been run against a hosted deployment**, because none exists. It has been run against a local production server, which exercises every check except the transport itself, and it has been deliberately broken to confirm it fails: with a proxy serving `/_next/static` without credentials in front of that server — the CDN case above — it fails on the first asset rather than passing.
+
+#### After the first successful deployment
+
+A deployed HTTPS origin is what ADR-013 was waiting for. Mobile capture acceptance — microphone permission, interruption, backgrounding, lock screen, force-close and reopen — becomes possible at that point and returns as its own task, run against the deployed origin rather than against a development server on the network.
 
 ### Self-hosted container (ADR-010)
 
@@ -147,7 +193,16 @@ npm run build && npm run selfhost:assemble
 PORT=3000 HOSTNAME=127.0.0.1 npm run selfhost:start
 ```
 
-Serve behind a TLS reverse proxy for any access beyond localhost; Basic credentials require encrypted transport.
+Serve behind a TLS reverse proxy for any access beyond localhost; Basic credentials require encrypted transport, and without HTTPS `crypto.subtle` is undefined and recording refuses to start.
+
+Once it is served over its real origin, verify it the same way a hosted deployment is verified:
+
+```sh
+ECHO_OWNER_USERNAME=... ECHO_OWNER_PASSWORD=... \
+  npm run test:deployed -- https://echo.your-domain.example
+```
+
+`scripts/deployed-smoke.mjs` is host-agnostic on purpose (ADR-010): it checks the origin, not the platform.
 
 ## Unresolved setup and automation
 
