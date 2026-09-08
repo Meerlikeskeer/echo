@@ -32,6 +32,7 @@ shadcn/ui is the approved base component system and enters the repository when a
 | --- | --- | --- |
 | Vercel | Primary web hosting and deployment target | Approved (ADR-008); **not yet provisioned** |
 | Next.js standalone output + container | Portable self-hosted deployment | Approved (ADR-010); verified by ENG-002, **not yet provisioned** |
+| `vercel.json` + `scripts/deployed-smoke.mjs` | Reproducible build configuration and verification of a live origin | Added by ENG-010; **never yet run against a deployment** |
 
 The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments.
 
@@ -55,6 +56,22 @@ ADR-010's promise is verified continuously rather than asserted.
 - **Build-time versus runtime configuration.** `scripts/selfhost.test.mjs` builds once and boots identical bytes twice, configured and unconfigured, asserting the behavior differs. That is what makes one image deployable anywhere and proves no credential is baked in at build time. Echo has no `NEXT_PUBLIC_*` variables and provider credentials must never become one.
 
 **Why this is not folded into `scripts/production.test.mjs`.** That file owns the full access matrix against `next start`, which reads the whole workspace and the whole `node_modules`, so it passes even when the standalone bundle is broken. The two suites cover different artifacts; the self-host suite asserts only what the deployment shape can break.
+
+#### ENG-010 deployment boundaries
+
+ENG-010 makes deploying Echo reproducible and verifiable. It provisions nothing: creating the project and setting secrets needs the owner's account, so the task ends with the procedure and the check, not with a running origin.
+
+| Piece | Responsibility |
+| --- | --- |
+| `vercel.json` | The build, in version control: `framework`, `installCommand`, `buildCommand`, `outputDirectory`. Echo is an npm workspace with a root lockfile and hoisted dependencies, so the Vercel Root Directory stays at the repository root and these commands make the hosted install match `npm ci` locally. A dashboard-only arrangement would be invisible to Git and unreviewable. |
+| `scripts/deployed-smoke.mjs` | Verifies a live origin: HTTPS, the gate, wrong-credential refusal, every linked compiled asset refused without credentials, unknown paths private, `/diagnostics/*` absent in production, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Reads credentials from the environment and never prints them. |
+| `npm run test:deployed` | Runs it. Deliberately **not** part of `npm run check`: it needs a live URL and real credentials, so a CI gate cannot run it and must not appear to. |
+
+**The failure mode this exists to catch.** `apps/web/src/proxy.ts` excludes nothing, and `scripts/production.test.mjs` proves the gate covers page, RSC, API, static and unknown paths against a Node server. A hosting platform commonly serves `/_next/static` from a CDN edge that answers *before* the application runs. If it does, compiled assets become public on the deployed origin while every local check stays green — the same shape as the ENG-002 static-asset failure, one layer further out. The deployed check fetches each linked asset without credentials and fails if any is served.
+
+**Host-agnostic by construction (ADR-010).** The script takes a base URL and asserts only on HTTP behavior, so it verifies the container behind the owner's own reverse proxy exactly as it verifies Vercel. Nothing platform-specific enters application code: `vercel.json` is build configuration, not a queue, blob store, cron or KV binding, and adopting one of those still requires its own ADR.
+
+**Deployment is a prerequisite, not a nicety.** `checksum()` in `apps/web/src/lib/recording/session.ts` needs `crypto.subtle`, which browsers expose only in a secure context, and ADR-013 makes a deployed HTTPS origin the only way Echo is reachable from a second device. Mobile capture acceptance depends on this task completing.
 
 ### Initial Backend
 
