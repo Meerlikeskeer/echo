@@ -24,23 +24,32 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 **Rationale:** REQ-009 makes self-hosted deployment an architectural baseline, but nothing verifies it. Proving parity is cheapest now, while the application is a single page and an access proxy, and before WEB-004/WEB-005/WEB-010 introduce queues, scheduled work and object storage — the point at which platform-specific primitives would otherwise be adopted silently. Must not weaken any existing check.
 
-### Browser evidence (2026-09-08, Chrome 150, macOS)
+### Browser evidence (2026-09-08, macOS)
 
-**ADR-011 is validated.** The relay works in a real browser. Measured, not inferred:
+**ADR-011 is validated on Chrome 150 and Safari 26.4.** The relay works in both engines. Measured, not inferred:
 
-- `simultaneousRecordingStates: true` in every boundary window, with `sameStream: true` throughout — two `MediaRecorder` instances genuinely recording at once on one `MediaStream`, which is the assumption the whole design rests on.
-- Every container decoded independently through its own `decodeAudioData` call: **3/3 at 0 ms overlap, 3/3 at 1000 ms, 4/4 at 2000 ms**.
-- Every SHA-256 checksum recomputed from the blob matched its capture metadata.
-- `validateChunkOrder` passed on the real metadata at all three settings.
-- Overlap drift against a ±250 ms tolerance: **1.0, 0.9, 4.1, 2.4, 4.4, 1.5, 2.4 ms**. Codec negotiated to `audio/webm;codecs=opus` every time, 48 kHz stereo.
+- `simultaneousRecordingStates: true` at every boundary in every run, with `sameStream: true` throughout — two `MediaRecorder` instances genuinely recording at once on one `MediaStream`, which is the assumption the entire design rests on.
+- Every container decoded independently through its own `decodeAudioData` call: **3/3, 3/3, 4/4 on Chrome; 3/3, 3/3, 4/4 on Safari**.
+- Every SHA-256 checksum recomputed from the blob matched its capture metadata, in all six runs.
+- `validateChunkOrder` passed on real metadata at every setting.
+- Overlap drift against ±250 ms: **Chrome 0.6–4.8 ms, Safari 0–4 ms**. Both negotiated Opus in WebM at 48 kHz stereo.
 
-**Finding: zero overlap loses audio at every boundary.** `MediaRecorder` does not begin capturing when `start()` returns — on Chrome 150 the `start` event lagged the call by **50–120 ms**. At 0 ms overlap the previous recorder's `stop` event preceded the next recorder's `start` event by ~52 ms (`eventOverlapMs: -51.6` and `-49.5`), so nothing captured the audio in between. The decoded durations confirm it: **13,920 ms of audio recovered from a 14,006 ms session**, roughly 86 ms permanently missing. Native *state* timing hid this completely — it reported +1 ms of overlap while the audio was already gone. Only the event windows expose it.
+**Finding: the zero-overlap audio gap is Chrome-specific.** `MediaRecorder` start latency differs sharply between engines:
 
-This makes "None" in the recorder's overlap selector a lossy setting that looks fine. Roughly 50 ms lost every 30 seconds will clip consonants and word boundaries in speech. **Recommendation: remove the zero-overlap option or relabel it explicitly as lossy**, and treat a positive overlap as a requirement rather than a preference. That is a WEB-003/WEB-006 decision for the owner, not something this handoff changes unilaterally.
+| | `start()` → `start` event | `eventOverlapMs` at 0 ms overlap | Verdict at 0 ms |
+| --- | --- | --- | --- |
+| Chrome 150 | **61–82 ms** | **−54.4, −51.4** | **FAIL** — audio lost |
+| Safari 26.4 | **0–2 ms** | +4, +3 | PASS |
 
-Two checks were added to the harness in response: *No unrecorded gap between chunks*, which fails when event windows do not intersect, and *Decoded audio accounts for the session*, which compares summed decoded duration minus deliberate overlap against session length. Zero overlap fails both — correctly.
+On Chrome the previous recorder's `stop` event precedes the next recorder's `start` event by ~52 ms, so nothing captures the audio in between and it is permanently gone. Native *state* timing hides this completely — it reported +1 ms of overlap while the audio was already lost; only the event windows expose it. Safari starts essentially instantly and has no gap.
 
-**Still outstanding:** the 2000 ms run was invalidated because the tab was backgrounded (`hidden=true`), which throttles timers — visible as a 14,519 ms session and a chunk stretched to 6,510 ms. All seven other checks passed in that run; it needs a clean re-run. Safari has not been tried at all, and Safari's `MediaRecorder` is the most likely to disagree. Microphone permission, the recorder UI's 60-second auto-stop, and mobile capture remain manual checks.
+Because the loss depends on the engine, a zero-overlap setting is safe on one browser and lossy on another, with nothing in the UI to distinguish them. **Recommendation: remove the "None" option from the recorder's overlap selector and make a positive overlap a requirement rather than a preference.** ~50 ms lost every chunk boundary on Chrome will clip consonants and word onsets in speech, and WEB-006 stitching cannot recover audio nothing recorded. This is an owner decision and has not been made.
+
+**Second finding: Safari encodes ~1.6× larger.** Same six seconds of identical synthetic audio: **~153 KB on Safari against ~96 KB on Chrome** (roughly 204 kbps against 128 kbps). At the current 60-second cap that is about 1.5 MB, comfortably inside Vercel's 4.5 MB request limit, so it forces nothing now — but WEB-004 and WEB-005 must size against Safari, not Chrome.
+
+**Third: Safari normalises the container type with a space** — `audio/webm; codecs=opus` rather than Chrome's `audio/webm;codecs=opus`. The harness reports requested and actual MIME separately, so this passed correctly. Any future code that compares media-type strings for equality must normalise rather than match literally.
+
+**Remaining for WEB-003 acceptance, all manual and none automatable by synthetic audio:** microphone permission Allow and Deny in the real recorder, the recorder UI's 60-second auto-stop and chunk playback, and capture on a physical mobile browser including interruption and backgrounding. Mobile needs a secure origin reachable from the device; the `127.0.0.1` bind and the `crypto.subtle` secure-context gap recorded against ENG-002 both apply.
 
 ### Handoff (2026-09-07)
 

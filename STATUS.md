@@ -12,14 +12,13 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **The container image is verified.** On 2026-09-08 the `selfhost-container` CI job built the image and its smoke check passed — the first confirmed build of Echo's Docker image, and the last open item on ENG-002.
 
-**WEB-003 — ADR-011 validated in a real browser, on `feat/WEB-003-browser-acceptance`.** Chrome 150 confirmed the relay: two `MediaRecorder` instances recording concurrently on one `MediaStream`, every container decoding independently, every checksum matching, overlap drift 0.9–4.4 ms against a ±250 ms tolerance. Full measurements are in the TASKS.md *Browser evidence* section.
+**WEB-003 — ADR-011 validated on Chrome 150 and Safari 26.4.** Both engines ran the harness clean: two `MediaRecorder` instances recording concurrently on one `MediaStream`, every container decoding independently, every checksum matching, overlap drift 0–4.8 ms against a ±250 ms tolerance. Full measurements are in the TASKS.md *Browser evidence* section.
 
-**The first browser run found that `captureSession` had never worked in any browser.** `capture.ts` assigned `setTimeout`/`clearTimeout` straight onto its runtime object, so calling `io.schedule()` set `this` to that object and every browser threw `TypeError: Illegal invocation`. Forty-six unit tests missed it because every one injects a fake runtime — the default object was constructed by no test at all. Fixed, with a regression test that reproduces the browser's rule in Node and was verified to fail without the fix.
+**The first browser run found that `captureSession` had never worked in any browser.** `capture.ts` assigned `setTimeout`/`clearTimeout` straight onto its runtime object, so `io.schedule()` set `this` to that object and every browser threw `TypeError: Illegal invocation`. Forty-six unit tests missed it because every one injects a fake runtime — the default object was constructed by no test at all. Fixed, with a regression test that reproduces the browser rule in Node and was verified to fail without the fix.
 
-**Finding: zero overlap loses audio.** `MediaRecorder` start events lag their `start()` call by 50–120 ms, so at 0 ms overlap ~52 ms per boundary is captured by nothing — 13,920 ms recovered from a 14,006 ms session. Native state timing reported +1 ms of overlap and hid it entirely. The recorder UI still offers "None" as an overlap option; **that option is lossy and should be removed or relabelled** — an owner decision, not yet made.
+**Open decision: the "None" overlap option is lossy on Chrome and safe on Safari.** Chrome's `MediaRecorder` takes 61–82 ms to start, so at zero overlap ~52 ms per boundary is captured by nothing; Safari starts in 0–2 ms and loses nothing. Same setting, different outcome, nothing in the UI to tell them apart. Recommendation is to remove the option; **not yet decided by the owner.**
 
-**Not finished:** the 2000 ms run was invalidated by a backgrounded tab and needs a clean re-run; Safari has not been tried; microphone permission, the 60-second auto-stop and mobile capture remain manual checks.
-
+**Not finished:** microphone permission, the 60-second auto-stop and chunk playback in the real recorder, and mobile capture — all manual, none coverable by synthetic audio.
 **What still blocks WEB-003:**
 
 1. **No browser has ever run the capture path.** The harness above is the fix, but it has not been run and reviewed. The riskiest untested assumption is the relay: overlap capture runs two `MediaRecorder` instances on one `MediaStream` at once. Plausible, never observed.
