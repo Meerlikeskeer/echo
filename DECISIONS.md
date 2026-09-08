@@ -156,6 +156,26 @@ Validation also established that **overlap cannot be optional**. `MediaRecorder`
 
 The recorder no longer offers zero overlap, and a test asserts every offered value is at least 1000 ms. `captureSession` still accepts `overlapMs: 0`, because the port itself is not wrong — the product choice is. WEB-006 stitching cannot recover audio that nothing recorded, so this must stay a capture-time guarantee rather than a downstream repair.
 
+## ADR-013 — Echo binds loopback only; mobile waits for a deployed origin
+
+**Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-009 · **Supersedes:** the `dev:lan` half of ENG-008
+
+**Context:** ENG-008 added `npm run dev:lan`, which served the development server over HTTPS on `0.0.0.0` so a phone on the same Wi-Fi could reach Echo and satisfy WEB-003's remaining mobile acceptance check. It was opt-in, separately named, and never run. The owner reviewed it and declined the exposure: a development server that holds owner credentials and opens a live microphone should not be reachable from whatever network the laptop has joined — campus, café or otherwise. The access gate is not the mitigation being questioned; being on the network at all is.
+
+The deeper problem is sequencing. Mobile capture was being treated as an acceptance requirement for tasks whose product path is not yet deployed or proven, which made a security-relevant exposure look like a prerequisite for finishing ordinary work.
+
+**Decision:**
+
+1. **Echo binds `127.0.0.1` and nothing else.** `dev` and `start` keep the loopback bind and no script binds another interface. Reaching Echo from a second device is a property of a **deployed** origin with a real certificate, never of the development server. The container image (`Dockerfile`) still sets `HOSTNAME=0.0.0.0` because a container binds inside its own namespace and its publication is the operator's explicit choice; that is not the same as a laptop listening on a shared LAN.
+
+2. **Mobile capture is paused as an acceptance requirement.** No current task is blocked on a physical phone. WEB-003 and WEB-004 keep their mobile items as *deferred*, not *outstanding*, and neither counts as incomplete for lacking one. Mobile acceptance returns as its own task once the laptop path is deployed and working end to end, and it will then run against that deployed HTTPS origin.
+
+3. **The secure-context guard stays.** `apps/web/src/lib/recording/secure-context.ts` and its tests are kept. It was written alongside `dev:lan` but does not depend on it: it refuses capture before the microphone opens on any origin lacking `crypto.subtle`, which is exactly the ADR-010 self-hosted-over-plain-HTTP case that deployment work will meet. Only its advice changed, from `npm run dev:lan` to loopback or a properly served origin.
+
+**Consequences:** Recording can be exercised only on the machine running Echo until deployment exists, so WEB-003's manual microphone checks and WEB-004's browser acceptance are desktop-only for now. That is accepted. Deployment moves ahead of mobile in priority; ADR-008 (Vercel) and ADR-010 (portability) already govern how it is done and neither changes here. No dependency, framework, host or storage decision is made or reversed by this ADR.
+
+**Reversing this needs an ADR, not a convenience commit.** Re-adding a script that binds a non-loopback interface, or reinstating mobile as a blocking acceptance criterion before a deployed origin exists, is a reversal of this decision and must be recorded as one. A test in `apps/web/tests/secure-context.test.ts` asserts that no user-facing refusal message advertises such a script.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.

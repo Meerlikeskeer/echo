@@ -2,7 +2,7 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `feat/WEB-003-browser-acceptance` · **Base:** `main` @ `3d0e87e`
+**Updated:** 2026-09-08 · **Branch:** `eng/ENG-009-withdraw-lan-exposure` · **Base:** `main` @ `a032a01`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
@@ -26,12 +26,18 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **One carried-over gap, not blocking:**
 
-- **`crypto.subtle` secure-context gap.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP on a LAN — an ADR-010 baseline — makes it `undefined`; capture then fails as a generic "Capture incomplete" with no diagnosis. Unreachable today because `dev` and `start` bind `127.0.0.1`. Logged against ENG-002.
+- **`crypto.subtle` secure-context gap — diagnosed, not solved.** `checksum()` in `apps/web/src/lib/recording/session.ts` uses `crypto.subtle.digest`, which browsers expose only over HTTPS or on `localhost`. Self-hosting over plain HTTP — an ADR-010 baseline — makes it `undefined`. ENG-008's `secure-context` module now refuses capture up front and says why, so this no longer surfaces as a generic "Capture incomplete"; it is unreachable in development because `dev` and `start` bind `127.0.0.1`. Serving a deployed origin over HTTPS is the actual fix and belongs to the deployment task.
 Previously recorded provider environment blocker — **`npm run doctor` now answers this in seconds; check before assuming it still holds:**
 
 **Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
 
-**ENG-008 — secure-context development server, in flight on `eng/ENG-008-https-dev-server`.** Runs in parallel with WEB-004 and touches no file in that lane. `npm run dev:lan` serves HTTPS on the LAN address so a phone can reach Echo in a secure context, using Next.js 16's built-in `--experimental-https` — no dependency and no stack decision. `npm run dev` still binds `127.0.0.1` over HTTP; exposing the application to the network stays a separately named, deliberate command. A new `secure-context` module refuses capture *before* the microphone opens when `crypto.subtle` is unavailable, naming the address and the fix instead of failing later as the generic "Capture incomplete". That closes the gap logged against ENG-002 and unblocks WEB-003's remaining mobile check. **Certificate trust on the phone is unverified** — the harness has not been opened from a device yet.
+**ENG-009 — DONE on `eng/ENG-009-withdraw-lan-exposure`, off `main` @ `a032a01`. Awaiting review; not merged.** Owner decision, 2026-09-08, recorded as **ADR-013**: serving Echo on every network interface is not wanted, so ENG-008's `dev:lan` script was removed rather than kept as an opt-in. Nothing in the repository now binds a non-loopback interface; `dev` and `start` bind `127.0.0.1`. The README section documenting phone access is replaced by one stating the loopback-only bind and why.
+
+**Mobile capture is paused as an acceptance requirement.** No current task is blocked on a physical phone. WEB-003's mobile item is now *deferred*, not *outstanding*, and WEB-003 is not incomplete for lacking it. Mobile returns as its own task against a **deployed** HTTPS origin, once the laptop path is deployed and working end to end. Deployment therefore moves ahead of mobile in priority; ADR-008 and ADR-010 already govern how it is done and neither changed.
+
+**Kept deliberately:** `apps/web/src/lib/recording/secure-context.ts`, its call site and its tests. The guard is not a mobile feature — it refuses capture before the microphone opens on any origin without `crypto.subtle`, the ADR-010 self-hosted-over-HTTP case deployment is heading into. Only its advice changed. The file went from 4 tests to **5**: the new one fails if any user-facing message ever advertises `dev:lan`, `0.0.0.0` or `--experimental-https` again.
+
+**Open follow-up:** `feat/WEB-004-durable-queue` (PR #9) still carries pre-decision mobile wording in its own `STATUS.md` and `TASKS.md`. ADR-013 supersedes it; mark it deferred when that branch merges. This branch deliberately does not edit another task's lane. See the ENG-009 handoff in TASKS.md.
 
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
@@ -82,31 +88,34 @@ Echo is a private-first web AI note taker. Three tasks are merged into `main`. O
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
+- A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
 - The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
 
 ## What does not exist
 
 Overlap stitching, incremental processing during capture, **saving anything at all**, offline queue, history, speaker labels, research, reminders, background processing, hardware. No database, file storage, or real user accounts. Sessions/chunks exist only in page memory. Nothing is deployed.
 
+**No network access to Echo, by decision (ADR-013).** `dev` and `start` bind `127.0.0.1` and no script binds any other interface, so Echo is reachable only from the machine running it. Capture therefore cannot be exercised from a phone or any second device, and mobile acceptance is deferred until a deployed HTTPS origin exists. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR.
+
 ## Verification snapshot
 
-Run from the repository root. Last run 2026-09-08 on `feat/WEB-003-browser-acceptance`, Node 22.23.2 / npm 10.9.8.
+Run from the repository root. **Rows below are the ENG-009 run: 2026-09-08 on `eng/ENG-009-withdraw-lan-exposure` @ `a032a01` + this branch, Node 22.23.2 / npm 10.9.8, in a clean worktree checkout.** All four commands were executed; nothing is copied forward.
 
 | Command | Exit | Result |
 | --- | --- | --- |
 | `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **46 unit tests, 46 pass, 0 fail** · production build succeeded · **6 production HTTP tests, 6 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
+| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **53 unit tests, 53 pass, 0 fail** · production build succeeded · **6 production HTTP tests, 6 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
 | `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run doctor` (fixture mode) | 0 | Both ports PASS; no credential file read |
+| `npm run doctor` (fixture mode) | not run | Not executed for ENG-009; this change touches no provider code. Previous run: both ports PASS, no credential file read |
 | `selfhost-container` CI job | 0 | **Passed 2026-09-08** — image built, no environment file inside it, gate enforced, page and every compiled asset served from the container. Docker is still unavailable locally, so this is verified only in CI |
 
-Counts only ever rise: **33 → 46 unit** and **4 → 6 production HTTP**, plus 4 self-host parity tests added by ENG-002. Nothing was removed or relaxed. The WEB-003 harness added the sixth production HTTP test, which asserts `/diagnostics/capture` returns 404 in production even to an authenticated owner. The repeated `EPERM` / `exit 127` snapshots recorded agent sandbox failures, not code failures, and do not reproduce here.
+Counts only ever rise: **33 → 46 → 52 → 53 unit** and **4 → 6 production HTTP**, plus 4 self-host parity tests added by ENG-002. Nothing was removed or relaxed. ENG-009 removed a script and a README section, not a check: its only test-file change takes `secure-context.test.ts` from 4 tests to 5, verified against `main` by diff. The WEB-003 harness added the sixth production HTTP test, which asserts `/diagnostics/capture` returns 404 in production even to an authenticated owner. The repeated `EPERM` / `exit 127` snapshots recorded agent sandbox failures, not code failures, and do not reproduce here.
 
 `npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
 
 **Live service check — 2026-09-06, first one ever performed.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in **1.4 s**, correct transcript, sensible notes and action items, timestamps normalized. This retires the previous "no live vendor call has ever been made" caveat. REQ-006 targets 5–10 s from stop to result; 1.4 s for a 7-second clip is inside it, but that is one measurement of one short clip on one connection, not a measured latency claim.
 
-**Still not verified:** microphone permission prompts, the 60-second auto-stop, independent browser decoding and mobile capture. An earlier synthetic Safari probe was blocked by sandbox filesystem and socket restrictions; that limit was environment-specific and `npm run dev` starts normally here. No long clip has been timed.
+**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding — all of which run on the host machine over loopback. An earlier synthetic Safari probe was blocked by sandbox filesystem and socket restrictions; that limit was environment-specific and `npm run dev` starts normally here. No long clip has been timed. **Mobile capture is no longer listed here as unverified work in progress: under ADR-013 it is deferred until a deployed origin exists.**
 
 ## Reading map
 
