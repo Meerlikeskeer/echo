@@ -29,6 +29,8 @@ test("chunk uploads validate checksum and normalize transcription into session t
     const result = await response.json();
     assert.deepEqual(result.chunk, metadata);
     assert.ok(result.transcript.segments[0].startMs >= 29000);
+    const spaced = syntheticClip(); spaced.append("chunk", JSON.stringify({ ...metadata, mimeType: "audio/webm; codecs=opus" }));
+    assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: spaced })).status, 200);
     const invalid = syntheticClip(); invalid.append("chunk", JSON.stringify({ ...metadata, checksum: "0".repeat(64) }));
     assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: invalid })).status, 400);
   });

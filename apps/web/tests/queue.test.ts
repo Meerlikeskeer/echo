@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUDIO_BUDGET, CAPACITY_RESERVE, drainQueue, incompleteSessions, normalizeMime, orderEntries, retryDelay, sameChunk, storageFailure, UploadFailure, verifyChunk, type QueueEntry, type QueueStore } from "../src/lib/recording/queue";
+import { AUDIO_BUDGET, CAPACITY_RESERVE, preserveAudio, sendChunk, drainQueue, incompleteSessions, normalizeMime, orderEntries, retryDelay, sameChunk, storageFailure, UploadFailure, verifyChunk, type QueueEntry, type QueueStore } from "../src/lib/recording/queue";
 import { checksum } from "../src/lib/recording/session";
 import type { RecordingResult } from "../src/lib/recording/pipeline";
 
@@ -95,4 +95,21 @@ test("retry delay is bounded and quota reserve covers Safari bitrate with headro
   assert.ok(AUDIO_BUDGET > CAPACITY_RESERVE);
   assert.match(storageFailure(new DOMException("full", "QuotaExceededError")), /Storage is full/);
   assert.match(storageFailure(new Error("secret")), /Local saving failed/);
+});
+
+test("queue refresh preserves playback Blob identity while updating processing state", async () => {
+  const row = await entry();
+  const fresh = structuredClone(row); fresh.state = "processed";
+  const refreshed = preserveAudio([row], [fresh]);
+  assert.equal(refreshed[0].audio, row.audio);
+  assert.equal(refreshed[0].state, "processed");
+});
+test("HTTP retry classification honors permanent provider failure even with 502", async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: { retryable: false } }), { status: 502 });
+    await assert.rejects(sendChunk(await entry()), (error: unknown) => error instanceof UploadFailure && !error.retryable);
+    globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+    await assert.rejects(sendChunk(await entry()), (error: unknown) => error instanceof UploadFailure && error.retryable);
+  } finally { globalThis.fetch = original; }
 });

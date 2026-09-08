@@ -50,7 +50,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const [overlapMs, setOverlapMs] = useState(1000);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const queue = useAudioQueue(phase === "recording" || phase === "starting");
+  const queue = useAudioQueue(phase === "recording" || phase === "starting", status.ready);
   const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
   const outcomes = queue.entries.filter((entry) => entry.result);
   const gaps = incompleteSessions(queue.entries);
@@ -150,6 +150,10 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         <ul className="mt-4 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-900">
           {status.problems.map((problem) => <li key={problem}>{problem}</li>)}
         </ul>
+        {queue.error ? <p role="alert">{queue.error}</p> : null}
+        {chunks.length ? <div className="mt-5 space-y-4"><p>Saved audio remains available while processing is unconfigured. No clips are deleted.</p>
+          {chunks.map((chunk) => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some((entry) => chunkKey(entry) === chunkKey(chunk))} disabled={false} onSave={() => { void queue.persist(chunk).catch(() => {}); }} />)}
+        </div> : null}
       </section>
     );
   }

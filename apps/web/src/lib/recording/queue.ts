@@ -4,7 +4,8 @@ import type { RecordingResult } from "./pipeline";
 export const AUDIO_BUDGET = 64 * 1024 * 1024;
 // Safari's measured 204 kbps, plus overlap/headroom: over two minutes.
 export const CAPACITY_RESERVE = 4 * 1024 * 1024;
-export const normalizeMime = (type: string) => type.toLowerCase().split(";").map((part) => part.trim()).join(";");
+import { normalizeMime } from "./media-type";
+export { normalizeMime } from "./media-type";
 export const chunkKey = (chunk: PlayableChunk) => `${chunk.metadata.sessionId}/${chunk.metadata.id}`;
 export interface QueueEntry extends PlayableChunk {
   state: "pending" | "processed" | "blocked";
@@ -49,14 +50,15 @@ export class IndexedDBQueue implements QueueStore {
   constructor(readonly name = "echo-audio-queue-v1", readonly budget = AUDIO_BUDGET) {}
   private open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
+      let blocked = false;
       const request = indexedDB.open(this.name, 1);
       request.onupgradeneeded = () => {
         const store = request.result.createObjectStore("chunks", { keyPath: ["metadata.sessionId", "metadata.id"] });
         store.createIndex("sequence", ["metadata.sessionId", "metadata.sequence"], { unique: true });
       };
       request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error("Close other Echo tabs to upgrade local storage"));
-      request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result); };
+      request.onblocked = () => { blocked = true; reject(new Error("Close other Echo tabs to upgrade local storage")); };
+      request.onsuccess = () => { if (blocked) { request.result.close(); return; } request.result.onversionchange = () => request.result.close(); resolve(request.result); };
     });
   }
   private async transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore, value: (value: T) => void, fail: (error: Error) => void) => void): Promise<T> {
@@ -139,7 +141,13 @@ export async function sendChunk(chunk: PlayableChunk): Promise<RecordingResult> 
   body.append("durationMs", String(chunk.metadata.endMs - chunk.metadata.startMs));
   body.append("chunk", JSON.stringify(chunk.metadata));
   const response = await fetch("/api/recordings", { method: "POST", body, cache: "no-store", signal: AbortSignal.timeout(120_000) });
-  if (!response.ok) throw new UploadFailure(response.status === 408 || response.status === 429 || response.status >= 500);
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const error = body && typeof body === "object" && "error" in body ? body.error : null;
+    const retryable = error && typeof error === "object" && "retryable" in error && typeof error.retryable === "boolean"
+      ? error.retryable : response.status === 408 || response.status === 429 || response.status >= 500;
+    throw new UploadFailure(retryable);
+  }
   const result = await response.json() as RecordingResult;
   if (!result?.transcript || !result.notes || !Array.isArray(result.disclosures)) throw new UploadFailure(true);
   return result;
@@ -150,4 +158,13 @@ export async function capacity(entries: readonly PlayableChunk[]) {
   const available = Math.min(AUDIO_BUDGET - bytes, estimate?.quota === undefined ? Infinity : Math.max(0, estimate.quota - (estimate.usage ?? 0)));
   const persistent = await navigator.storage?.persisted().catch(() => false) ?? false;
   return { bytes, available, nearFull: available < CAPACITY_RESERVE, persistent };
+}
+
+/** IDB deserializes a new Blob on every read. Keep playback URLs stable. */
+export function preserveAudio(previous: readonly QueueEntry[], next: QueueEntry[]): QueueEntry[] {
+  const existing = new Map(previous.map((entry) => [chunkKey(entry), entry]));
+  return next.map((entry) => {
+    const old = existing.get(chunkKey(entry));
+    return old && sameChunk(old, entry) ? { ...entry, audio: old.audio } : entry;
+  });
 }

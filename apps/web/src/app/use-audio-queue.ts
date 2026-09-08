@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { capacity, chunkKey, drainQueue, IndexedDBQueue, sendChunk, storageFailure, type QueueEntry } from "../lib/recording/queue";
+import { capacity, preserveAudio, chunkKey, drainQueue, IndexedDBQueue, sendChunk, storageFailure, type QueueEntry } from "../lib/recording/queue";
 import type { PlayableChunk } from "../lib/recording/session";
 
-export function useAudioQueue(capturing: boolean) {
+export function useAudioQueue(capturing: boolean, canProcess = true) {
   const store = useRef(new IndexedDBQueue());
   const captureActive = useRef(capturing);
+  const processingAllowed = useRef(canProcess);
+  useEffect(() => { processingAllowed.current = canProcess; }, [canProcess]);
   useEffect(() => { captureActive.current = capturing; }, [capturing]);
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [unsaved, setUnsaved] = useState<PlayableChunk[]>([]);
@@ -20,11 +22,11 @@ export function useAudioQueue(capturing: boolean) {
   const refresh = useCallback(async () => {
     const rows = await store.current.list();
     const info = await capacity(rows);
-    if (mounted.current) { setEntries(rows); setSpace(info); setReady(true); }
+    if (mounted.current) { setEntries((previous) => preserveAudio(previous, rows)); setSpace(info); setReady(true); }
     return info;
   }, []);
   const sync = useCallback(async (force = false) => {
-    if (captureActive.current || !mounted.current || !navigator.onLine) return;
+    if (!processingAllowed.current || captureActive.current || !mounted.current || !navigator.onLine) return;
     if (!navigator.locks) { setLocksAvailable(false); return; }
     try {
       await navigator.locks.request("echo-audio-queue-drain", { ifAvailable: true }, async (lock) => {
