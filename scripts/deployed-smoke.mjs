@@ -75,6 +75,25 @@ try {
 
 // 1. The gate challenges an anonymous request.
 const anonymous = await get("/");
+
+// Before asserting, catch the case where the platform answers instead of Echo.
+// Vercel's Deployment Protection redirects anonymous requests to its own SSO, so
+// Echo's gate never runs and nothing below this line is testing Echo at all. That
+// is worth naming precisely: a bare "302 !== 401" sends you looking at proxy.ts,
+// which is not where the problem is.
+const redirectedTo = anonymous.headers.get("location") ?? "";
+if (/^3\d\d$/.test(String(anonymous.status)) && /vercel\.com\/sso-api|_vercel_sso/.test(redirectedTo + (anonymous.headers.get("set-cookie") ?? ""))) {
+  console.error(
+    `deployed-smoke: ${base.origin} is behind Vercel Deployment Protection, so Echo's own access gate is never reached.\n` +
+      `  The origin answered ${anonymous.status} and redirected to Vercel's SSO instead of challenging with Basic auth.\n` +
+      "  Access is currently controlled by your Vercel account, not by ECHO_OWNER_USERNAME/ECHO_OWNER_PASSWORD, and nothing\n" +
+      "  below this check can run: every later assertion would be testing Vercel's login page rather than Echo.\n" +
+      "  Fix: Vercel dashboard -> Project -> Settings -> Deployment Protection -> turn Vercel Authentication off, then re-run.\n" +
+      "  Echo gates every path itself with no exclusions, which is what this script exists to verify.",
+  );
+  process.exit(1);
+}
+
 assert.notEqual(anonymous.status, 503, "the origin reports itself unconfigured: ECHO_OWNER_USERNAME and a 32+ character ECHO_OWNER_PASSWORD are not set as server-side environment variables on the deployment");
 assert.equal(anonymous.status, 401, "an anonymous request to the deployed origin must be challenged");
 assert.match(anonymous.headers.get("www-authenticate") ?? "", /^Basic /, "the challenge must be Basic");
