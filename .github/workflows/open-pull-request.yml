@@ -1,0 +1,53 @@
+name: Open pull request
+
+# ENG-007. Agents cannot open pull requests: their sandboxes cannot reach
+# api.github.com, and a token that could would also let an agent approve its own
+# work. GitHub opens it instead, with a token scoped to this repository.
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'eng/**'
+      - 'docs/**'
+      - 'int/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: open-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  open-pull-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open a pull request if one is not already open
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "A pull request is already open for $BRANCH; it picks up this push automatically."
+            exit 0
+          fi
+          # The agents' commit messages already carry the task ID, the exact
+          # commands run, and what stayed unverified. That is the review
+          # material, so it becomes the pull request body verbatim.
+          {
+            echo "Opened automatically on push. The body is the latest commit message."
+            echo
+            echo "---"
+            echo
+            git log -1 --pretty=%B
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$(git log -1 --pretty=%s)" \
+            --body-file "$RUNNER_TEMP/pr-body.md"
