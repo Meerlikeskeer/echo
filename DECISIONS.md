@@ -142,13 +142,19 @@ A different and real risk was identified instead. REQ-009 makes self-hosted depl
 
 ## ADR-011 — Prototype playable chunk capture
 
-**Status:** Implemented on feature branch; browser validation and owner review pending · **Date:** 2026-09-06 · **Task:** WEB-003
+**Status:** Accepted; validated on Chrome 150 and Safari 26.4 · **Date:** 2026-09-06 · **Amended:** 2026-09-08 · **Task:** WEB-003
 
 **Context:** Arbitrary MediaRecorder data events are not independently playable audio files. WEB-003 needs complete chunks and explicit overlap without selecting storage or workers.
 
 **Decision:** Rotate independent recorders over one stream, briefly running both during overlap. Preserve actual monotonic offsets, ordering, codec and checksums in browser-memory metadata. Keep the one-minute prototype cap. After stopping, process each chunk through the existing guarded endpoint and retain separate results; stop on processing failure. Storage, durable deduplication, incremental processing and overlap stitching remain later tasks. ENG-005 uses a separate models-list authentication probe with no inference content.
 
-**Consequences:** Overlap consumes extra encoding work and duplicates speech until WEB-006. Browser scheduling and simultaneous encoder support require actual browser validation before this task can be marked complete. No database, storage, authentication, provider or hosting decision changes.
+**Consequences:** Overlap consumes extra encoding work and duplicates speech until WEB-006. No database, storage, authentication, provider or hosting decision changes.
+
+**Amendment, 2026-09-08 — validated, and overlap is now mandatory.** The relay was confirmed on Chrome 150 and Safari 26.4: two `MediaRecorder` instances recording concurrently on one `MediaStream`, every container decoding independently, every checksum matching, overlap drift 0–4.8 ms against a ±250 ms tolerance. The simultaneous-encoder assumption holds in both engines.
+
+Validation also established that **overlap cannot be optional**. `MediaRecorder` does not begin capturing when `start()` returns, and the lag is an engine difference of roughly thirty times: Chrome 150 takes **61–82 ms**, Safari 26.4 takes **0–2 ms**. With zero overlap, Chrome's outgoing recorder stops about 52 ms before the incoming one begins and that speech is captured by nothing — 13,920 ms of audio recovered from a 14,006 ms session. Safari loses nothing. A zero-overlap setting is therefore correct on one browser and lossy on another, and behaves correctly on whichever browser a developer happens to use, which is the worst failure shape available. Native recorder *state* timing reports the handoff as sound; only `start`/`stop` event windows expose the loss.
+
+The recorder no longer offers zero overlap, and a test asserts every offered value is at least 1000 ms. `captureSession` still accepts `overlapMs: 0`, because the port itself is not wrong — the product choice is. WEB-006 stitching cannot recover audio that nothing recorded, so this must stay a capture-time guarantee rather than a downstream repair.
 
 ## Open decisions
 

@@ -16,7 +16,7 @@ STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.
 
 **The first browser run found that `captureSession` had never worked in any browser.** `capture.ts` assigned `setTimeout`/`clearTimeout` straight onto its runtime object, so `io.schedule()` set `this` to that object and every browser threw `TypeError: Illegal invocation`. Forty-six unit tests missed it because every one injects a fake runtime — the default object was constructed by no test at all. Fixed, with a regression test that reproduces the browser rule in Node and was verified to fail without the fix.
 
-**Open decision: the "None" overlap option is lossy on Chrome and safe on Safari.** Chrome's `MediaRecorder` takes 61–82 ms to start, so at zero overlap ~52 ms per boundary is captured by nothing; Safari starts in 0–2 ms and loses nothing. Same setting, different outcome, nothing in the UI to tell them apart. Recommendation is to remove the option; **not yet decided by the owner.**
+**Overlap is now mandatory (ADR-011 amended).** Chrome's `MediaRecorder` takes 61–82 ms to start, so at zero overlap ~52 ms per boundary was captured by nothing; Safari starts in 0–2 ms and lost nothing. The same setting was correct on one browser and lossy on another. The recorder now offers 1 s and 2 s only, guarded by a test verified to fail when zero is reintroduced.
 
 **Not finished:** microphone permission, the 60-second auto-stop and chunk playback in the real recorder, and mobile capture — all manual, none coverable by synthetic audio.
 **What still blocks WEB-003:**

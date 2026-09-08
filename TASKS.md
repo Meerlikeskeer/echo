@@ -43,7 +43,9 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 On Chrome the previous recorder's `stop` event precedes the next recorder's `start` event by ~52 ms, so nothing captures the audio in between and it is permanently gone. Native *state* timing hides this completely — it reported +1 ms of overlap while the audio was already lost; only the event windows expose it. Safari starts essentially instantly and has no gap.
 
-Because the loss depends on the engine, a zero-overlap setting is safe on one browser and lossy on another, with nothing in the UI to distinguish them. **Recommendation: remove the "None" option from the recorder's overlap selector and make a positive overlap a requirement rather than a preference.** ~50 ms lost every chunk boundary on Chrome will clip consonants and word onsets in speech, and WEB-006 stitching cannot recover audio nothing recorded. This is an owner decision and has not been made.
+Because the loss depends on the engine, a zero-overlap setting is safe on one browser and lossy on another, with nothing in the UI to distinguish them — and it behaves correctly on whichever browser a developer happens to use, which is the worst failure shape available.
+
+**Resolved 2026-09-08: the owner removed the option.** The recorder offers 1 second and 2 seconds only, a test asserts every offered value is at least 1000 ms and was verified to fail when zero is reintroduced, and ADR-011 is amended to record overlap as mandatory. `captureSession` still accepts `overlapMs: 0`, because the port is not wrong — the product choice was. WEB-006 stitching cannot recover audio nothing recorded, so this stays a capture-time guarantee rather than a downstream repair.
 
 **Second finding: Safari encodes ~1.6× larger.** Same six seconds of identical synthetic audio: **~153 KB on Safari against ~96 KB on Chrome** (roughly 204 kbps against 128 kbps). At the current 60-second cap that is about 1.5 MB, comfortably inside Vercel's 4.5 MB request limit, so it forces nothing now — but WEB-004 and WEB-005 must size against Safari, not Chrome.
 
