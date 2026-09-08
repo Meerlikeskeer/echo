@@ -6,6 +6,7 @@ import type { RecordingResult } from "../lib/recording/pipeline";
 import { DisclosureNotice, RecordingOutcome } from "./recording-result";
 import { captureSession } from "../lib/recording/capture";
 import type { AudioChunk, PlayableChunk } from "../lib/recording/session";
+import { describeSecureContextProblem, readEnvironment } from "../lib/recording/secure-context";
 
 const TARGET_MIN_MS = 30_000;
 const MAX_MS = 60_000;
@@ -110,6 +111,17 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setFailure({ title: "Recording is not supported here", detail: "This browser does not provide microphone recording. Try a current version of Chrome, Edge, Firefox or Safari.", retryable: false });
+      setPhase("idle");
+      return;
+    }
+
+    // Checked before the microphone is opened, not after. Chunk checksums need
+    // crypto.subtle, which browsers withhold outside a secure context — the
+    // exact case when Echo is reached over plain HTTP from another device. Left
+    // to fail later this costs the user a recording and reports nothing useful.
+    const insecure = describeSecureContextProblem(readEnvironment());
+    if (insecure) {
+      setFailure(insecure);
       setPhase("idle");
       return;
     }

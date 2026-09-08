@@ -28,6 +28,8 @@ Previously recorded provider environment blocker — **`npm run doctor` now answ
 
 **Groq is rejecting `TRANSCRIPTION_API_KEY`** — the server log shows `port=transcription code=unauthorized upstream=401`. The same code path returned HTTP 200 against the live service earlier the same day, so this is a key that was rotated, replaced or mistyped, not a regression. Fix: put a current Groq key into **both** `TRANSCRIPTION_API_KEY` and `LLM_API_KEY` in `apps/web/.env.local` (one key serves both endpoints), with no quotes and no trailing spaces, then restart the server. Nothing in the repository needs changing.
 
+**ENG-008 — secure-context development server, in flight on `eng/ENG-008-https-dev-server`.** Runs in parallel with WEB-004 and touches no file in that lane. `npm run dev:lan` serves HTTPS on the LAN address so a phone can reach Echo in a secure context, using Next.js 16's built-in `--experimental-https` — no dependency and no stack decision. `npm run dev` still binds `127.0.0.1` over HTTP; exposing the application to the network stays a separately named, deliberate command. A new `secure-context` module refuses capture *before* the microphone opens when `crypto.subtle` is unavailable, naming the address and the fix instead of failing later as the generic "Capture incomplete". That closes the gap logged against ENG-002 and unblocks WEB-003's remaining mobile check. **Certificate trust on the phone is unverified** — the harness has not been opened from a device yet.
+
 Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
 
 ## Vocabulary

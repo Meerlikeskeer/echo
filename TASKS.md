@@ -232,6 +232,22 @@ One pull request is opened per branch and later pushes update it rather than ope
 
 **Next step:** owner applies the branch protection rule, then confirms a direct push to `main` is rejected. From that point every task ends in a pull request.
 
+## ENG-008 — Secure-context development server and diagnosis
+
+**Status:** In progress · **Branch:** `eng/ENG-008-https-dev-server`, off `main` @ `3d0e87e` · **Dependencies:** None
+
+**In flight (2026-09-08):** Running in parallel with WEB-004 on `feat/WEB-004-durable-queue`. Deliberately touches no file in that lane: one new module, one call site, `apps/web/package.json` scripts, and documentation.
+
+**Acceptance:** A developer can reach Echo from a phone on the same network over HTTPS, so browser APIs that require a secure context work. When a secure context is genuinely unavailable, the application says so precisely instead of failing as a generic capture error.
+
+**Rationale — two problems with one cause.** WEB-003's remaining acceptance work is mobile capture, and a phone cannot reach the `127.0.0.1` bind that `npm run dev` uses. Binding the LAN address alone does not help, because `checksum()` in `apps/web/src/lib/recording/session.ts` calls `crypto.subtle.digest`, which browsers expose only in a secure context — HTTPS or `localhost`. Over plain HTTP on a LAN `crypto.subtle` is `undefined`, capture throws, and the user sees "Capture incomplete" with no indication why. That gap is recorded against ENG-002 and is the same obstacle in both cases.
+
+Next.js 16 provides `--experimental-https`, which generates a locally trusted certificate through `mkcert`. No dependency and no stack decision is required; this is a development script and a diagnostic, not an infrastructure choice. Production HTTPS remains a deployment concern under ADR-007 and ADR-010.
+
+**Scope:** an opt-in `dev:lan` script serving HTTPS on the LAN address, kept separate from `npm run dev` so the safe loopback default is unchanged; a `secure-context` module that reports precisely why capture cannot run; its single call site; tests; and a README section covering certificate trust on the phone.
+
+**Constraints:** `npm run dev` keeps binding `127.0.0.1` over HTTP. Exposing the application to the network stays a deliberate, separately named command. No new dependency. No weakening of the access gate — Basic credentials over a LAN require the encrypted transport this task provides.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
