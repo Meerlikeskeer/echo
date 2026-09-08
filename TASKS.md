@@ -414,6 +414,27 @@ Error: ENOENT: no such file or directory, open
 - **Not verified here:** the deployed run itself was the owner's, not this session's — an agent sandbox cannot reach the platform. It is recorded as the owner's run and marked as such in the snapshot. The URL is deployment-specific rather than a project alias; a future alias should be re-checked rather than assumed.
 - **Next:** open mobile capture acceptance as its own task (ADR-013's precondition is now met), finish WEB-004's four native browser checks, and decide the proposed `status/in-flight/<TASK-ID>.md` split, which needs an ADR.
 
+## DOC-005 — The living documents still said nothing was deployed
+
+**Status:** Done · **Branch:** `docs/DOC-005-deployed-doc-drift`, off `main` @ `b44ec5b` · **Decisions:** none changed
+
+**What was wrong.** `ARCHITECTURE.md` and `README.md` asserted in seven places that Vercel was **not yet provisioned**, that `scripts/deployed-smoke.mjs` had **never been run against a deployment**, and that **"Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured."** ENG-010, ENG-013 and DOC-004 had disproved all of it: the project exists, the owner set all ten environment variables for Production and Preview, and the deployed check passed on 2026-09-08.
+
+**Why this was worth a task rather than a passing edit.** `STATUS.md` states that where it disagrees with `ARCHITECTURE.md`, **`ARCHITECTURE.md` wins and `STATUS.md` is stale**. The authoritative document was therefore telling every future session that no Vercel project existed, and a session correctly following that routing rule could have tried to provision one that was already live — a real action against the owner's account, not merely a confusing sentence. This is the same failure mode ADR-015 was written about, in a different file: documentation that nobody was obliged to move forward when the facts moved.
+
+**What the corrections say.** They record what DOC-004 actually established, and they carry its two limits forward rather than replacing one overclaim with another: the URL tested was deployment-specific rather than a project alias, so an alias must be re-checked rather than assumed; and with Vercel Deployment Protection off, **Echo's own fail-closed gate is the only thing in front of the origin**, which makes `apps/web/src/proxy.ts` load-bearing in production. Deploying remains an explicit owner-run command, never a push (ADR-014).
+
+**The container claim was left alone, because it is true.** The self-hosted image is built and smoke-checked in CI and has never been deployed anywhere — no registry, no host, no TLS. That row now says so precisely, instead of sharing a "not yet provisioned" label with a Vercel target that no longer needs one.
+
+### Handoff
+
+- **What changed:** `ARCHITECTURE.md` (three Hosting and Deployment rows, and the sentence at the end of the ADR-010 paragraph) and `README.md` (the stack-table Hosting row, the Deployment section intro, and the bolded "Nothing is deployed today"). **No application source, no script, no configuration, no decision.**
+- **Deliberately not touched, and this is the point of the task rather than an omission.** `DECISIONS.md` ADR-008 and ADR-013 both contain "not yet provisioned". **ADRs are dated records of what was decided and what was true then, not living status.** ADR-008's consequence was accurate when written; this repository amends or supersedes ADRs rather than rewriting them, and rewriting them here would destroy the audit trail the format exists for. `TASKS.md`'s ENG-002 *Limitations and blockers* was also left: it is a dated handoff, and it is not even wrong — it describes the **container** path, which still has no registry, no host and no TLS.
+- **How the scope was found:** a repository-wide search for `not yet provisioned`, `nothing is deployed` and `never yet run against a deployment`. Nine hits: seven corrected, two left for the reasons above. The same search after the change returns only those two.
+- **Verified, 2026-09-08, Node 22.23.2 / npm 10.9.8**, in the worktree `.claude/worktrees/doc-004-deployed-check-passes`: `check:tracked` 0 · `status:check` 0 (30 tasks) · lint 0 · typecheck 0 · **72 unit, 71 pass, 1 fail** · build 0 · **7 production HTTP, 7 pass** · **4 self-host parity, 4 pass**. Documentation-only, so the counts are **unchanged rather than higher**, which is the correct outcome here. The single unit failure is the known worktree artefact asserting the checkout is named `echo`, identical before and after.
+- **This branch does not contain WEB-005.** It is cut from `main` @ `b44ec5b`, so its floor is the pre-WEB-005 one (72 / 7 / 4 / 16). WEB-005 raises that floor to 91 / 8 / 4 / 16 on its own branch; whichever merges second inherits the other's counts and neither weakens anything.
+- **Next:** nothing follows from this task. It closes a gap rather than opening one.
+
 ## ENG-014 — Stop STATUS.md from causing merge conflicts
 
 **Status:** Done · **Branch:** `eng/ENG-014-status-per-task-files`, branched off `docs/DOC-004-deployed-check-passes` @ `96a1b2a` and since merged with `main` @ `5402d30`, which now contains that work · **Decisions:** ADR-015 accepted

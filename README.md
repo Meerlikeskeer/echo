@@ -27,7 +27,7 @@ Short summary for convenience. **The `Technology Stack` section of [ARCHITECTURE
 | Application | Next.js (App Router), React, TypeScript |
 | Styling and UI | Tailwind CSS; shadcn/ui as the base component system, Lucide for icons *(both approved, not yet installed)* |
 | Backend | Next.js Route Handlers and server-side modules; no separate backend service |
-| Hosting | Vercel *(approved, not yet provisioned)* |
+| Hosting | Vercel *(approved, provisioned and deployed; verified over HTTPS 2026-09-08)* |
 | Tooling | npm workspaces, Node 22.23.2, committed `package-lock.json` |
 | Testing/CI | ESLint, `tsc`, Node's built-in test runner via `tsx`, `next build`, production HTTP tests, Python `unittest` for the agent controller, GitHub Actions |
 | Providers | Transcription and LLM behind small server-side ports using the OpenAI-compatible wire format (ADR-009); adapters `openai-compatible` and `fixture`. Groq is a **temporary** prototype default; the permanent vendor is undecided |
@@ -105,7 +105,7 @@ GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to 
 
 ## Deployment
 
-Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified as artifacts, and **neither is provisioned** — nothing is deployed. `scripts/deployed-smoke.mjs` verifies whichever one you deploy, over its real origin.
+Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified as artifacts. **The Vercel target is deployed and verified over HTTPS**; the container is built and smoke-checked in CI but has never been deployed anywhere. `scripts/deployed-smoke.mjs` verifies whichever one you deploy, over its real origin.
 
 ### Vercel (primary target)
 
@@ -116,7 +116,7 @@ feature branch → GitHub → Vercel preview deployment
   → manual + automated verification → merge → production deployment
 ```
 
-**Nothing is deployed today.** No Vercel project or environment variables have been created. `vercel.json` and the runbook below are what ENG-010 added so that provisioning is a short, repeatable procedure rather than a remembered click-path; running it is the owner's step, because it needs the owner's account and the owner's secrets.
+**Echo is deployed and the deployed check passes** (2026-09-08). The Vercel project exists and the owner has set all ten environment variables for Production and Preview, so the runbook below is now a record of how it was done and how to do it again — for a fresh environment, a second project, or a recovery — rather than a pending step. Running it still needs the owner's account and the owner's secrets. Two things the passing run did **not** settle: it tested a deployment-specific URL rather than a project alias, and with Vercel Deployment Protection off, Echo's own fail-closed gate is the only thing in front of the origin.
 
 `vercel.json` at the repository root defines the build in version control:
 
