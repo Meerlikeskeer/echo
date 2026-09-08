@@ -38,7 +38,7 @@ Short definitions so nobody has to reconstruct them from context.
 
 ## Where the project is
 
-Echo is a private-first web AI note taker, **deployed and verified over HTTPS** as of 2026-09-08. `main` is at `5402d30`, which includes ENG-013 and DOC-004.
+Echo is a private-first web AI note taker, **deployed and verified over HTTPS** as of 2026-09-08. `main` is at `b44ec5b`, which includes ENG-013, DOC-004 and ENG-014.
 
 <!-- BEGIN GENERATED TASK TABLE -->
 
@@ -64,7 +64,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | ENG-005 Provider configuration doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
 | WEB-003 Session and playable chunk model | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-002-recording-slice` |
 | WEB-004 Durable offline queue | Implemented; native browser/local verification and owner acceptance pending — NOT Done | — |
-| WEB-005 Incremental upload and transcription | Todo | — |
+| WEB-005 Incremental upload and transcription | Implemented and verified by test; the hook wiring that drains during capture is… | — |
 | WEB-006 Transcript stitching | Todo | — |
 | WEB-007 Structured artifacts | Todo | — |
 | WEB-008 Quick Note mode | Todo | — |
@@ -85,6 +85,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
+- Incremental upload during capture (WEB-005): a chunk is sent as soon as it is durably committed rather than at session end, a failing chunk no longer blocks the ones behind it, retry is bounded before an entry blocks with a readable reason, and `uploading` is a **persisted** state so a page that died mid-upload is recoverable as *in flight, outcome unknown*. `POST /api/recordings` keeps a job ledger keyed by chunk identity, so a retry after a lost response replays the stored result instead of paying for a second provider call. **The ledger is in-process and best-effort, not exactly-once** — a cold start, a redeploy, a second instance or a TTL expiry all lose it (ADR-016). The drain-during-capture wiring itself is code-verified but has no automated test and awaits browser acceptance.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
 - Browser-local durable storage (WEB-004): each completed audio container and its metadata are saved in IndexedDB, recovered and checksummed after a reload, and retried while the page is active, with a 64 MiB audio budget and a 4 MiB warning reserve. Results never delete raw audio and no HTTP response is counted as a verified remote copy. Development-only, owner-gated `/diagnostics/queue` exercises the adapter natively. **No browser has yet run that acceptance.**
@@ -105,7 +106,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 
 ## What does not exist
 
-Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts.
+Overlap stitching, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 
@@ -126,11 +127,11 @@ Cheaper here than in a search, and each one cost something to learn.
 
 ## Verification floor
 
-**The floor is 72 unit, 7 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 unit** and **4 → 6 → 7 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+**The floor is 91 unit, 8 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
 
 | Command | What it covers |
 | --- | --- |
-| `npm ci` then `npm run check` | `check:tracked` → lint → typecheck → **72 unit** → production build → **7 production HTTP** → **4 self-host parity** |
+| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **91 unit** → production build → **8 production HTTP** → **4 self-host parity** |
 | `python3 -m unittest discover -s tests` | **16 tests**, bounded controller only — it certifies the controller, never the web application |
 | `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
 | `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |

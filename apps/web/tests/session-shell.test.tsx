@@ -78,3 +78,12 @@ test("the recorder never offers a zero-overlap capture", () => {
   assert.ok(!options.includes(0), `zero overlap must not be offered; found ${JSON.stringify(options)}`);
   assert.ok(options.every(value => value >= 1000), `every overlap option must be at least 1000 ms; found ${JSON.stringify(options)}`);
 });
+
+test("chunk progress is visible while recording, per chunk and not stitched", () => {
+  // Uploads run during capture (ADR-016), so the count of what is transcribed,
+  // moving, waiting or stopped has to be readable mid-session rather than at
+  // the end. Comments are stripped because React separates adjacent text nodes.
+  const html = renderToStaticMarkup(<SessionShell status={ready} />).replace(/<!--.*?-->/g, "");
+  assert.match(html, /Chunk processing: 0 transcribed · 0 uploading · 0 waiting · 0 retrying · 0 blocked/);
+  assert.doesNotMatch(html, /stitch(ed)? transcript/i);
+});

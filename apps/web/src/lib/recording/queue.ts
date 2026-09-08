@@ -8,7 +8,14 @@ import { normalizeMime } from "./media-type";
 export { normalizeMime } from "./media-type";
 export const chunkKey = (chunk: PlayableChunk) => `${chunk.metadata.sessionId}/${chunk.metadata.id}`;
 export interface QueueEntry extends PlayableChunk {
-  state: "pending" | "processed" | "blocked";
+  /**
+   * `uploading` means *in flight, outcome unknown* (ADR-016). It is written
+   * before the request leaves, because a page that dies mid-upload is otherwise
+   * indistinguishable from one that never sent — and the two need different
+   * handling. Recovery returns it to `pending`; whether that retry costs a
+   * provider call is then the server's decision, not this browser's.
+   */
+  state: "pending" | "uploading" | "processed" | "blocked";
   attempts: number;
   nextAttemptAt: number;
   error?: string;
@@ -18,6 +25,49 @@ export interface QueueStore {
   offer(chunk: PlayableChunk): Promise<void>;
   list(): Promise<QueueEntry[]>;
   update(entry: QueueEntry): Promise<void>;
+}
+
+/**
+ * A drain that never returned — the tab was closed, the process was killed —
+ * leaves `uploading` behind with no one to finish it. On load it returns to
+ * `pending` so it is retried; its attempt count and backoff are kept, because
+ * the attempt really was made. A `processed` entry is never reset: its result is
+ * the answer, and re-sending it would be work with nothing to gain.
+ */
+export function recoverEntry(entry: QueueEntry): QueueEntry {
+  return entry.state === "uploading" ? { ...entry, state: "pending" } : entry;
+}
+export function recoverEntries(entries: readonly QueueEntry[]): QueueEntry[] {
+  return entries.map(recoverEntry);
+}
+
+/** Processing updates never replace or remove raw audio, whatever the caller
+ *  hands back — the stored Blob is the only copy that exists. */
+export function processingUpdate(previous: QueueEntry, entry: QueueEntry): QueueEntry {
+  return { ...previous, state: entry.state, attempts: entry.attempts, nextAttemptAt: entry.nextAttemptAt, error: entry.error, result: entry.result };
+}
+
+export interface QueueProgress {
+  readonly total: number;
+  readonly transcribed: number;
+  readonly uploading: number;
+  readonly waiting: number;
+  readonly retrying: number;
+  readonly blocked: number;
+}
+/** Drives the during-capture progress line. `retrying` is separated from
+ *  `waiting` because "not sent yet" and "sent and refused" read the same in a
+ *  single pending count, and only one of them is a problem. */
+export function summarizeQueue(entries: readonly QueueEntry[]): QueueProgress {
+  const count = (predicate: (entry: QueueEntry) => boolean) => entries.filter(predicate).length;
+  return {
+    total: entries.length,
+    transcribed: count((entry) => entry.state === "processed"),
+    uploading: count((entry) => entry.state === "uploading"),
+    waiting: count((entry) => entry.state === "pending" && entry.attempts === 0),
+    retrying: count((entry) => entry.state === "pending" && entry.attempts > 0),
+    blocked: count((entry) => entry.state === "blocked"),
+  };
 }
 export function storageFailure(error: unknown): string {
   return error instanceof Error && error.name === "QuotaExceededError"
@@ -106,11 +156,22 @@ export class IndexedDBQueue implements QueueStore {
       request.onsuccess = () => {
         const previous = request.result as QueueEntry | undefined;
         if (!previous || !sameChunk(previous, entry)) { fail(new Error("Chunk changed during processing")); return; }
-        // Processing updates never replace or remove raw audio.
-        store.put({ ...previous, state: entry.state, attempts: entry.attempts, nextAttemptAt: entry.nextAttemptAt, error: entry.error, result: entry.result });
+        store.put(processingUpdate(previous, entry));
         done();
       };
     });
+  }
+  /**
+   * Called once when the page loads, before the first drain. Another tab could
+   * be uploading one of these right now, and this would reset it — but that
+   * costs at most a repeated send, which is what the server's job ledger exists
+   * to absorb, whereas leaving a dead `uploading` row costs the chunk entirely.
+   */
+  async recover(): Promise<void> {
+    for (const entry of await this.list()) {
+      const recovered = recoverEntry(entry);
+      if (recovered !== entry) await this.update(recovered);
+    }
   }
 }
 
@@ -118,18 +179,30 @@ export class UploadFailure extends Error {
   constructor(readonly retryable: boolean) { super(retryable ? "Server unavailable; retry scheduled." : "Processing rejected. Sign in or check provider configuration, then retry."); }
 }
 export const retryDelay = (attempt: number) => Math.min(60_000, 1000 * 2 ** Math.min(6, Math.max(0, attempt - 1)));
+/** Retrying forever against a server that is never going to accept this chunk
+ *  burns the provider allowance and hides the failure behind an activity
+ *  indicator. At the bound the entry stops on its own and says why. */
+export const MAX_ATTEMPTS = 8;
+export const EXHAUSTED = `Upload failed ${MAX_ATTEMPTS} times and is paused. The audio is still saved on this browser — use "Retry pending processing" to try again.`;
 export async function drainQueue(store: QueueStore, send: (chunk: PlayableChunk) => Promise<RecordingResult>, options: { online: () => boolean; now: () => number; force?: boolean; active?: () => boolean }) {
   for (const entry of await store.list()) {
     if (!options.online() || options.active?.() === false) break;
     if (entry.state === "processed" || (!options.force && (entry.state === "blocked" || entry.nextAttemptAt > options.now()))) continue;
     await verifyChunk(entry);
-    const attempt = { ...entry, attempts: entry.attempts + 1, nextAttemptAt: options.now() + retryDelay(entry.attempts + 1) };
+    const attempt = { ...entry, state: "uploading" as const, attempts: entry.attempts + 1, nextAttemptAt: options.now() + retryDelay(entry.attempts + 1) };
     await store.update(attempt); // Write failure must prevent the HTTP request.
     let result: RecordingResult;
     try { result = await send(entry); }
     catch (error) {
-      await store.update({ ...attempt, state: error instanceof UploadFailure && !error.retryable ? "blocked" : "pending", error: error instanceof UploadFailure ? error.message : "Connection interrupted; retry scheduled." });
-      break;
+      const permanent = error instanceof UploadFailure && !error.retryable;
+      const exhausted = attempt.attempts >= MAX_ATTEMPTS;
+      await store.update({ ...attempt, state: permanent || exhausted ? "blocked" : "pending",
+        error: permanent || !exhausted ? (error instanceof UploadFailure ? error.message : "Connection interrupted; retry scheduled.") : EXHAUSTED });
+      // ADR-016: one unlucky chunk used to stall every chunk behind it for the
+      // rest of the session. It now waits out its own backoff while the others
+      // go. Offline and unmounted still break above, because there continuing
+      // is pointless rather than merely slow.
+      continue;
     }
     // A response is a processing result, NEVER evidence for deleting a Blob.
     await store.update({ ...attempt, state: "processed", result, error: undefined, nextAttemptAt: 0 });

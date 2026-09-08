@@ -631,9 +631,40 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 ## WEB-005 — Incremental upload and transcription
 
-**Status:** Todo · **Dependencies:** WEB-003, WEB-004
+**Status:** Implemented and verified by test; the hook wiring that drains during capture is code-verified but untested and needs browser acceptance — NOT Done · **Dependencies:** WEB-003, WEB-004
 
 **Acceptance:** Upload/transcribe during recording with durable status, bounded retry/backoff and idempotent jobs; demonstrate reordered uploads and provider failures recover without duplicated work.
+
+### Handoff (2026-09-08)
+
+- **Branch/base:** `feat/WEB-005-incremental-upload`, from `main` @ `b44ec5b` (the merge of ENG-014, PR #21). The branch already existed as an empty placeholder pointing at `main` with no commits of its own; ENG-014's handoff had noted that whoever owned it should add its `status/in-flight/` file, which this task did before starting work.
+- **Decision first:** **ADR-016** was written and committed before any code, as ADR-012 was for WEB-004. It records both halves of REQ-003 — draining during capture, and a job ledger keyed by chunk identity — and is emphatic about what the ledger does **not** promise.
+- **Implemented.** Client: `sync()` no longer refuses while capture is active and `persist()` fires a drain after each durable commit without awaiting it, so the microphone never waits on the network; `drainQueue` continues past a failed entry instead of stopping the queue behind it; retry is bounded at 8 attempts before `blocked` with a readable reason; `uploading` is a **persisted** state, and recovery on load returns a stale `uploading` row to `pending` while never touching a `processed` one. Server: `POST /api/recordings` consults a `JobLedger` keyed `sessionId/id/checksum`, replaying a stored result or joining an in-flight job rather than paying for a second provider call, marked in both a `replayed` body field and an `x-echo-replayed` header.
+- **The ledger is deliberately in-process and best-effort, and the code says so.** A cold start, a redeploy, a second instance or a TTL expiry all lose it, and the retry then costs a provider call exactly as before. Nothing in the code, comments, UI or tests claims exactly-once; the only two matches for that phrase in the tree are explicit denials. Exactly-once needs a ledger that outlives the process — the relational-database decision, which stays **Open**.
+- **Builder/checker, run manually.** The Codex-backed controller in `AGENT_WORKFLOW.md` was not used: it needs Codex credentials and `agent-loop.json` is still `"ready": false`. Acceptance criteria were written before the builder saw the task, and an independent read-only checker reviewed the result. This is the same manual discipline WEB-004 used, and it carries none of the executable loop's guarantees.
+- **The checker found no behavioural defect** and returned `goal_met: false` on coverage alone. Two of its findings were repaired rather than documented:
+  1. Updating one existing assertion from `pending` to `uploading` (required by ADR-016) had quietly left *"what is on disk after a failed result-write is still retryable"* pinned by nothing. New test `a row left uploading is re-attempted by the next drain, not stranded` restores it, and names the plausible future hardening that would break it.
+  2. A **pre-existing** production test posted the same chunk twice to prove MIME normalization; once both posts shared a ledger key, its second assertion came from the replay branch instead of a real transcription. The second post now carries a distinct id, plus a new `x-echo-replayed: "false"` assertion so it cannot silently regress.
+- **`IndexedDBQueue.recover()` and `.update()` execute in no automated test** — only the pure functions they delegate to. The browser harness at `/diagnostics/queue` gained a scenario for `recover()` and the `uploading` state so the real implementation is at least exercised when WEB-004's pending browser acceptance is run.
+
+**Verified, 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6**, in the worktree `.claude/worktrees/doc-004-deployed-check-passes`. Every command below was re-run by the coordinator, not taken from the builder's report.
+
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm run check:tracked` | 0 | no source file is hidden from version control |
+| `npm run status:check` | 0 | table matches `TASKS.md` |
+| `npm run lint` | 0 | clean |
+| `npm run typecheck` | 0 | clean |
+| `npm test` | 1 | **91 tests, 90 pass, 1 fail** — up from 72. The single failure is the known worktree artefact `output file tracing still points at the repository root in both cases`, unchanged from the baseline taken before this work started |
+| `npm run build` | 0 | compiled |
+| `npm run test:production` | 0 | **8 tests, 8 pass** — up from 7 |
+| `npm run test:selfhost` | 0 | **4 pass** — floor held |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** — floor held |
+| `npm run test:deployed` | not run | owner-only; needs a live URL and real credentials |
+
+**Not verified, and this is why the task is not Done.** Acceptance items A1–A3 — that the queue actually drains during capture, that `persist()` triggers it, and that capture never waits on it — **have no automated test.** They live in `useAudioQueue`, which needs a DOM, `navigator.locks` and IndexedDB, and this repository has no browser test runner; adding one would mean a new dependency. The pieces underneath them are tested and the wiring was read and traced by an independent checker, but read is not run. The same applies to the `navigator.locks` fail-closed branch and to `IndexedDBQueue`'s own methods.
+
+**Next:** owner reviews; the browser acceptance for this task should be run together with WEB-004's four outstanding checks at `/diagnostics/queue`, since both need the same session in a real Chrome and Safari.
 
 ## WEB-006 — Transcript stitching
 
