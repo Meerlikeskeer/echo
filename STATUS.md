@@ -2,11 +2,13 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `docs/DOC-002-status-after-eng-010` · **Base:** `main` @ `318c356`
+**Updated:** 2026-09-08 · **Branch:** `docs/DOC-004-deployed-check-passes` · **Base:** `eng/ENG-013-deployment-protection` @ `4fe9f03`, which is `main` @ `26006fb` plus DOC-003 and ENG-013
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
 ## In flight
+
+**DOC-004 — in flight on `docs/DOC-004-deployed-check-passes`.** Attempting: record that `npm run test:deployed` has now completed a full pass against the hosted origin, and close out the CDN static-asset question ENG-010 was built to ask. Documentation only — no application source changes. Not done here: WEB-004 native browser acceptance, mobile capture acceptance, and the proposed split of this section into `status/in-flight/<TASK-ID>.md`. This branch is stacked on `eng/ENG-013-deployment-protection` rather than `main`, because the run it records is the run that made ENG-013's new branch stop firing; the two belong in the same review.
 
 **ENG-010 — DONE and merged** (PRs #11 and #12, `main` @ `318c356`). `vercel.json`, `scripts/deployed-smoke.mjs` and `npm run test:deployed` are on `main`, with the provisioning runbook in `README.md` → *Deployment*. ADR-014 was accepted mid-task: `git.deploymentEnabled` is `false`, so a push builds nothing and deploying is always an explicit command. **Merged and deployed are separate states** — check which commit is live before concluding anything from a deployed origin.
 
