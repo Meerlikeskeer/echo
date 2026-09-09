@@ -2,7 +2,7 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Base:** `main` @ `5402d30`
+**Updated:** 2026-09-08 · **Base:** `main` @ `1559da2`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
@@ -38,7 +38,7 @@ Short definitions so nobody has to reconstruct them from context.
 
 ## Where the project is
 
-Echo is a private-first web AI note taker, **deployed and verified over HTTPS** as of 2026-09-08. `main` is at `b44ec5b`, which includes ENG-013, DOC-004 and ENG-014.
+Echo is a private-first web AI note taker, **deployed and verified over HTTPS** as of 2026-09-08. This task starts from `main` at `1559da2`, including WEB-005 and DOC-005 (PRs #22 and #23). ADR-017 accepts conservative stitching and browser-local capture completion records for WEB-006; implementation and verification are in flight.
 
 <!-- BEGIN GENERATED TASK TABLE -->
 

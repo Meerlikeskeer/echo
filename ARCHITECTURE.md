@@ -155,7 +155,7 @@ Echo's provider ports use the OpenAI `/v1/audio/transcriptions` and `/v1/chat/co
 
 ### Browser-local storage
 
-Native IndexedDB is approved for the WEB-004 offline audio queue only (ADR-012), with native Web Locks for same-origin retry serialization. No dependency or server-side storage choice is introduced. Browser persistence is subject to quota, eviction and user clearing; no local queue entry is an independent verified remote copy.
+Native IndexedDB is approved for the WEB-004 offline audio queue (ADR-012) and its WEB-006 capture completion records (ADR-017), with native Web Locks for same-origin retry serialization. No dependency or server-side storage choice is introduced. Browser persistence is subject to quota, eviction and user clearing; no local queue entry is an independent verified remote copy.
 
 ### Data and Infrastructure Decisions Still Open
 
@@ -306,4 +306,10 @@ Entry state is `pending`, `uploading`, `processed` or `blocked`, and it is persi
 
 The only adapter is in-process: a bounded, expiring `Map`, no dependency and no platform service, so it behaves identically on Vercel and in the self-hosted container. **It is not exactly-once**, and nothing in the code or the interface may claim otherwise: a cold start, a redeploy, a second instance or an expiry all lose it, and the retry then costs a provider call. It holds results in memory for its TTL and never writes them to disk or to a log. A ledger entry is not a durable copy and cannot satisfy RET-002; no response, replayed or fresh, authorizes deleting raw audio.
 
-Stitching those per-chunk results into one session transcript is WEB-006 and is not done here.
+Stitching those per-chunk results into one session transcript is WEB-006.
+
+## WEB-006 transcript stitching boundaries
+
+ADR-017 defines the implementation boundary: a pure domain stitcher consumes chunk metadata, original transcripts and explicit successful-capture completion evidence. Provider timestamps are already session milliseconds. Deduplication requires matching text and agreeing source segment times wholly inside measured overlap; ambiguous speech stays visible, and original text plus source references are preserved. No word timing is invented.
+
+The existing IndexedDB queue gains completion records listing expected chunk metadata, committed only after successful capture and validation against saved chunks. Finalization requires that manifest and every expected valid transcript, with no metadata conflict or gap. Recording, failed capture, legacy recovery and failed completion writes remain partial. The UI derives one session transcript as results change, while notes stay per-chunk until WEB-007. This boundary is being implemented; see the WEB-006 task handoff for verification.
