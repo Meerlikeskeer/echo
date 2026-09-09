@@ -29,10 +29,10 @@ What is now satisfied: `npm run typecheck`, `npm run lint` and `npm run build` a
 
 What still blocks enabling it:
 
-- `scripts/run-app-tests.py` (the `test` adapter) **does not exist**.
-- `scripts/run-app-acceptance.py` (the `acceptance` adapter) **does not exist**.
+- `scripts/run-app-tests.py` (the `test` adapter) exists through ENG-017; its independent verification is recorded in that task's handoff.
+- `scripts/run-app-acceptance.py` (the `acceptance` adapter) exists through ENG-017; successful production integration still needs a working production build.
 - No goal-specific acceptance tests have been written or independently reviewed.
-- Neither adapter has been demonstrated to report individual test outcomes and to preserve failures rather than manufacturing green.
+- ENG-017's frozen fixture tests exercise individual outcomes and failure preservation; required full-suite verification remains blocked in its task handoff. Fixture evidence alone does not enable the loop.
 
 Both adapters must emit a JSON object at the path substituted for `{report}`, mapping every selected test ID to `pass` or `fail`, derived from the framework's machine-readable output. The web unit tests use Node's built-in runner via `tsx`, and the production tests use `node --test`; both emit TAP, which an adapter must parse faithfully — including failures, skips and a nonzero exit status. Do not set `ready: true` until these exist and have been independently verified.
 
