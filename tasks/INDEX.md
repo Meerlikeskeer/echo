@@ -27,10 +27,11 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-013](ENG-013.md) Name Vercel Deployment Protection instead of failing with `302 !== 401` | Done; verified against the live deployment | `eng/ENG-013-deployment-protection` |
 | [ENG-014](ENG-014.md) Stop STATUS.md from causing merge conflicts | Done | `eng/ENG-014-status-per-task-files` |
 | [ENG-015](ENG-015.md) Scope the container job to where its result can change | Implemented; awaiting owner review | `eng/ENG-015-container-job-scope` |
-| [ENG-016](ENG-016.md) Auto-merge on green | Specified; owner must apply the workflow and settings | `eng/ENG-016-auto-merge-on-green` |
+| [ENG-016](ENG-016.md) Auto-merge on green | Specified and merged; the workflow was applied by ENG-020, and three owner-side settings… | `eng/ENG-016-auto-merge-on-green` |
 | [ENG-017](ENG-017.md) Bounded loop test and acceptance adapters | Implemented and independently reviewed; full verification blocked by environment… | `eng/ENG-017-bounded-loop-adapters` |
 | [ENG-018](ENG-018.md) `npm run check` could not pass in a worktree, because a test asserted a folder… | Implemented and verified; awaiting owner review | `eng/ENG-018-worktree-verification` |
 | [ENG-019](ENG-019.md) Stop the process from generating merge conflicts and locking agents out | Implemented and verified; awaiting owner review | `eng/ENG-019-conflict-free-task-records` |
+| [ENG-020](ENG-020.md) Apply the auto-merge workflow ENG-016 specified | Workflow applied and pushed; three owner-side settings remain | `eng/ENG-020-apply-auto-merge` |
 | [INT-001](INT-001.md) Branch integration and architecture documentation | Done | — |
 | [WEB-001](WEB-001.md) Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | [WEB-002](WEB-002.md) Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
