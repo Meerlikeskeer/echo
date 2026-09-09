@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { capacity, preserveAudio, chunkKey, drainQueue, IndexedDBQueue, sendChunk, storageFailure, type QueueEntry } from "../lib/recording/queue";
+import { capacity, preserveAudio, chunkKey, drainQueue, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, type QueueEntry } from "../lib/recording/queue";
+import { reportFailure } from "../lib/recording/log";
 import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
 import type { PlayableChunk, Session } from "../lib/recording/session";
 
@@ -9,16 +10,30 @@ export function useAudioQueue(canProcess = true) {
   const store = useRef(new IndexedDBQueue());
   const processingAllowed = useRef(canProcess);
   useEffect(() => { processingAllowed.current = canProcess; }, [canProcess]);
+  const mounted = useRef(false);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [unsaved, setUnsaved] = useState<PlayableChunk[]>([]);
+  // WEB-015. resolveFailure needs the unsaved count at the moment a storage
+  // operation succeeds, inside an async callback that closed over an older
+  // render's `unsaved`. A ref written beside the state is the value that is
+  // actually current there.
+  const unsavedNow = useRef<PlayableChunk[]>([]);
+  const trackUnsaved = useCallback((next: (previous: PlayableChunk[]) => PlayableChunk[]) => {
+    unsavedNow.current = next(unsavedNow.current);
+    setUnsaved(unsavedNow.current);
+  }, []);
   const [error, setError] = useState<string | null>(null);
+  /** Withdraw a storage warning the moment a storage operation proves the
+   *  condition is over. Called on every success path, never on a failure. */
+  const settled = useCallback(() => {
+    if (mounted.current) setError((current) => resolveFailure(current, unsavedNow.current.length));
+  }, []);
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [space, setSpace] = useState<Awaited<ReturnType<typeof capacity>> | null>(null);
   const [online, setOnline] = useState(true);
   const [locksAvailable, setLocksAvailable] = useState(true);
-  const mounted = useRef(false);
   const refresh = useCallback(async () => {
     const rows = await store.current.list();
     // Completion evidence is a second, newer read, and WEB-004's promise — saved
@@ -47,10 +62,14 @@ export function useAudioQueue(canProcess = true) {
         try {
           await drainQueue(store.current, sendChunk, { online: () => navigator.onLine, now: () => Date.now(), force, active: () => mounted.current });
           await refresh();
+          settled();
         } finally { if (mounted.current) setWorking(false); }
       });
-    } catch (cause) { if (mounted.current) setError(storageFailure(cause)); }
-  }, [refresh]);
+    } catch (cause) {
+      reportFailure("draining the upload queue", cause);
+      if (mounted.current) setError(storageFailure(cause, "maintenance"));
+    }
+  }, [refresh, settled]);
   useEffect(() => {
     mounted.current = true;
     const poll = async (stale = false) => {
@@ -58,8 +77,19 @@ export function useAudioQueue(canProcess = true) {
       // Only on load. A page that died mid-upload left `uploading` rows nothing
       // will ever finish; running this on the interval would instead reset the
       // upload this page has in flight right now.
-      try { if (stale) await store.current.recover(); await refresh(); await sync(); }
-      catch (cause) { if (mounted.current) setError(storageFailure(cause)); }
+      try {
+        if (stale) await store.current.recover();
+        await refresh();
+        // WEB-015. Before sync(), not after. sync() handles its own failures and
+        // returns normally, so clearing afterwards would withdraw a warning it
+        // had just raised. Reading the store is its own proof that the store is
+        // reachable; sync() withdraws its own on its own success path.
+        settled();
+        await sync();
+      } catch (cause) {
+        reportFailure(stale ? "recovering local storage on load" : "reading local storage", cause);
+        if (mounted.current) setError(storageFailure(cause, "maintenance"));
+      }
     };
     void poll(true);
     const reconnect = () => { setOnline(navigator.onLine); void sync(); };
@@ -67,24 +97,28 @@ export function useAudioQueue(canProcess = true) {
     window.addEventListener("offline", reconnect);
     const timer = setInterval(() => { void poll(); }, 5000);
     return () => { mounted.current = false; clearInterval(timer); window.removeEventListener("online", reconnect); window.removeEventListener("offline", reconnect); };
-  }, [refresh, sync]);
+  }, [refresh, settled, sync]);
   const persist = useCallback(async (chunk: PlayableChunk) => {
     try {
       await store.current.offer(chunk);
-      if (mounted.current) setUnsaved((previous) => previous.filter((item) => chunkKey(item) !== chunkKey(chunk)));
+      if (mounted.current) trackUnsaved((previous) => previous.filter((item) => chunkKey(item) !== chunkKey(chunk)));
       await refresh();
+      // WEB-015. The clip is saved. If nothing else is waiting, the warning a
+      // previous attempt raised no longer describes anything true.
+      settled();
       // Deliberately not awaited. Persistence keeps absolute priority: capture
       // hands the next container to this same function, and if that call waited
       // on an upload the microphone would be waiting on the network.
       void sync();
     } catch (cause) {
+      reportFailure("saving a recorded clip", cause);
       if (mounted.current) {
-        setUnsaved((previous) => previous.some((item) => chunkKey(item) === chunkKey(chunk)) ? previous : [...previous, chunk]);
-        setError(storageFailure(cause));
+        trackUnsaved((previous) => previous.some((item) => chunkKey(item) === chunkKey(chunk)) ? previous : [...previous, chunk]);
+        setError(storageFailure(cause, "capture"));
       }
       throw cause;
     }
-  }, [refresh, sync]);
+  }, [refresh, settled, sync, trackUnsaved]);
   const prepare = useCallback(async () => {
     await navigator.storage?.persist().catch(() => false);
     const info = await refresh();
@@ -96,6 +130,7 @@ export function useAudioQueue(canProcess = true) {
       await persistSessionCompletion(captured, manifest => store.current.saveCompletion(manifest));
       await refresh();
     } catch (cause) {
+      reportFailure("saving the capture-completion record", cause);
       if (mounted.current) setError("Capture completion could not be saved. The session remains partial; saved audio is retained.");
       throw cause;
     }

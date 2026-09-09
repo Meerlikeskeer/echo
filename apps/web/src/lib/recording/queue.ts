@@ -80,11 +80,58 @@ export class StorageBlockedError extends Error {
     this.name = "StorageBlockedError";
   }
 }
-export function storageFailure(error: unknown): string {
+/**
+ * WEB-015. Where the failure happened, which the caller knows and the error does
+ * not. One sentence used to serve all three, and it was false in two of them.
+ *
+ * - `capture` — a recorded clip could not be saved while recording. `capture.ts`
+ *   calls stop() when the persist callback throws, so "recording stopped" is
+ *   true here and only here.
+ * - `starting` — prepare() refused before the microphone was ever opened.
+ *   Nothing was recording and nothing is unsaved.
+ * - `maintenance` — the load-time recovery, the five-second poll or the drain.
+ *   These run with no capture in progress, so telling the owner that recording
+ *   stopped and that unsaved clips need rescuing describes neither the cause nor
+ *   any true consequence. That sentence is what sent a session to clear site
+ *   data, destroying saved audio, which the retention rules forbid as a remedy.
+ */
+export type StorageSituation = "capture" | "starting" | "maintenance";
+/** The error is never interpolated into the returned sentence. A storage error
+ *  can carry a key name or a path, and this string is rendered on the page;
+ *  `reportFailure` in ./log.ts is where the real cause goes. */
+export function storageFailure(error: unknown, situation: StorageSituation = "capture"): string {
   if (error instanceof Error && error.name === "StorageBlockedError") return error.message;
-  return error instanceof Error && error.name === "QuotaExceededError"
+  const full = error instanceof Error && error.name === "QuotaExceededError";
+  if (situation === "starting") {
+    return full
+      ? "Storage is full, so recording did not start. Previously saved clips are retained; download and remove clips to free space."
+      : "Local saving is not working, so recording did not start. Previously saved clips are retained. The exact error is in this page's browser console.";
+  }
+  if (situation === "maintenance") {
+    return full
+      ? "Storage is full. Previously saved clips are retained and nothing has been deleted; download and remove clips to free space."
+      : "Local storage could not be read just now. Saved clips are retained and nothing has been deleted. The exact error is in this page's browser console.";
+  }
+  return full
     ? "Storage is full. Recording stopped. Previously saved clips are retained; download unsaved clips before leaving."
     : "Local saving failed. Recording stopped. Keep this page open and download unsaved clips before leaving.";
+}
+/**
+ * WEB-015. A storage warning must not outlive the failure it describes. The only
+ * thing that used to clear one was a successful prepare(), which runs only when
+ * the owner presses Record — so a chunk that failed once and saved on retry left
+ * "Local saving failed. Recording stopped." on screen indefinitely, beside a
+ * queue showing zero unsaved clips.
+ *
+ * A storage operation that succeeds while nothing is waiting unsaved is the
+ * evidence that the condition is over, and it is the only evidence available: no
+ * error carries a signal that it has been resolved. Holding the warning while a
+ * clip is still unsaved is deliberate — that clip is the reason the warning was
+ * worth showing. A genuinely persistent fault cannot be cleared this way,
+ * because the operation that would clear it fails too.
+ */
+export function resolveFailure(current: string | null, unsavedCount: number): string | null {
+  return unsavedCount === 0 ? null : current;
 }
 export async function verifyChunk(chunk: PlayableChunk): Promise<void> {
   if (!isAudioChunk(chunk.metadata) || !(chunk.audio instanceof Blob) || chunk.audio.size !== chunk.metadata.size ||
