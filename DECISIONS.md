@@ -234,11 +234,54 @@ A second, quieter failure came from the same shape. Because the *In flight* sect
 
 **Reversing this needs an ADR.** Moving *In flight* back into `STATUS.md`, or hand-maintaining the task table again, reverses this decision and must be recorded as one.
 
+## ADR-016 — Upload during capture, and a chunk-identity job ledger
+
+**Status:** Accepted for implementation · **Date:** 2026-09-08 · **Task:** WEB-005 · **Refines:** ADR-012
+
+**Context:** REQ-003 asks for two things — upload and transcribe *while recording continues*, and retries that *do not duplicate chunks or jobs*. WEB-004 deliberately delivered neither, and said so. It drains the queue only after capture stops (`useAudioQueue.sync()` returns early while capture is active), and ADR-012 records the honest limit on the other half: *"The stateless endpoint cannot guarantee exactly-once provider execution after a lost HTTP response; retries can repeat processing, but never create a second local chunk/result."*
+
+Both restrictions were correct for a task whose subject was durable storage. Both are now the task.
+
+The second one is the harder half. `POST /api/recordings` holds no state between requests, so a response lost in transit — a timeout, a suspended tab, a dropped connection after the provider has already answered — is indistinguishable, from the client, from a request that never arrived. The client must retry, because retrying is what durability means. The provider then transcribes the same audio twice. The wasted vendor call is the smaller cost. The real cost is that two transcriptions of one chunk can differ, so *"what is this chunk's transcript"* stops having a single answer, and WEB-006 has to stitch a session whose parts are not stable.
+
+Fixing that properly needs a ledger that survives the process. A durable ledger means a database, and `ARCHITECTURE.md` lists the relational database as **Open** with an explicit instruction not to choose one silently. A retry bug is not a good reason to settle the database question sideways.
+
+**Decision:**
+
+1. **Uploads run during capture.** The queue drains as soon as a container is durably committed, not when the session ends. The `echo-audio-queue-drain` Web Lock still admits one drainer per origin, so two tabs cannot double-send, and the drain stays sequential, so at most one upload is ever in flight. Persistence keeps absolute priority: capture never waits on an upload, and an upload failure never stops capture.
+
+2. **A failing chunk no longer blocks the ones behind it.** The drain currently stops at the first send failure, which converts one unlucky chunk into a stalled session. It now continues past a failed entry and returns to it on its own backoff schedule. It still stops immediately when the browser goes offline or the page is unmounted, because continuing there is pointless rather than merely slow.
+
+3. **Retry is bounded.** An entry that has exhausted its attempts becomes `blocked` with a reason the owner can read, instead of retrying forever against a provider that is never going to accept it. An explicit owner-initiated retry still overrides that.
+
+4. **`uploading` is a persisted state, not an in-memory one.** ARCHITECTURE's *Offline and security* section already requires Echo to distinguish local-only, uploading, verified and processed. A page that dies mid-upload must be recoverable as *"this chunk was in flight and we do not know the outcome"* — which is exactly the state the ledger exists to resolve. On recovery a stale `uploading` entry returns to `pending` and is retried; the ledger, not the client, decides whether that retry costs a provider call.
+
+5. **A `JobLedger` port, keyed by chunk identity.** The key is `sessionId/id/checksum` — content-addressed, and made of fields the Route Handler already validates against the uploaded bytes. Three outcomes: a **replay** returns the stored result without touching a provider; a **join** attaches to a job already in flight for the same key rather than starting a second one; a **claim** proceeds to the providers as today. A replayed response says so, in a field the client and the tests can see, because an answer that is silently identical is an answer nobody can verify.
+
+6. **One adapter: in-process, bounded, no dependency and no platform service.** A `Map` with a capped entry count and a time-to-live. It is portable in the ADR-010 sense — identical behaviour on Vercel and in the self-hosted container — because it is just memory in the process that is already handling the request.
+
+7. **Requests without chunk metadata are not ledgered.** The WEB-002 single-clip path has no identity to key on and is left exactly as it is.
+
+**What this does not promise, stated plainly.** This is **not exactly-once.** A cold start, a redeploy, a second Fluid Compute instance answering the retry, or a TTL expiry each lose the ledger, and the retry then costs a provider call exactly as it does today. What it closes is the *common* window — a retry seconds after a dropped response, on the instance that just handled it — which is the case a suspended tab and a flaky connection actually produce. Exactly-once needs a ledger that outlives the process, which is the database decision, and that decision stays **Open**. This ADR narrows ADR-012's limitation; it does not reverse it, and ADR-012's sentence remains true as written.
+
+**A ledger entry is not a durable copy of anything.** It holds a result, not audio, in memory, for minutes. RET-002 is untouched: nothing here can authorize deleting a raw chunk, and no HTTP response — replayed or fresh — becomes evidence of a verified remote copy.
+
+**Privacy note.** The ledger holds transcript text in process memory for its TTL. The process already holds that text to answer the request; this widens the window from one request to a few minutes. It is never written to disk, never logged, and never keyed by anything an unauthenticated caller can produce — the endpoint's own owner gate runs first, unchanged.
+
+**Alternatives rejected:**
+
+- **A durable ledger now, in Postgres or a KV store.** This is the correct end state and it settles the Open database decision as a side effect of fixing a retry bug. Rejected on sequencing, not on merit.
+- **Vercel KV, Queues or Workflow.** Platform-specific primitives, which ADR-010 forbids without an answer for self-hosted deployments. The in-process adapter needs no such answer.
+- **A client-supplied `Idempotency-Key` header.** The conventional shape, and here a strictly weaker one: a client-chosen key is not derived from the bytes, so the same key carrying different audio reads as a replay. Chunk identity already exists, is already validated against the upload, and already makes that case a conflict.
+- **Not retrying after an ambiguous response.** Discards results to avoid duplicating work, which is the wrong trade for a note taker whose whole promise is that a recording survives.
+
+**Consequences.** Provider spend and result stability both improve in the ordinary case, and neither is guaranteed in the adversarial one. `ARCHITECTURE.md`'s WEB-004 boundary line *"uploads … run after capture"* is superseded by this ADR and updated in the same change. The database decision keeps its **Open** status and now has a named consequence attached to it: the first thing a durable store buys Echo is exactly-once chunk processing. Reversing decision 1 or 5 — draining only after capture again, or removing the ledger — needs an ADR.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
 
-- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice.
+- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice. ADR-016 names the first thing it buys: a job ledger that outlives the process, and with it exactly-once chunk processing.
 - **Object/audio storage:** undecided. Large audio must not be stored in relational database rows; object/blob storage will likely be required. Constrained by ADR-010: prefer an S3-compatible interface so self-hosted deployments can satisfy it.
 - **Transcription provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `TranscriptionProvider`.
 - **LLM / notes-generation provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `NotesProvider`.

@@ -163,13 +163,14 @@ These are intentionally unresolved. An agent encountering one must not silently 
 
 | Decision | Current state |
 | --- | --- |
-| Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. |
+| Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. ADR-016 records the first concrete thing it would buy: a job ledger that survives a cold start. |
 | Object/audio storage provider | **Open.** Large audio must not be stored in relational database rows; object/blob storage will likely be required. |
 | Production authentication | **Open.** The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final architecture. |
 | Transcription vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `TranscriptionProvider`. |
 | LLM vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `NotesProvider`. |
 | Diarization vendor | **Open.** Kept behind a session-scoped `DiarizationProvider`; depends on object storage, so not required before WEB-005. |
 | Background job / worker infrastructure | **Open.** Introduce only when workload justifies it; ADR-010 requires the chosen mechanism to have a self-hostable implementation. |
+| Durable job ledger / exactly-once processing | **Open**, and blocked on the database row above. ADR-016 ships an in-process, best-effort ledger that closes the common retry window and explicitly does not claim exactly-once. |
 | Long-running processing infrastructure | **Open.** Same trigger conditions as above. |
 
 ### Changing a stack decision
@@ -293,4 +294,16 @@ Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and 
 
 ## WEB-004 durable queue boundaries
 
-The browser adapter stores Blob + metadata + processing state atomically, preserves existing identity, verifies recovered bytes and exposes ordered pending chunks and gaps. Capture hands off each complete container before session end. Uploads await persistence and run after capture, on reconnect or on recovery, serialized with Web Locks. Results and bounded retry timing survive reload; ambiguous network completion can repeat stateless provider work. No deletion exists: HTTP success cannot satisfy RET-002. The 64 MiB audio budget and 4 MiB warning reserve use Safari measurements in TASKS.md. Mobile suspension, eviction, offline shell navigation and origin changes are not durable-copy guarantees; see ADR-012.
+The browser adapter stores Blob + metadata + processing state atomically, preserves existing identity, verifies recovered bytes and exposes ordered pending chunks and gaps. Capture hands off each complete container before session end. Uploads await persistence and are serialized with Web Locks. **ADR-016 supersedes the original "after capture" restriction**: they now run during capture as well, on each durable commit — see the WEB-005 boundaries below. Results and bounded retry timing survive reload; ambiguous network completion can repeat stateless provider work. No deletion exists: HTTP success cannot satisfy RET-002. The 64 MiB audio budget and 4 MiB warning reserve use Safari measurements in TASKS.md. Mobile suspension, eviction, offline shell navigation and origin changes are not durable-copy guarantees; see ADR-012.
+
+## WEB-005 incremental upload boundaries
+
+Uploads run **during** capture (ADR-016). A container is offered to the queue when it completes, the drain starts on that durable commit rather than at session end, and the `echo-audio-queue-drain` Web Lock still admits one drainer per origin. The drain stays sequential, so at most one upload is in flight at a time and capture never waits on the network. A send failure no longer stops the entries behind it; the failed entry returns on its own bounded backoff, and the drain stops only when the browser is offline or the page is gone.
+
+Entry state is `pending`, `uploading`, `processed` or `blocked`, and it is persisted, not held in memory. `uploading` means *in flight, outcome unknown* — the state a page that died mid-upload must be recoverable as. Recovery returns a stale `uploading` entry to `pending`; whether the retry costs a provider call is then the server's decision, not the client's. Attempts are bounded, and exhausting them means `blocked` with a readable reason rather than an unbounded retry loop. An owner-initiated retry overrides backoff and `blocked`.
+
+`POST /api/recordings` consults a `JobLedger` port keyed by chunk identity, `sessionId/id/checksum`, over fields it already validates against the uploaded bytes. A key that has completed **replays** its stored result without calling a provider; a key already in flight **joins** that job instead of starting a second one; anything else proceeds as before. A replayed response is marked as replayed. Requests carrying no chunk metadata — the WEB-002 single-clip path — have no identity and are not ledgered.
+
+The only adapter is in-process: a bounded, expiring `Map`, no dependency and no platform service, so it behaves identically on Vercel and in the self-hosted container. **It is not exactly-once**, and nothing in the code or the interface may claim otherwise: a cold start, a redeploy, a second instance or an expiry all lose it, and the retry then costs a provider call. It holds results in memory for its TTL and never writes them to disk or to a log. A ledger entry is not a durable copy and cannot satisfy RET-002; no response, replayed or fresh, authorizes deleting raw audio.
+
+Stitching those per-chunk results into one session transcript is WEB-006 and is not done here.
