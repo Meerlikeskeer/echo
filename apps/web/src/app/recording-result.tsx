@@ -17,7 +17,9 @@ const RETENTION_TEXT: Readonly<Record<ProviderDisclosure["retention"], string>> 
 };
 
 export function DisclosureNotice({ disclosures }: { disclosures: readonly ProviderDisclosure[] }) {
-  const valid = Array.isArray(disclosures) ? disclosures.filter((entry) => entry &&
+  // Array.isArray widens a readonly array to any[], so the checked value is
+  // annotated back to its declared type before anything reads a field.
+  const valid: readonly ProviderDisclosure[] = Array.isArray(disclosures) ? disclosures.filter((entry) => entry &&
     (entry.port === "transcription" || entry.port === "notes") &&
     (entry.processor === "external" || entry.processor === "local") &&
     typeof entry.model === "string" && (entry.endpointHost === null || typeof entry.endpointHost === "string") &&
@@ -32,7 +34,7 @@ export function DisclosureNotice({ disclosures }: { disclosures: readonly Provid
         {external.length === 0 ? "No external processing" : "External processing"}
       </h2>
       <ul className="mt-2 space-y-1">
-        {disclosures.map((entry) => (
+        {valid.map((entry) => (
           <li key={entry.port}>
             {entry.port === "transcription" ? "Audio" : "Transcript"} → {entry.endpointHost ?? "this server"}
             {" · "}{entry.model}{" · "}{RETENTION_TEXT[entry.retention]}

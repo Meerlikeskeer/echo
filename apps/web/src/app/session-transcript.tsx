@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { stitchSession, type StitchedTranscript, type TranscriptEntry } from "../lib/recording/stitching";
 import type { Completion } from "../lib/recording/session-completion";
 
@@ -7,9 +8,13 @@ const clock = (ms: number) => {
 };
 
 export function SessionTranscript({ transcript }: { transcript: StitchedTranscript }) {
-  return <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8" aria-label="Session transcript">
+  // The heading names the section, so repeating it in an aria-label would only
+  // duplicate it. useId keeps the reference unique when several sessions render
+  // together; a session identifier could repeat or be invalid.
+  const headingId = useId();
+  return <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8" aria-labelledby={headingId}>
     <div className="flex items-center justify-between gap-4">
-      <h2 className="text-lg font-semibold text-slate-900">Session transcript</h2>
+      <h2 id={headingId} className="text-lg font-semibold text-slate-900">Session transcript</h2>
       <span className="text-sm text-slate-600">{transcript.status === "final" ? "Final" : "Partial"}</span>
     </div>
     <p className="mt-2 text-xs text-slate-500">Session {transcript.sessionId.slice(0, 8)} · Times are relative to session start.</p>
@@ -34,7 +39,9 @@ export function SessionTranscript({ transcript }: { transcript: StitchedTranscri
       </li>)}
     </ol>
     {!transcript.segments.length ? <p className="mt-4 text-sm text-slate-500">Waiting for a transcript. Saved audio remains available below.</p> : null}
-    <p className="mt-4 text-xs text-slate-500">Only verified overlapping segments are merged. Uncertain repetition is kept to preserve speech. Final means all expected transcripts are present, not a verified remote audio copy.</p>
+    {/* The badge above carries the status; this note explains what that word
+        means without reading as a second status of its own. */}
+    <p className="mt-4 text-xs text-slate-500">Only verified overlapping segments are merged. Uncertain repetition is kept to preserve speech. A session is final once every expected transcript is present, which is not a verified remote copy of the audio.</p>
   </section>;
 }
 

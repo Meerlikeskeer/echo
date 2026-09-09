@@ -65,7 +65,10 @@ export function stitchSession(input: { sessionId: string; chunks: readonly Trans
       output.sources.push({ chunkId: metadata.id, sequence: metadata.sequence, segmentIndex, originalText, startMs, endMs });
     };
     const validTexts: string[] = [];
-    transcript.segments.forEach((segment, segmentIndex) => {
+    // Array.isArray widens a readonly array to any[]; bind the checked value
+    // back to its declared type so each segment is still validated as data.
+    const segments: Transcript["segments"] = transcript.segments;
+    segments.forEach((segment, segmentIndex) => {
       if (!segment || typeof segment.text !== "string" || !Number.isFinite(segment.startMs) || !Number.isFinite(segment.endMs) ||
           segment.startMs < metadata.startMs || segment.endMs > metadata.endMs || segment.endMs < segment.startMs) {
         gap("invalid-input", metadata.sequence); return;
