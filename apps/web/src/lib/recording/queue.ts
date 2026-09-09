@@ -1,6 +1,7 @@
 import { checksum, isAudioChunk, validateChunkOrder, type PlayableChunk } from "./session";
 import type { RecordingResult } from "./pipeline";
 import { isCompletion, sameMetadata, type Completion } from "./session-completion";
+import { validateQuickNote } from "./quick-note";
 
 export const AUDIO_BUDGET = 64 * 1024 * 1024;
 // Safari's measured 204 kbps, plus overlap/headroom: over two minutes.
@@ -21,6 +22,8 @@ export interface QueueEntry extends PlayableChunk {
   nextAttemptAt: number;
   error?: string;
   result?: RecordingResult;
+  /** Browser wall-clock time when the processing response arrived. */
+  resultReceivedAt?: number;
 }
 export interface QueueStore {
   offer(chunk: PlayableChunk): Promise<void>;
@@ -45,7 +48,7 @@ export function recoverEntries(entries: readonly QueueEntry[]): QueueEntry[] {
 /** Processing updates never replace or remove raw audio, whatever the caller
  *  hands back — the stored Blob is the only copy that exists. */
 export function processingUpdate(previous: QueueEntry, entry: QueueEntry): QueueEntry {
-  return { ...previous, state: entry.state, attempts: entry.attempts, nextAttemptAt: entry.nextAttemptAt, error: entry.error, result: entry.result };
+  return { ...previous, state: entry.state, attempts: entry.attempts, nextAttemptAt: entry.nextAttemptAt, error: entry.error, result: entry.result, resultReceivedAt: entry.resultReceivedAt };
 }
 
 export interface QueueProgress {
@@ -181,7 +184,8 @@ export async function verifyChunk(chunk: PlayableChunk): Promise<void> {
 export function sameChunk(a: PlayableChunk, b: PlayableChunk): boolean {
   const x = a.metadata, y = b.metadata;
   return x.sessionId === y.sessionId && x.id === y.id && x.sequence === y.sequence && x.startMs === y.startMs &&
-    x.endMs === y.endMs && x.overlapMs === y.overlapMs && x.size === y.size && x.checksum === y.checksum && normalizeMime(x.mimeType) === normalizeMime(y.mimeType);
+    x.endMs === y.endMs && x.overlapMs === y.overlapMs && x.size === y.size && x.checksum === y.checksum && normalizeMime(x.mimeType) === normalizeMime(y.mimeType) &&
+    x.quickNote?.stoppedAt === y.quickNote?.stoppedAt && x.quickNote?.onlineAtStop === y.quickNote?.onlineAtStop;
 }
 export function orderEntries(entries: QueueEntry[]): QueueEntry[] {
   return entries.sort((a, b) => a.metadata.sessionId.localeCompare(b.metadata.sessionId) || a.metadata.sequence - b.metadata.sequence);
@@ -357,7 +361,7 @@ export async function drainQueue(store: QueueStore, send: (chunk: PlayableChunk)
       continue;
     }
     // A response is a processing result, NEVER evidence for deleting a Blob.
-    await store.update({ ...attempt, state: "processed", result, error: undefined, nextAttemptAt: 0 });
+    await store.update({ ...attempt, state: "processed", result, resultReceivedAt: options.now(), error: undefined, nextAttemptAt: 0 });
   }
 }
 export async function sendChunk(chunk: PlayableChunk): Promise<RecordingResult> {
@@ -375,6 +379,7 @@ export async function sendChunk(chunk: PlayableChunk): Promise<RecordingResult> 
   }
   const result = await response.json() as RecordingResult;
   if (!result?.transcript || !result.notes || !Array.isArray(result.disclosures)) throw new UploadFailure(true);
+  if (chunk.metadata.quickNote && !validateQuickNote(result.quickNote)) throw new UploadFailure(false);
   return result;
 }
 export async function capacity(entries: readonly PlayableChunk[]) {

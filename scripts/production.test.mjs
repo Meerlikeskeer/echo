@@ -20,6 +20,52 @@ const BLANK_PROVIDERS = {
 };
 const FIXTURE_PROVIDERS = { ...BLANK_PROVIDERS, TRANSCRIPTION_PROVIDER: "fixture", TRANSCRIPTION_MODEL: "fixture-transcribe", LLM_PROVIDER: "fixture", LLM_MODEL: "fixture-notes" };
 
+test("Quick Note uploads classify into pending suggestions and cannot replay ordinary notes", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    const metadata = { sessionId: "quick-session", id: "quick-clip", sequence: 0, startMs: 0, endMs: 8000, overlapMs: 0, mimeType: "audio/webm;codecs=opus", size: 2048, checksum: createHash("sha256").update(new Uint8Array(2048)).digest("hex") };
+    const post = (chunk) => {
+      const body = syntheticClip();
+      body.set("durationMs", String(chunk.endMs - chunk.startMs));
+      body.append("chunk", JSON.stringify(chunk));
+      return fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body });
+    };
+    const ordinary = await post(metadata);
+    assert.equal(ordinary.status, 200);
+    assert.equal((await ordinary.json()).quickNote, undefined);
+    const quick = { ...metadata, quickNote: { stoppedAt: 1788973200000, onlineAtStop: true } };
+    const response = await post(quick);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-echo-replayed"), "false");
+    const result = await response.json();
+    assert.deepEqual(result.quickNote, { items: [{ kind: "task", text: "Review the generated notes.", dateText: null }] });
+    assert.deepEqual(result.chunk.quickNote, quick.quickNote);
+    assert.ok(result.transcript.text.length);
+    assert.ok(result.notes.title.length);
+    assert.equal(result.disclosures.length, 2);
+    const replay = await post(quick);
+    assert.equal(replay.status, 200);
+    assert.equal(replay.headers.get("x-echo-replayed"), "true");
+    assert.deepEqual((await replay.json()).quickNote, result.quickNote);
+  });
+});
+
+test("Quick Note uploads reject invalid context and multi-chunk captures", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    const metadata = { sessionId: "invalid-quick", id: "clip", sequence: 0, startMs: 0, endMs: 8000, overlapMs: 0, mimeType: "audio/webm;codecs=opus", size: 2048, checksum: createHash("sha256").update(new Uint8Array(2048)).digest("hex"), quickNote: { stoppedAt: 1788973200000, onlineAtStop: false } };
+    for (const chunk of [
+      { ...metadata, quickNote: { stoppedAt: -1, onlineAtStop: true } },
+      { ...metadata, quickNote: { stoppedAt: 1788973200000, onlineAtStop: "true" } },
+      { ...metadata, sequence: 1 },
+      { ...metadata, endMs: 60001 },
+    ]) {
+      const body = syntheticClip(); body.set("durationMs", String(chunk.endMs - chunk.startMs)); body.append("chunk", JSON.stringify(chunk));
+      const response = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, "bad_request");
+    }
+  });
+});
+
 test("chunk uploads validate checksum and normalize transcription into session time", { timeout: 30000 }, async () => {
   await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
     const metadata = { sessionId: "synthetic-session", id: "synthetic-chunk", sequence: 1, startMs: 29000, endMs: 70000, overlapMs: 1000, mimeType: "audio/webm;codecs=opus", size: 2048, checksum: createHash("sha256").update(new Uint8Array(2048)).digest("hex") };

@@ -11,6 +11,7 @@ import { SessionTranscripts } from "./session-transcript";
 import { useAudioQueue } from "./use-audio-queue";
 import { chunkKey, incompleteSessions, storageFailure, summarizeQueue } from "../lib/recording/queue";
 import { reportFailure } from "../lib/recording/log";
+import { QuickNotes } from "./quick-notes";
 
 const TARGET_MIN_MS = 30_000;
 const MAX_MS = 60_000;
@@ -48,13 +49,16 @@ function clock(ms: number): string {
 
 export function Recorder({ status }: { status: ProviderStatus }) {
   const [phase, setPhase] = useState<Phase>("idle");
+  const [mode, setMode] = useState<"session" | "quick-note">("session");
   const [recorder, setRecorder] = useState<ReturnType<typeof captureSession> | null>(null);
   const [overlapMs, setOverlapMs] = useState(1000);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
   const queue = useAudioQueue(status.ready);
   const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
-  const outcomes = queue.entries.filter((entry) => entry.result);
+  const outcomes = queue.entries.filter((entry) => entry.result && !entry.metadata.quickNote);
+  const sessionEntries = queue.entries.filter(entry => !entry.metadata.quickNote);
+  const sessionCompletions = queue.completions.filter(completion => !completion.chunks.some(chunk => chunk.quickNote));
   const gaps = incompleteSessions(queue.entries);
   const progress = summarizeQueue(queue.entries);
   const generation = useRef(0);
@@ -117,7 +121,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     let active: ReturnType<typeof captureSession>;
     try {
-      active = captureSession(stream, { chunkMs: 30_000, overlapMs }, undefined, queue.persist);
+      active = captureSession(stream, mode === "quick-note" ? { chunkMs: 30_000, overlapMs: 0, quickNote: true } : { chunkMs: 30_000, overlapMs }, undefined, queue.persist);
     } catch (cause) {
       reportFailure("starting the audio recorder", cause);
       stream.getTracks().forEach((track) => track.stop());
@@ -164,7 +168,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           {status.problems.map((problem) => <li key={problem}>{problem}</li>)}
         </ul>
         {queue.error ? <p role="alert">{queue.error}</p> : null}
-        <SessionTranscripts entries={queue.entries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={queue.completions} />
+        <QuickNotes entries={queue.entries} online={queue.online} />
+        <SessionTranscripts entries={sessionEntries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={sessionCompletions} />
         {chunks.length ? <div className="mt-5 space-y-4"><p>Saved audio remains available while processing is unconfigured. No clips are deleted.</p>
           {chunks.map((chunk) => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some((entry) => chunkKey(entry) === chunkKey(chunk))} disabled={false} onSave={() => { void queue.persist(chunk).catch(() => {}); }} />)}
         </div> : null}
@@ -177,6 +182,11 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     <div>
       <section aria-labelledby="record-title" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 id="record-title" className="sr-only">Recorder</h2>
+        <label className="text-sm text-slate-600">Recording mode
+          <select className="ml-3 rounded border p-1" value={mode} disabled={busy || phase === "recording"} onChange={event => setMode(event.target.value as "session" | "quick-note")}>
+            <option value="session">Session</option><option value="quick-note">Quick Note</option>
+          </select>
+        </label>
         <div className="flex flex-col items-center gap-5 py-4">
           {phase === "recording" ? (
             <button type="button" onClick={stop} className="flex h-28 w-28 items-center justify-center rounded-full bg-rose-600 text-lg font-semibold text-white shadow-lg transition hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-rose-700">
@@ -196,7 +206,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             ) : phase === "starting" ? (
               "Waiting for microphone permission…"
             ) : (
-              "Record 30–60 seconds. Recording stops at one minute; play or transcribe each chunk below."
+              mode === "quick-note" ? "Capture a task, reminder, note or idea. Stop when ready; Quick Note stops at 30 seconds and classifies into pending suggestions." : "Record 30–60 seconds. Recording stops at one minute; play or transcribe each chunk below."
             )}
           </p>
         </div>
@@ -211,14 +221,15 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           use. Overlap is a requirement here, not a preference. Evidence is in
           the WEB-003 browser evidence section of TASKS.md.
         */}
-        <label className="text-sm text-slate-600">Chunk overlap
+        {mode === "session" ? <><label className="text-sm text-slate-600">Chunk overlap
           <select className="ml-3 rounded border p-1" value={overlapMs} disabled={busy || phase === "recording"} onChange={(event) => setOverlapMs(Number(event.target.value))}>
             <option value={1000}>1 second</option><option value={2000}>2 seconds</option>
           </select>
         </label>
-        <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible.</p>
+        <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible.</p></> : <p className="mt-2 text-xs text-slate-500">One short clip, saved locally. Offline captures wait for this page to reconnect. Dates and suggestions need your review.</p>}
       </section>
 
+      <QuickNotes entries={queue.entries} online={queue.online} />
       <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
         <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>
         {/* Chunks upload while recording continues (ADR-016), so this has to be
@@ -251,7 +262,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         </div>
       ) : null}
 
-      <SessionTranscripts entries={queue.entries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={queue.completions} />
+      <SessionTranscripts entries={sessionEntries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={sessionCompletions} />
       {outcomes.map((entry) => <div key={chunkKey(entry)}><p className="mt-6 text-sm">Session {entry.metadata.sessionId.slice(0, 8)} · chunk {entry.metadata.sequence + 1} · Per-chunk notes and original transcript</p><RecordingOutcome result={entry.result!} /></div>)}
       <div className="mt-6"><DisclosureNotice disclosures={status.disclosures} /></div>
     </div>

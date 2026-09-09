@@ -4,6 +4,8 @@
 // their wire format into these types and never leak `verbose_json`, `choices`,
 // or any other vendor structure into domain code or a function signature.
 
+import type { QuickNote } from "../recording/quick-note";
+
 export type ProviderPort = "transcription" | "notes";
 export type AdapterId = "openai-compatible" | "fixture";
 
@@ -105,6 +107,7 @@ export interface TranscriptionProvider {
 }
 
 export interface NotesProvider {
+  classifyQuickNote(transcript: Transcript, options?: { readonly signal?: AbortSignal }): Promise<QuickNote>;
   readonly disclosure: ProviderDisclosure;
   readonly capabilities: NotesCapabilities;
   generateNotes(transcript: Transcript, options?: { readonly signal?: AbortSignal }): Promise<GeneratedNotes>;

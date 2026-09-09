@@ -32,6 +32,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; stopping: boolean; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout>; ready?: Promise<PlayableChunk> }[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let stopped = false;
+  let quickNoteStop: { stoppedAt: number; onlineAtStop: boolean } | undefined;
   let failed = false;
   let completion: Promise<{ session: Session; chunks: PlayableChunk[] }> | undefined;
   let finishedResolve!: (result: { session: Session; chunks: PlayableChunk[] }) => void;
@@ -83,6 +84,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
           sessionId: session.id, id: entry.id, sequence, startMs: entry.startMs, endMs: entry.endMs,
           overlapMs: sequence ? Math.max(0, entries[sequence - 1].endMs - entry.startMs) : 0,
           mimeType: audio.type, size: audio.size, checksum: await checksum(audio),
+          ...(options.quickNote && quickNoteStop ? { quickNote: quickNoteStop } : {}),
         } };
         try { await onChunk?.(chunk); }
         catch { failed = true; void stop(); }
@@ -91,6 +93,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
       // Stop on checksum failure too; the rejection is handled immediately.
       void entry.ready.catch(() => { failed = true; void stop(); });
       schedule(() => {
+        if (options.quickNote) { void stop(); return; }
         // Start the next complete container before stopping the previous one.
         begin();
         if (options.overlapMs === 0) stopEntry(entry);
@@ -100,6 +103,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   }
   function stop() {
     if (completion) return completion;
+    if (options.quickNote) quickNoteStop = { stoppedAt: Date.now(), onlineAtStop: globalThis.navigator?.onLine !== false };
     stopped = true;
     timers.forEach(io.cancel);
     entries.forEach(stopEntry);
