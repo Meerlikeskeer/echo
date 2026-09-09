@@ -79,9 +79,18 @@ npx vercel                     # deploy; note the URL it prints
 npm run test:deployed -- <the URL it printed>
 ```
 
+**Deploy current `main`, and know what is new since the last verified
+deployment.** Three user-visible features have landed: the session transcript
+with overlap stitching and visible gaps (WEB-006), the rewritten recorder error
+reporting (WEB-015), and session artifacts with their own endpoint (WEB-007).
+**No new environment variables are needed** — artifacts reuse the existing
+`LLM_*` group. `POST /api/sessions/artifacts` is a new production access
+surface, and ENG-021 added it to this check, so exit 0 now means **both**
+endpoints were verified on the platform rather than only the recording one.
+
 **Expect exit 0.** The script checks the gate, refusal of wrong credentials,
 every linked compiled asset refused without credentials, `/diagnostics/*` absent,
-the Route Handlers' own guards, and that no password or `NEXT_PUBLIC_` value
+both Route Handlers' own guards, and that no password or `NEXT_PUBLIC_` value
 appears in anything served.
 
 Two things to watch. **Merged is not deployed** — a push deploys nothing

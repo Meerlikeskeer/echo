@@ -150,6 +150,24 @@ assert.ok([400, 503].includes(emptyPost.status), `POST /api/recordings answered 
 const emptyBody = await emptyPost.text();
 assert.doesNotMatch(emptyBody, leaked, "an error response leaked the owner password");
 
+// ENG-021. WEB-007 added a second Route Handler and this check did not follow
+// it, so a new production access surface went live unverified. The local
+// production suite covers it; that runs on loopback and cannot see what a
+// hosting platform does in front of the origin, which is the entire reason this
+// script exists. **Every Route Handler belongs here, and a new one is not
+// deployed until it is.**
+const artifacts = new URL("/api/sessions/artifacts", base);
+const anonymousArtifacts = await fetch(artifacts, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+assert.equal(anonymousArtifacts.status, 401, "POST /api/sessions/artifacts must refuse an anonymous request");
+const emptyArtifacts = await fetch(artifacts, { method: "POST", headers: { ...owner, "content-type": "application/json" }, body: "{}" });
+assert.notEqual(emptyArtifacts.status, 200, "POST /api/sessions/artifacts accepted a body that is not a session transcript");
+assert.ok(
+  [400, 503].includes(emptyArtifacts.status),
+  `POST /api/sessions/artifacts answered ${emptyArtifacts.status} to an empty object; expected 400 (rejected) or 503 (providers unconfigured)`,
+);
+const artifactsBody = await emptyArtifacts.text();
+assert.doesNotMatch(artifactsBody, leaked, "an error response leaked the owner password");
+
 // 8. Report provider configuration without reading or printing any value.
 const providersReady = !/Recording is unavailable/.test(html);
 notes.push(providersReady
@@ -163,5 +181,5 @@ if (base.protocol === "https:" && !page.headers.get("strict-transport-security")
 }
 if (loopback) notes.push("checked over loopback, not a real certificate: this does not verify the deployed transport");
 
-console.log(`deployed-smoke: OK — ${base.origin} challenges anonymous requests, refuses wrong credentials, serves the page and ${assets.length} compiled assets to the owner only, hides diagnostics, and guards the recording endpoint.`);
+console.log(`deployed-smoke: OK — ${base.origin} challenges anonymous requests, refuses wrong credentials, serves the page and ${assets.length} compiled assets to the owner only, hides diagnostics, and guards both Route Handlers.`);
 for (const note of notes) console.log(`deployed-smoke: note — ${note}`);
