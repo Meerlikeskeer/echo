@@ -27,7 +27,7 @@ Short summary for convenience. **The `Technology Stack` section of [ARCHITECTURE
 | Application | Next.js (App Router), React, TypeScript |
 | Styling and UI | Tailwind CSS; shadcn/ui as the base component system, Lucide for icons *(both approved, not yet installed)* |
 | Backend | Next.js Route Handlers and server-side modules; no separate backend service |
-| Hosting | Vercel *(approved, not yet provisioned)* |
+| Hosting | Vercel *(approved, provisioned and deployed; verified over HTTPS 2026-09-08)* |
 | Tooling | npm workspaces, Node 22.23.2, committed `package-lock.json` |
 | Testing/CI | ESLint, `tsc`, Node's built-in test runner via `tsx`, `next build`, production HTTP tests, Python `unittest` for the agent controller, GitHub Actions |
 | Providers | Transcription and LLM behind small server-side ports using the OpenAI-compatible wire format (ADR-009); adapters `openai-compatible` and `fixture`. Groq is a **temporary** prototype default; the permanent vendor is undecided |
@@ -105,7 +105,7 @@ GitHub Actions runs `npm ci` and `npm run check` on pull requests and pushes to 
 
 ## Deployment
 
-Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified as artifacts, and **neither is provisioned** — nothing is deployed. `scripts/deployed-smoke.mjs` verifies whichever one you deploy, over its real origin.
+Echo has two supported deployment shapes. Vercel is the primary target; a container is the portable one. Both are verified as artifacts. **The Vercel target is deployed and verified over HTTPS**; the container is built and smoke-checked in CI but has never been deployed anywhere. `scripts/deployed-smoke.mjs` verifies whichever one you deploy, over its real origin.
 
 ### Vercel (primary target)
 
@@ -116,20 +116,23 @@ feature branch → GitHub → Vercel preview deployment
   → manual + automated verification → merge → production deployment
 ```
 
-**Nothing is deployed today.** No Vercel project or environment variables have been created. `vercel.json` and the runbook below are what ENG-010 added so that provisioning is a short, repeatable procedure rather than a remembered click-path; running it is the owner's step, because it needs the owner's account and the owner's secrets.
+**Echo is deployed and the deployed check passes** (2026-09-08). The Vercel project exists and the owner has set all ten environment variables for Production and Preview, so the runbook below is now a record of how it was done and how to do it again — for a fresh environment, a second project, or a recovery — rather than a pending step. Running it still needs the owner's account and the owner's secrets. Two things the passing run did **not** settle: it tested a deployment-specific URL rather than a project alias, and with Vercel Deployment Protection off, Echo's own fail-closed gate is the only thing in front of the origin.
 
 `vercel.json` at the repository root defines the build in version control:
 
 ```json
-{ "framework": "nextjs", "installCommand": "npm ci", "buildCommand": "npm run build", "outputDirectory": "apps/web/.next" }
+{ "framework": "nextjs", "installCommand": "npm ci --include=dev",
+  "buildCommand": "npm run build", "git": { "deploymentEnabled": false } }
 ```
 
-Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
+`--include=dev` is not optional and the first production deployment failed without it. Vercel sets `NODE_ENV=production` for the install step, and npm reads that as `--omit=dev`, so a plain `npm ci` installs 26 packages instead of 373. Everything `next build` needs to compile — `typescript`, `tailwindcss`, `@tailwindcss/postcss`, the `@types/*` packages — is a devDependency, correctly so: they are build-time tools, not runtime dependencies. The build then dies resolving `@tailwindcss/postcss` from `globals.css`, and Vercel reports only `Command "npm run build" exited with 1`. Reproduce it locally with `NODE_ENV=production npm ci && npm run build`; the same commands with `--include=dev` succeed.
+
+Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** — answer `./` when the CLI asks where your code is located — and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
 
 #### Provisioning runbook
 
 1. **Generate an owner password.** `openssl rand -hex 24` gives 48 characters; the gate refuses anything under 32. Keep it in a password manager. It is never committed and never printed by any script here.
-2. **Create the project.** `npx vercel@latest login`, then `npx vercel link` from the repository root. This is interactive and cannot be done by an agent.
+2. **Create the project.** `npx vercel@latest login`, then `npx vercel link` from the repository root. This is interactive and cannot be done by an agent. When it asks **"In which directory is your code located?"** answer `./` — the repository root, for the workspace reason above. Do not run `npx vercel git connect`; see *Deployments are explicit* below.
 3. **Set the environment variables, server-side, for every environment you will use** (Production, Preview, Development):
    - `ECHO_OWNER_USERNAME` — any name without a colon.
    - `ECHO_OWNER_PASSWORD` — the value from step 1.
@@ -139,7 +142,7 @@ Echo is an npm workspace whose application lives in `apps/web` while `package-lo
    Set them as plain (encrypted, server-side) environment variables. **Never prefix any of them with `NEXT_PUBLIC_`** — that would place the value in the browser bundle. Echo has no `NEXT_PUBLIC_*` variables and `scripts/deployed-smoke.mjs` fails if one appears in the served page.
 
    Until the provider group is complete Echo still deploys and still gates correctly; it disables recording and names the missing variables, by design.
-4. **Deploy a preview first.** `npx vercel` builds a preview URL. Do not deploy to production before step 5 passes against that preview.
+4. **Deploy a preview first.** `npx vercel` builds a preview URL. Nothing deploys on its own (ADR-014), so this command is the only thing that produces one. Do not deploy to production before step 5 passes against that preview.
 5. **Verify the deployed origin.** From the repository root, with the same credentials you configured:
 
    ```sh
@@ -150,6 +153,14 @@ Echo is an npm workspace whose application lives in `apps/web` while `package-lo
    It exits non-zero on the first failure and prints what failed. It reads credentials from the environment, never prints them, and refuses to accept them inside the URL.
 6. **Promote to production** — `npx vercel --prod` — and run step 5 again against the production URL. A preview passing does not verify production: they carry different environment variables.
 
+#### Deployments are explicit (ADR-014)
+
+`vercel.json` sets `"git": { "deploymentEnabled": false }`. A push to any branch builds nothing on Vercel, and a connected repository stays connected without spending the plan's build allowance on ordinary version-control activity — several pushes an hour across parallel task branches would otherwise exhaust it, and the deployed origin would disappear for reasons unrelated to the code.
+
+Deploying is therefore always a command you run: `npx vercel` for a preview, `npx vercel --prod` for production. **`main` moving does not change what is live**, so *merged* and *deployed* are separate states — check which commit is deployed before concluding anything from a deployed origin.
+
+CI is unaffected: `.github/workflows/pull-request.yml` still runs `npm run check` and the container job on every push. Verification did not weaken; only the automatic builds went away. Turning this back on is a reversal of ADR-014 and needs its own ADR.
+
 #### What the deployed check proves that the local suites cannot
 
 `npm run check` exercises the application against `next start` on loopback, and `scripts/container-smoke.mjs` exercises the self-hosted image. Neither can see what a hosting platform puts *in front of* the application.
@@ -158,7 +169,7 @@ Echo is an npm workspace whose application lives in `apps/web` while `package-lo
 
 It also confirms the things only a real origin can confirm: HTTPS (Basic credentials travel in every request, and `crypto.subtle` — which checksums every recorded chunk — is undefined without a secure context), that wrong credentials are refused rather than merely absent ones, that `/diagnostics/*` does not exist in production even for the owner, that `POST /api/recordings` guards itself independently of the proxy, and that neither the page nor any compiled asset contains the owner password.
 
-**This script has not yet been run against a hosted deployment**, because none exists. It has been run against a local production server, which exercises every check except the transport itself, and it has been deliberately broken to confirm it fails: with a proxy serving `/_next/static` without credentials in front of that server — the CDN case above — it fails on the first asset rather than passing.
+**This script has not yet been run against a hosted deployment**, though one now exists as of 2026-09-08 — running it against the production URL is the outstanding step. It has been run against a local production server, which exercises every check except the transport itself, and it has been deliberately broken to confirm it fails: with a proxy serving `/_next/static` without credentials in front of that server — the CDN case above — it fails on the first asset rather than passing.
 
 #### After the first successful deployment
 

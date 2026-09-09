@@ -8,7 +8,7 @@ import type { PlayableChunk } from "../lib/recording/session";
 import { describeSecureContextProblem, readEnvironment } from "../lib/recording/secure-context";
 
 import { useAudioQueue } from "./use-audio-queue";
-import { chunkKey, incompleteSessions, storageFailure } from "../lib/recording/queue";
+import { chunkKey, incompleteSessions, storageFailure, summarizeQueue } from "../lib/recording/queue";
 
 const TARGET_MIN_MS = 30_000;
 const MAX_MS = 60_000;
@@ -50,10 +50,11 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const [overlapMs, setOverlapMs] = useState(1000);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const queue = useAudioQueue(phase === "recording" || phase === "starting", status.ready);
+  const queue = useAudioQueue(status.ready);
   const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
   const outcomes = queue.entries.filter((entry) => entry.result);
   const gaps = incompleteSessions(queue.entries);
+  const progress = summarizeQueue(queue.entries);
   const generation = useRef(0);
   useEffect(() => () => { generation.current++; }, []);
 
@@ -207,6 +208,10 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
       <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
         <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>
+        {/* Chunks upload while recording continues (ADR-016), so this has to be
+            readable mid-session: which chunks are done, which are moving, and
+            which have stopped. Per chunk only — WEB-006 stitches them. */}
+        <p>Chunk processing: {progress.transcribed} transcribed · {progress.uploading} uploading · {progress.waiting} waiting · {progress.retrying} retrying · {progress.blocked} blocked</p>
         <p>All clips are local-only: no verified remote audio copy exists. Processing does not remove audio.</p>
         <p>{queue.space?.persistent ? "Browser persistence granted." : "Browser storage may be evicted."} Keep this tab open while recording. Backgrounding or closing can lose the unfinished chunk and pauses retries.</p>
         {queue.space?.nearFull ? <p role="alert">Storage nearly full. Export clips; new recording is paused. Echo will not delete audio to free space.</p> : null}
@@ -214,7 +219,10 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         {queue.error ? <p role="alert">{queue.error}</p> : null}
         {gaps.length ? <p role="alert">Missing or inconsistent chunks in {gaps.length} sessions. Available clips remain recoverable; continuity is not verified.</p> : null}
         {queue.entries.some((entry) => entry.error) ? <p role="alert">Some processing attempts failed. Audio is retained; retry after reconnecting or checking server access.</p> : null}
-        <button type="button" className="rounded border px-3 py-1 disabled:opacity-50" disabled={busy || phase === "recording" || !queue.online} onClick={() => { void queue.sync(true); }}>Retry pending processing</button>
+        {progress.blocked ? <p role="alert">{progress.blocked} clips stopped retrying. The audio is retained; retry below once the cause is fixed.</p> : null}
+        {/* Enabled during capture: uploads run alongside recording now, and this
+            drain never blocks the microphone. */}
+        <button type="button" className="rounded border px-3 py-1 disabled:opacity-50" disabled={busy || !queue.online} onClick={() => { void queue.sync(true); }}>Retry pending processing</button>
       </section>
 
       {chunks.length ? <section className="mt-6 space-y-4" aria-label="Session chunks">

@@ -10,7 +10,7 @@ Do not maintain a separate Claude-specific product plan. Repository documentatio
 - Approved: Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, Lucide icons, Vercel hosting, and backend logic inside Next.js Route Handlers and server-side modules.
 - Intentionally undecided: relational database, object/audio storage, the **permanent** transcription and LLM vendors, diarization, background/worker infrastructure, and production authentication. Do not pick one silently. ADR-009 selects a Temporary prototype default behind the provider ports; ADR-010 requires Echo to stay deployable outside Vercel.
 - Provider credentials stay server-side. Never use `NEXT_PUBLIC_*` for secrets.
-- Current state and next task: see [STATUS.md](STATUS.md). Fill in its *In flight* section **before** starting work and keep it current as you go, so an interrupted session is still recoverable; update the rest of it in the same commit as any change to task status, the verification snapshot, or an accepted ADR.
+- Current state and next task: see [STATUS.md](STATUS.md), and `status/in-flight/` for what is being worked on right now. Create `status/in-flight/<TASK-ID>.md` **before** starting work and keep it current as you go, so an interrupted session is still recoverable; delete it in the pull request that finishes the task, after moving anything durable somewhere permanent (**ADR-015**). Task status lives in `TASKS.md` and generates `STATUS.md`'s table via `npm run status:table` — never edit that table by hand.
 
 ## Version control
 
@@ -18,7 +18,7 @@ Read `AGENTS.md` → *Version control discipline* before branching or committing
 
 ## Verification
 
-Run `npm ci` then `npm run check` from the repository root, and `python3 -m unittest discover -s tests` for the bounded controller. Report exactly what ran. Do not weaken existing checks or claim passing tests that did not execute. The `STATUS.md` snapshot holds the current exit codes and test counts; a count going down is a regression, not a cleanup.
+Run `npm ci` then `npm run check` from the repository root, and `python3 -m unittest discover -s tests` for the bounded controller. Report exactly what ran. Do not weaken existing checks or claim passing tests that did not execute. `STATUS.md` § *Verification floor* holds the counts every change must still meet; a count going down is a regression, not a cleanup. **`npm run check` cannot pass inside a git worktree** until ENG-012's `next-config.test.ts` stops asserting the checkout is named `echo` — run it from `~/Documents/GitHub/echo` for a true result.
 
 ## Bounded loop
 

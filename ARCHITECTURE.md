@@ -30,13 +30,13 @@ shadcn/ui is the approved base component system and enters the repository when a
 
 | Technology | Responsibility | Status |
 | --- | --- | --- |
-| Vercel | Primary web hosting and deployment target | Approved (ADR-008); **not yet provisioned** |
-| Next.js standalone output + container | Portable self-hosted deployment | Approved (ADR-010); verified by ENG-002, **not yet provisioned** |
-| `vercel.json` + `scripts/deployed-smoke.mjs` | Reproducible build configuration and verification of a live origin | Added by ENG-010; **never yet run against a deployment** |
+| Vercel | Primary web hosting and deployment target | Approved (ADR-008); **provisioned, deployed and verified over HTTPS** (2026-09-08) |
+| Next.js standalone output + container | Portable self-hosted deployment | Approved (ADR-010); verified by ENG-002 and built in CI, but **never deployed anywhere** — no registry, no host, no TLS |
+| `vercel.json` + `scripts/deployed-smoke.mjs` | Reproducible build configuration and verification of a live origin | Added by ENG-010; **has run against the live deployment and passed** (DOC-004, 2026-09-08) |
 
 The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments.
 
-**Vercel is a deployment target, not Echo's runtime (ADR-010).** REQ-009 makes self-hosted deployment an architectural baseline, so Echo must also run as a container using the Next.js standalone server. Application code targets portable primitives; introducing a platform-specific service — managed blob storage, queue, workflow, cron, KV or edge-config binding — requires an ADR stating how self-hosted deployments satisfy the same need. GPU-backed inference is always reached as a configured HTTP endpoint, never co-located with the web application. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured, and hosted use still requires provisioned owner credentials and HTTPS (ADR-007).
+**Vercel is a deployment target, not Echo's runtime (ADR-010).** REQ-009 makes self-hosted deployment an architectural baseline, so Echo must also run as a container using the Next.js standalone server. Application code targets portable primitives; introducing a platform-specific service — managed blob storage, queue, workflow, cron, KV or edge-config binding — requires an ADR stating how self-hosted deployments satisfy the same need. GPU-backed inference is always reached as a configured HTTP endpoint, never co-located with the web application. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. **Echo is deployed.** The Vercel project exists, the owner has set all ten environment variables for Production and Preview, and `npm run test:deployed` passes against the live origin over its real certificate — including the check this was built for, that Vercel's edge does not serve `/_next/static` ahead of Echo's gate. Two limits on how far that generalises: the URL tested was deployment-specific rather than a project alias, so an alias should be re-checked rather than assumed; and with Vercel Deployment Protection off, **Echo's own fail-closed gate is the only thing in front of the origin**, which makes `apps/web/src/proxy.ts` load-bearing in production — adding a path exclusion there is a production access change. Deploying is still an explicit owner-run command, never a push (ADR-014).
 
 #### ENG-002 self-host parity boundaries
 
@@ -63,11 +63,13 @@ ENG-010 makes deploying Echo reproducible and verifiable. It provisions nothing:
 
 | Piece | Responsibility |
 | --- | --- |
-| `vercel.json` | The build, in version control: `framework`, `installCommand`, `buildCommand`, `outputDirectory`. Echo is an npm workspace with a root lockfile and hoisted dependencies, so the Vercel Root Directory stays at the repository root and these commands make the hosted install match `npm ci` locally. A dashboard-only arrangement would be invisible to Git and unreviewable. |
+| `vercel.json` | The build, in version control: `framework`, `installCommand`, `buildCommand`, and `git.deploymentEnabled: false` so a push never triggers a build (ADR-014). No `outputDirectory`: the Next.js builder locates its own output, and naming one competed with it (ENG-012). Echo is an npm workspace with a root lockfile and hoisted dependencies, so the Vercel Root Directory stays at the repository root and these commands make the hosted install match `npm ci` locally. A dashboard-only arrangement would be invisible to Git and unreviewable. |
 | `scripts/deployed-smoke.mjs` | Verifies a live origin: HTTPS, the gate, wrong-credential refusal, every linked compiled asset refused without credentials, unknown paths private, `/diagnostics/*` absent in production, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Reads credentials from the environment and never prints them. |
 | `npm run test:deployed` | Runs it. Deliberately **not** part of `npm run check`: it needs a live URL and real credentials, so a CI gate cannot run it and must not appear to. |
 
 **The failure mode this exists to catch.** `apps/web/src/proxy.ts` excludes nothing, and `scripts/production.test.mjs` proves the gate covers page, RSC, API, static and unknown paths against a Node server. A hosting platform commonly serves `/_next/static` from a CDN edge that answers *before* the application runs. If it does, compiled assets become public on the deployed origin while every local check stays green — the same shape as the ENG-002 static-asset failure, one layer further out. The deployed check fetches each linked asset without credentials and fails if any is served.
+
+**`output: "standalone"` is conditional, and that is a deployment boundary rather than a detail.** ADR-010 needs standalone output for the container; Vercel needs it absent. The platform injects its own `modifyConfig` and an `onBuildComplete` hook that reads `.next/next-server.js.nft.json`, and with standalone on that file is not where the hook looks — the build fails with `ENOENT` *after* compiling, type-checking and generating pages successfully, so it reads as a code error and is not one. `apps/web/next.config.ts` therefore sets `output` from `process.env.VERCEL`, and `apps/web/tests/next-config.test.ts` asserts both branches. Vercel performs its own output tracing, so the container loses nothing and neither does Vercel.
 
 **Host-agnostic by construction (ADR-010).** The script takes a base URL and asserts only on HTTP behavior, so it verifies the container behind the owner's own reverse proxy exactly as it verifies Vercel. Nothing platform-specific enters application code: `vercel.json` is build configuration, not a queue, blob store, cron or KV binding, and adopting one of those still requires its own ADR.
 
@@ -161,13 +163,14 @@ These are intentionally unresolved. An agent encountering one must not silently 
 
 | Decision | Current state |
 | --- | --- |
-| Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. |
+| Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. ADR-016 records the first concrete thing it would buy: a job ledger that survives a cold start. |
 | Object/audio storage provider | **Open.** Large audio must not be stored in relational database rows; object/blob storage will likely be required. |
 | Production authentication | **Open.** The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final architecture. |
 | Transcription vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `TranscriptionProvider`. |
 | LLM vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `NotesProvider`. |
 | Diarization vendor | **Open.** Kept behind a session-scoped `DiarizationProvider`; depends on object storage, so not required before WEB-005. |
 | Background job / worker infrastructure | **Open.** Introduce only when workload justifies it; ADR-010 requires the chosen mechanism to have a self-hostable implementation. |
+| Durable job ledger / exactly-once processing | **Open**, and blocked on the database row above. ADR-016 ships an in-process, best-effort ledger that closes the common retry window and explicitly does not claim exactly-once. |
 | Long-running processing infrastructure | **Open.** Same trigger conditions as above. |
 
 ### Changing a stack decision
@@ -291,4 +294,16 @@ Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and 
 
 ## WEB-004 durable queue boundaries
 
-The browser adapter stores Blob + metadata + processing state atomically, preserves existing identity, verifies recovered bytes and exposes ordered pending chunks and gaps. Capture hands off each complete container before session end. Uploads await persistence and run after capture, on reconnect or on recovery, serialized with Web Locks. Results and bounded retry timing survive reload; ambiguous network completion can repeat stateless provider work. No deletion exists: HTTP success cannot satisfy RET-002. The 64 MiB audio budget and 4 MiB warning reserve use Safari measurements in TASKS.md. Mobile suspension, eviction, offline shell navigation and origin changes are not durable-copy guarantees; see ADR-012.
+The browser adapter stores Blob + metadata + processing state atomically, preserves existing identity, verifies recovered bytes and exposes ordered pending chunks and gaps. Capture hands off each complete container before session end. Uploads await persistence and are serialized with Web Locks. **ADR-016 supersedes the original "after capture" restriction**: they now run during capture as well, on each durable commit — see the WEB-005 boundaries below. Results and bounded retry timing survive reload; ambiguous network completion can repeat stateless provider work. No deletion exists: HTTP success cannot satisfy RET-002. The 64 MiB audio budget and 4 MiB warning reserve use Safari measurements in TASKS.md. Mobile suspension, eviction, offline shell navigation and origin changes are not durable-copy guarantees; see ADR-012.
+
+## WEB-005 incremental upload boundaries
+
+Uploads run **during** capture (ADR-016). A container is offered to the queue when it completes, the drain starts on that durable commit rather than at session end, and the `echo-audio-queue-drain` Web Lock still admits one drainer per origin. The drain stays sequential, so at most one upload is in flight at a time and capture never waits on the network. A send failure no longer stops the entries behind it; the failed entry returns on its own bounded backoff, and the drain stops only when the browser is offline or the page is gone.
+
+Entry state is `pending`, `uploading`, `processed` or `blocked`, and it is persisted, not held in memory. `uploading` means *in flight, outcome unknown* — the state a page that died mid-upload must be recoverable as. Recovery returns a stale `uploading` entry to `pending`; whether the retry costs a provider call is then the server's decision, not the client's. Attempts are bounded, and exhausting them means `blocked` with a readable reason rather than an unbounded retry loop. An owner-initiated retry overrides backoff and `blocked`.
+
+`POST /api/recordings` consults a `JobLedger` port keyed by chunk identity, `sessionId/id/checksum`, over fields it already validates against the uploaded bytes. A key that has completed **replays** its stored result without calling a provider; a key already in flight **joins** that job instead of starting a second one; anything else proceeds as before. A replayed response is marked as replayed. Requests carrying no chunk metadata — the WEB-002 single-clip path — have no identity and are not ledgered.
+
+The only adapter is in-process: a bounded, expiring `Map`, no dependency and no platform service, so it behaves identically on Vercel and in the self-hosted container. **It is not exactly-once**, and nothing in the code or the interface may claim otherwise: a cold start, a redeploy, a second instance or an expiry all lose it, and the retry then costs a provider call. It holds results in memory for its TTL and never writes them to disk or to a log. A ledger entry is not a durable copy and cannot satisfy RET-002; no response, replayed or fresh, authorizes deleting raw audio.
+
+Stitching those per-chunk results into one session transcript is WEB-006 and is not done here.

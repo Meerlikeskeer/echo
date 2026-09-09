@@ -1,0 +1,83 @@
+# ENG-002 / ADR-010. `npm run check` already proves the standalone bundle runs
+# self-hosted, and it runs anywhere. This job proves the container around that
+# bundle also builds and runs, which needs a container runtime that most
+# development machines in this project do not have. Docker is unavailable on
+# the development machine, so this job is the only place the image is ever
+# verified — see STATUS.md § Verification floor.
+#
+# It lives in its own file, and does not run on draft pull requests, because it
+# is a full image build on every push. Echo's builder/checker protocol freezes
+# acceptance tests *before* implementation, so a task branch is deliberately red
+# from the freeze commit until the builder lands — five or more pushes, each
+# previously paying for a Docker build whose result could not change until the
+# implementation existed.
+#
+# Pre-merge coverage is not reduced. A draft cannot be merged, and marking a
+# pull request ready for review runs this job before the merge button is real.
+# `workflow_dispatch` runs it on demand against any branch.
+name: Self-hosted container
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  selfhost-container:
+    # Skip only while a pull request is still a draft. Pushes to main and
+    # manual runs have no pull_request payload and always proceed.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Synthetic, generated per run, and never a real credential. Only ever
+      # passed to the container and to the smoke check.
+      ECHO_OWNER_USERNAME: synthetic-owner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Generate a synthetic owner password for this run
+        run: echo "ECHO_OWNER_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Build the self-hosted image
+        run: docker build -t echo:ci .
+
+      - name: Confirm the image contains no environment file
+        # A stray .env in the build context would ship a credential inside the
+        # image. .dockerignore excludes them; this asserts it rather than
+        # trusting it.
+        run: |
+          if docker run --rm --entrypoint sh echo:ci -c 'ls -A /app; find /app -maxdepth 3 -name ".env*" -print' | grep -q '\.env'; then
+            echo "An environment file was found inside the image."
+            exit 1
+          fi
+
+      - name: Run the container
+        run: |
+          docker run -d --name echo-ci -p 3000:3000 \
+            -e ECHO_OWNER_USERNAME="$ECHO_OWNER_USERNAME" \
+            -e ECHO_OWNER_PASSWORD="$ECHO_OWNER_PASSWORD" \
+            echo:ci
+
+      - name: Smoke-check the running container
+        run: node scripts/container-smoke.mjs http://127.0.0.1:3000
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs echo-ci || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f echo-ci || true

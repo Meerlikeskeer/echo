@@ -1,21 +1,32 @@
 import { requireOwnerAccess } from "../../../lib/owner-access";
 import { providerSetup } from "../../../lib/providers/registry";
-import { processRecording } from "../../../lib/recording/pipeline";
+import { processRecording, type RecordingResult } from "../../../lib/recording/pipeline";
 import { describeFailure, type RecordingErrorBody } from "../../../lib/recording/http";
 import { ProviderError } from "../../../lib/providers/errors";
 import type { AudioClip } from "../../../lib/providers/types";
 import { checksum, isAudioChunk, type AudioChunk } from "../../../lib/recording/session";
+import { InProcessJobLedger, type JobLedger } from "../../../lib/recording/job-ledger";
 
 import { normalizeMime } from "../../../lib/recording/media-type";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const json = (status: number, body: unknown) =>
+const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-content-type-options": "nosniff" },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-content-type-options": "nosniff", ...extra },
   });
+
+/** The response body a chunk upload produced, stored whole so a retry of the
+ *  same chunk identity gets back the same answer rather than a second opinion. */
+type ChunkResponse = RecordingResult & { readonly chunk: AudioChunk };
+
+// Module scope on purpose: this is the state that survives between requests in
+// one process, and there is deliberately no other. ADR-016 is explicit that a
+// cold start, a redeploy or a second instance loses it and the retry then costs
+// a provider call, exactly as it did before.
+const ledger: JobLedger<ChunkResponse> = new InProcessJobLedger<ChunkResponse>();
 
 const fail = (status: number, body: RecordingErrorBody) => json(status, { error: body });
 
@@ -35,6 +46,9 @@ export async function POST(request: Request): Promise<Response> {
       problems: providerSetup.problems,
     });
   }
+  // Bound here because the check above narrows this module binding, and that
+  // narrowing does not survive into the ledger's closure.
+  const providers = providerSetup;
 
   let clip: AudioClip;
   let chunk: AudioChunk | undefined;
@@ -64,8 +78,23 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await processRecording(clip, providerSetup, { sessionOffsetMs: chunk?.startMs ?? 0 });
-    return json(200, { ...result, ...(chunk ? { chunk } : {}) });
+    // A request carrying no chunk metadata is the WEB-002 single-clip path. It
+    // has no identity to key on, so it is not ledgered and is left exactly as it
+    // was.
+    if (!chunk) return json(200, await processRecording(clip, providers, { sessionOffsetMs: 0 }));
+    const identity = chunk;
+    // Built only from metadata already checked byte-for-byte against the upload
+    // above, and only after the owner gate — an unauthenticated caller can
+    // neither read this nor put anything in it.
+    const { result, outcome } = await ledger.run({ sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum }, async () => ({
+      ...await processRecording(clip, providers, { sessionOffsetMs: identity.startMs }),
+      chunk: identity,
+    }));
+    // A join and a replay both mean the same thing to the caller: this answer
+    // cost no provider call. An answer that is silently identical is one nobody
+    // can verify, so it is stated in the body and in a header.
+    const replayed = outcome !== "claim";
+    return json(200, { ...result, replayed }, { "x-echo-replayed": String(replayed) });
   } catch (error) {
     const { status, body } = describeFailure(error);
     // Safe fields only — never a response body, credential, audio or transcript.

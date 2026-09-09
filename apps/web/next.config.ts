@@ -13,9 +13,18 @@ import type { NextConfig } from "next";
 // which is exactly what scripts/selfhost.test.mjs does.
 const repositoryRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+// ADR-010 wants `standalone` everywhere Echo is self-hosted. Vercel is the one
+// place it must be off: the platform injects its own `modifyConfig` and then an
+// `onBuildComplete` hook that reads `.next/next-server.js.nft.json`. With
+// `standalone` on, that file is not where the hook looks and the build dies with
+// ENOENT *after* compiling, type-checking and generating pages successfully — so
+// the failure looks like a code error and is not one. Vercel does its own output
+// tracing, so nothing is lost by leaving this off there.
+const onVercel = Boolean(process.env.VERCEL);
+
 const config: NextConfig = {
   poweredByHeader: false,
-  output: "standalone",
+  output: onVercel ? undefined : "standalone",
   outputFileTracingRoot: repositoryRoot,
   // `next dev` otherwise writes apps/web/AGENTS.md and apps/web/CLAUDE.md on
   // every start. Echo keeps one canonical set of agent instructions at the

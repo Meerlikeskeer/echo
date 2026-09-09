@@ -29,8 +29,13 @@ test("chunk uploads validate checksum and normalize transcription into session t
     const result = await response.json();
     assert.deepEqual(result.chunk, metadata);
     assert.ok(result.transcript.segments[0].startMs >= 29000);
-    const spaced = syntheticClip(); spaced.append("chunk", JSON.stringify({ ...metadata, mimeType: "audio/webm; codecs=opus" }));
-    assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: spaced })).status, 200);
+    // A distinct chunk id on purpose: sharing one would key the job ledger the
+    // same way and this post would be answered by a replay, so it would no
+    // longer prove that Safari's MIME spacing is accepted by the pipeline.
+    const spaced = syntheticClip(); spaced.append("chunk", JSON.stringify({ ...metadata, id: "synthetic-chunk-spaced", mimeType: "audio/webm; codecs=opus" }));
+    const normalized = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: spaced });
+    assert.equal(normalized.status, 200);
+    assert.equal(normalized.headers.get("x-echo-replayed"), "false", "this must be a real transcription, not a replayed one");
     const invalid = syntheticClip(); invalid.append("chunk", JSON.stringify({ ...metadata, checksum: "0".repeat(64) }));
     assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: invalid })).status, 400);
   });
@@ -177,5 +182,60 @@ test("capture diagnostics are unavailable in production even to the owner", { ti
  test("queue diagnostics are absent from production even for the owner", { timeout: 30000 }, async () => {
   await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
     assert.equal((await fetch(`${base}/diagnostics/queue`, { headers: { authorization } })).status, 404);
+  });
+});
+
+test("a repeated chunk upload replays the first answer instead of transcribing twice", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    const metadata = { sessionId: "replay-session", id: "replay-chunk", sequence: 1, startMs: 29000, endMs: 70000, overlapMs: 1000, mimeType: "audio/webm;codecs=opus", size: 2048, checksum: createHash("sha256").update(new Uint8Array(2048)).digest("hex") };
+    const post = async () => {
+      const body = syntheticClip();
+      body.append("chunk", JSON.stringify(metadata));
+      const response = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body });
+      assert.equal(response.status, 200);
+      return { replayed: response.headers.get("x-echo-replayed"), body: await response.json() };
+    };
+    // The owner gate runs before the ledger, so an unauthenticated caller can
+    // neither read it nor put anything in it. The owner's first request below
+    // answering "not replayed" is the proof that this one populated nothing.
+    const probe = syntheticClip();
+    probe.append("chunk", JSON.stringify(metadata));
+    const denied = await fetch(`${base}/api/recordings`, { method: "POST", headers: { "x-middleware-subrequest": "proxy:proxy:proxy:proxy:proxy" }, body: probe });
+    assert.equal(denied.status, 401);
+    assert.equal(denied.headers.get("x-echo-replayed"), null);
+
+    // The first response is what a client can lose: a timeout, a suspended tab,
+    // a connection dropped after the provider already answered. The retry is
+    // byte-identical, and must not buy a second transcription.
+    const first = await post();
+    const second = await post();
+    assert.equal(first.replayed, "false");
+    assert.equal(first.body.replayed, false);
+    assert.equal(second.replayed, "true");
+    assert.equal(second.body.replayed, true);
+    assert.deepEqual({ ...second.body, replayed: false }, first.body);
+
+    // Same chunk id, different bytes, is a conflict rather than a replay: the
+    // checksum no longer matches the upload and the request never reaches the
+    // ledger at all.
+    const conflicting = syntheticClip(1024);
+    conflicting.append("chunk", JSON.stringify(metadata));
+    assert.equal((await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: conflicting })).status, 400);
+
+    // A different chunk identity is its own job, answered fresh.
+    const other = syntheticClip();
+    other.append("chunk", JSON.stringify({ ...metadata, id: "replay-chunk-2", sequence: 2, startMs: 69000, endMs: 110000 }));
+    const fresh = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: other });
+    assert.equal(fresh.status, 200);
+    assert.equal(fresh.headers.get("x-echo-replayed"), "false");
+
+    // The single-clip path carries no chunk identity, so it is not ledgered and
+    // its body is unchanged.
+    const single = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: syntheticClip() });
+    assert.equal(single.status, 200);
+    assert.equal(single.headers.get("x-echo-replayed"), null);
+    const body = await single.json();
+    assert.equal("replayed" in body, false);
+    assert.equal("chunk" in body, false);
   });
 });

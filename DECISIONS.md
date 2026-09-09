@@ -194,11 +194,94 @@ The deeper problem is sequencing. Mobile capture was being treated as an accepta
 
 **Reversing this needs an ADR, not a convenience commit.** Re-adding a script that binds a non-loopback interface, or reinstating mobile as a blocking acceptance criterion before a deployed origin exists, is a reversal of this decision and must be recorded as one. A test in `apps/web/tests/secure-context.test.ts` asserts that no user-facing refusal message advertises such a script.
 
+## ADR-014 — Deployments are explicit; a push does not deploy
+
+**Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-010 · **Refines:** ADR-008
+
+**Context:** Vercel's default behaviour is to build and deploy on every push to a connected repository, including every branch and every preview. Echo is developed by more than one agent working on separate branches, several pushes to a task branch in an hour is normal, and the account is on a free plan with a finite build allowance. The default therefore converts ordinary version-control activity into consumption of a limited resource, and the failure lands at the worst possible moment: the allowance runs out mid-day, and the deployed origin — the thing WEB-004's queue and mobile acceptance both depend on — becomes unavailable for reasons that have nothing to do with the code.
+
+**Decision:** Deployments are triggered explicitly, never by a push. `vercel.json` sets `git.deploymentEnabled` to `false`, so a connected repository produces no automatic build for any branch. Deploying is `npx vercel` for a preview and `npx vercel --prod` for production, run deliberately by the owner. `scripts/deployed-smoke.mjs` verifies whatever was deployed, and it is unaffected by this: it takes a URL and asserts on HTTP behaviour.
+
+**Consequences.** The deployed origin can lag `main`, so *deployed* and *merged* are now different states and neither implies the other — check which commit is live before drawing conclusions from a deployed origin. The workflow recorded in ADR-008 and `ARCHITECTURE.md`, feature branch → preview → verification → merge → production, still holds; the preview step becomes a command rather than a side effect of pushing. CI is untouched: `.github/workflows/pull-request.yml` still runs `npm run check` and the container job on every push, so nothing about verification weakens, and the build allowance is spent only where it buys something.
+
+**Rejected: leaving the default on and rationing by discipline.** The cost is paid by whoever pushes, not by whoever decided, and an agent following ordinary version-control instructions would spend the allowance without ever seeing it. A setting in version control is checkable; a habit is not.
+
+**Reversing this needs an ADR.** Turning `deploymentEnabled` back on, per-branch or globally, is a reversal of this decision and must be recorded as one — including the reasoning about the plan's allowance that made it safe.
+
+## ADR-015 — Per-task status files; STATUS.md holds only what is shared
+
+**Status:** Accepted · **Date:** 2026-09-08 · **Task:** ENG-014 · **Refines:** the `STATUS.md` convention established by ENG-003
+
+**Context:** `STATUS.md` is the one file every session reads, and its update protocol requires **every** task to write the same three regions: the *In flight* section, one row of a shared task table, and the verification snapshot. Git merges cleanly when branches touch different regions of a file and conflicts when they touch the same ones, so the protocol did not merely permit collisions — it mandated them. The measurements at the time of this decision: **29 of the 61 commits on `main` touched `STATUS.md`** (48%), and the two volatile sections were **92 of its 192 lines** (also 48%). Half the file was the half everyone had to rewrite.
+
+The cost was not usually visible as conflict markers. It was paid instead by **stacking branches to avoid the conflict** — DOC-003 under ENG-013 under DOC-004 under ENG-014, four deep — which `AGENTS.md` separately warns against, because a stacked branch inherits the review burden of its base and cannot be reverted alone. One rule in the repository was pushing directly against another.
+
+A second, quieter failure came from the same shape. Because the *In flight* section was shared and append-friendly, finished work accumulated in it instead of being moved somewhere durable. It reached 51 lines and simultaneously contained a paragraph reading "provisioning started, nothing deployed yet" and, three paragraphs later, "ECHO IS DEPLOYED". A session reading top to bottom would have believed the first.
+
+**Decision:** `STATUS.md` keeps only content that is genuinely shared and changes rarely — the reading map, the vocabulary, what exists and does not exist, the verification **floor**, and the update protocol. The three volatile regions move:
+
+1. **In flight → `status/in-flight/<TASK-ID>.md`,** one file per active task, created before work starts and **deleted in the pull request that finishes the task.** Separate files never conflict. Deletion on merge is what prevents the rot described above, so anything durable must be moved to a source-of-truth document *before* the file is deleted.
+2. **The verification snapshot splits in two.** The **floor** — currently 72 unit, 7 production HTTP, 4 self-host parity, 16 controller — stays in `STATUS.md`, changes rarely, and changes deliberately: a count going down is still a regression, not a cleanup. The **numbers from a particular run** belong to the task that ran them, and go in its in-flight file and its pull request body.
+3. **The task table is generated, not written.** `scripts/status-table.mjs` builds it from the `**Status:**` lines already present in each `TASKS.md` entry, and `npm run check` fails when the committed table does not match. `TASKS.md` was already the source of truth for task state; the table was a hand-maintained copy of it, and a copy that fifteen branches all edit is a conflict generator with no compensating benefit.
+
+**Consequences.** Parallel branches stop competing for `STATUS.md`, which removes the main reason to stack branches and makes "branch from `main`" the easy path rather than the expensive one. `STATUS.md` gets shorter and stops carrying stale narrative, so the file every session is required to read stays cheap to read — the reason ENG-003 created it. Task state now has exactly one writable home, `TASKS.md`, and one generated view. The cost is one more directory and a script inside `npm run check`; that check is what keeps the generated table honest, so weakening or removing it is not a cleanup.
+
+**What does not change.** `STATUS.md` is still the first thing every session reads and still the only file every session must read. The update protocol still applies in full: record before starting, keep it current, and a task is still not done until its `TASKS.md` handoff says so. The counts are still a floor. None of the version-control discipline in `AGENTS.md` is relaxed — this ADR changes where status is written, not whether it is.
+
+**Rejected: a union merge driver on `STATUS.md`.** Marking the file `merge=union` in `.gitattributes` makes Git take both sides instead of failing. That suits an append-only changelog. `STATUS.md` is edited, not appended — rows are flipped, paragraphs are corrected, stale claims are deleted — and a union merge would silently keep both the old claim and its correction. Applied to the example above, it would have preserved "nothing deployed yet" alongside "ECHO IS DEPLOYED" and reported success. Turning a loud failure into a quiet wrong answer is the wrong trade for a file whose purpose is to be believed.
+
+**Rejected: relaxing the update protocol instead.** The discipline is not the problem and it was expensive to learn — `main` once fell fourteen commits behind, and a Route Handler was once excluded from every commit while every check passed green. Those rules stay. The file layout was an incidental choice from ENG-003, not one of those lessons, and it is the part that was generating friction.
+
+**Reversing this needs an ADR.** Moving *In flight* back into `STATUS.md`, or hand-maintaining the task table again, reverses this decision and must be recorded as one.
+
+## ADR-016 — Upload during capture, and a chunk-identity job ledger
+
+**Status:** Accepted for implementation · **Date:** 2026-09-08 · **Task:** WEB-005 · **Refines:** ADR-012
+
+**Context:** REQ-003 asks for two things — upload and transcribe *while recording continues*, and retries that *do not duplicate chunks or jobs*. WEB-004 deliberately delivered neither, and said so. It drains the queue only after capture stops (`useAudioQueue.sync()` returns early while capture is active), and ADR-012 records the honest limit on the other half: *"The stateless endpoint cannot guarantee exactly-once provider execution after a lost HTTP response; retries can repeat processing, but never create a second local chunk/result."*
+
+Both restrictions were correct for a task whose subject was durable storage. Both are now the task.
+
+The second one is the harder half. `POST /api/recordings` holds no state between requests, so a response lost in transit — a timeout, a suspended tab, a dropped connection after the provider has already answered — is indistinguishable, from the client, from a request that never arrived. The client must retry, because retrying is what durability means. The provider then transcribes the same audio twice. The wasted vendor call is the smaller cost. The real cost is that two transcriptions of one chunk can differ, so *"what is this chunk's transcript"* stops having a single answer, and WEB-006 has to stitch a session whose parts are not stable.
+
+Fixing that properly needs a ledger that survives the process. A durable ledger means a database, and `ARCHITECTURE.md` lists the relational database as **Open** with an explicit instruction not to choose one silently. A retry bug is not a good reason to settle the database question sideways.
+
+**Decision:**
+
+1. **Uploads run during capture.** The queue drains as soon as a container is durably committed, not when the session ends. The `echo-audio-queue-drain` Web Lock still admits one drainer per origin, so two tabs cannot double-send, and the drain stays sequential, so at most one upload is ever in flight. Persistence keeps absolute priority: capture never waits on an upload, and an upload failure never stops capture.
+
+2. **A failing chunk no longer blocks the ones behind it.** The drain currently stops at the first send failure, which converts one unlucky chunk into a stalled session. It now continues past a failed entry and returns to it on its own backoff schedule. It still stops immediately when the browser goes offline or the page is unmounted, because continuing there is pointless rather than merely slow.
+
+3. **Retry is bounded.** An entry that has exhausted its attempts becomes `blocked` with a reason the owner can read, instead of retrying forever against a provider that is never going to accept it. An explicit owner-initiated retry still overrides that.
+
+4. **`uploading` is a persisted state, not an in-memory one.** ARCHITECTURE's *Offline and security* section already requires Echo to distinguish local-only, uploading, verified and processed. A page that dies mid-upload must be recoverable as *"this chunk was in flight and we do not know the outcome"* — which is exactly the state the ledger exists to resolve. On recovery a stale `uploading` entry returns to `pending` and is retried; the ledger, not the client, decides whether that retry costs a provider call.
+
+5. **A `JobLedger` port, keyed by chunk identity.** The key is `sessionId/id/checksum` — content-addressed, and made of fields the Route Handler already validates against the uploaded bytes. Three outcomes: a **replay** returns the stored result without touching a provider; a **join** attaches to a job already in flight for the same key rather than starting a second one; a **claim** proceeds to the providers as today. A replayed response says so, in a field the client and the tests can see, because an answer that is silently identical is an answer nobody can verify.
+
+6. **One adapter: in-process, bounded, no dependency and no platform service.** A `Map` with a capped entry count and a time-to-live. It is portable in the ADR-010 sense — identical behaviour on Vercel and in the self-hosted container — because it is just memory in the process that is already handling the request.
+
+7. **Requests without chunk metadata are not ledgered.** The WEB-002 single-clip path has no identity to key on and is left exactly as it is.
+
+**What this does not promise, stated plainly.** This is **not exactly-once.** A cold start, a redeploy, a second Fluid Compute instance answering the retry, or a TTL expiry each lose the ledger, and the retry then costs a provider call exactly as it does today. What it closes is the *common* window — a retry seconds after a dropped response, on the instance that just handled it — which is the case a suspended tab and a flaky connection actually produce. Exactly-once needs a ledger that outlives the process, which is the database decision, and that decision stays **Open**. This ADR narrows ADR-012's limitation; it does not reverse it, and ADR-012's sentence remains true as written.
+
+**A ledger entry is not a durable copy of anything.** It holds a result, not audio, in memory, for minutes. RET-002 is untouched: nothing here can authorize deleting a raw chunk, and no HTTP response — replayed or fresh — becomes evidence of a verified remote copy.
+
+**Privacy note.** The ledger holds transcript text in process memory for its TTL. The process already holds that text to answer the request; this widens the window from one request to a few minutes. It is never written to disk, never logged, and never keyed by anything an unauthenticated caller can produce — the endpoint's own owner gate runs first, unchanged.
+
+**Alternatives rejected:**
+
+- **A durable ledger now, in Postgres or a KV store.** This is the correct end state and it settles the Open database decision as a side effect of fixing a retry bug. Rejected on sequencing, not on merit.
+- **Vercel KV, Queues or Workflow.** Platform-specific primitives, which ADR-010 forbids without an answer for self-hosted deployments. The in-process adapter needs no such answer.
+- **A client-supplied `Idempotency-Key` header.** The conventional shape, and here a strictly weaker one: a client-chosen key is not derived from the bytes, so the same key carrying different audio reads as a replay. Chunk identity already exists, is already validated against the upload, and already makes that case a conflict.
+- **Not retrying after an ambiguous response.** Discards results to avoid duplicating work, which is the wrong trade for a note taker whose whole promise is that a recording survives.
+
+**Consequences.** Provider spend and result stability both improve in the ordinary case, and neither is guaranteed in the adversarial one. `ARCHITECTURE.md`'s WEB-004 boundary line *"uploads … run after capture"* is superseded by this ADR and updated in the same change. The database decision keeps its **Open** status and now has a named consequence attached to it: the first thing a durable store buys Echo is exactly-once chunk processing. Reversing decision 1 or 5 — draining only after capture again, or removing the ledger — needs an ADR.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
 
-- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice.
+- **Relational database:** undecided. PostgreSQL is the expected direction, but it is not an approved final choice. ADR-016 names the first thing it buys: a job ledger that outlives the process, and with it exactly-once chunk processing.
 - **Object/audio storage:** undecided. Large audio must not be stored in relational database rows; object/blob storage will likely be required. Constrained by ADR-010: prefer an S3-compatible interface so self-hosted deployments can satisfy it.
 - **Transcription provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `TranscriptionProvider`.
 - **LLM / notes-generation provider:** prototype default selected in ADR-009 and marked Temporary; the permanent vendor remains undecided. Kept behind `NotesProvider`.

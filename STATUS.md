@@ -2,35 +2,19 @@
 
 **Read this file first. It is the only file every session must read.** It exists so work can start without loading the whole repository. Use the reading map below to decide what else to open — and open nothing else.
 
-**Updated:** 2026-09-08 · **Branch:** `test/WEB-004-browser-acceptance` · **Base:** `main` @ `6cee6fd`, integrated `main` @ `f5f3521`
+**Updated:** 2026-09-08 · **Base:** `main` @ `5402d30`
 
 STATUS.md is a cache, not a source of truth. If it disagrees with `ARCHITECTURE.md`, `DECISIONS.md`, `REQUIREMENTS.md` or `TASKS.md`, **those win and this file is stale** — correct it in the same change.
 
+**This file holds only what is shared and changes rarely.** Anything belonging to one task lives with that task (**ADR-015**): active work in `status/in-flight/<TASK-ID>.md`, the per-task record in `TASKS.md`. That is why parallel branches no longer collide here.
+
 ## In flight
 
-**WEB-004 native browser acceptance — blocked, NOT Done.** Branch `test/WEB-004-browser-acceptance` started from remote `main` @ `6cee6fd`, in separate worktree `/private/tmp/echo-web004-browser`. Implementation is merged in PR #9; no application source changed. This attempt observed **no native PASS lines**. Safari 26.4 (21624.1.16.11.4) displayed “Safari Can’t Connect to the Server” at `http://127.0.0.1:3000/diagnostics/queue`. Chrome app selection initially failed; selecting its running translocated path worked, but subsequent actions were refused twice because the user changed the app state. Chrome version was not obtained. The earlier `elementHasNoFrame` / `noWindowsAvailable` errors did not recur in this attempt. These are not browser test failures or proof of a code defect.
+**One file per active task in [`status/in-flight/`](status/in-flight/).** Read [`status/in-flight/README.md`](status/in-flight/README.md) before adding yours.
 
-`npm run dev` announced readiness, then logged repeated `EMFILE` watcher errors and development-directory restarts; it was stopped. The first check overlapped the dev process, but a standalone retry and an escalated retry failed identically in generated route types. Required-command results below are this attempt’s actual results. Environment files were excluded from the worktree because session policy denies access; no credentials were read or printed. Owner configuration/authentication with fixture providers was requested without asking for credentials in chat. Storage, reload recovery, capture persistence, disconnect/reconnect, retention, playback and two-tab acceptance all remain unverified.
+Create your file **before** you start work, and delete it in the pull request that finishes the task. Separate files never conflict, which is the whole point — see the *Update protocol* at the end of this file.
 
-**Parallel ENG-010:** PR #11 merged into `main` @ `f5f3521` during this attempt; that main commit is integrated here. Its deployment facts below are preserved. No deployment files or ENG-010 task entry were edited by this task.
-
-**Next:** restore a stable configured local development server and idle browser automation, then execute the WEB-004 browser steps in TASKS.md. Do not infer acceptance from historical or CI checks. Mobile remains deferred under ADR-013.
-
-**Preserved ENG-010 deployment handoff (PR #11 now merged):**
-
-**ENG-010 — implemented and verified as far as an agent can verify it. On `eng/ENG-010-deploy-hosted-origin`, off `main` @ `f234040`. Nothing is deployed; the first deployment is the owner's step.** This is the task ADR-013 put ahead of mobile: nothing is deployed, so nothing outside the machine running Echo has ever reached it, and the `crypto.subtle` secure-context gap has no fix until a real certificate exists.
-
-**Scope.** Make a deployment reproducible from the repository rather than from a dashboard click-path, and make "it is deployed" a check rather than a claim. Three deliverables: a committed `vercel.json` so the build is defined in version control; `scripts/deployed-smoke.mjs`, which verifies a live origin over HTTPS without printing credentials; and a README runbook naming the exact provisioning steps and environment variables. No new dependency, framework, host or storage decision — ADR-008 and ADR-010 already govern this and neither changes.
-
-**What this task cannot do.** Provisioning needs the owner's Vercel account and the owner's secrets. An agent cannot run `vercel login`, create the project, or set `ECHO_OWNER_PASSWORD`. So this task ends with everything the owner needs; the first real deployment and the first `npm run test:deployed` against a hosted URL are the owner's step, and until they happen **Echo is still not deployed.** The runbook is `README.md` → *Deployment* → *Provisioning runbook*, six steps.
-
-**The risk this exists to catch, and proof the check is not vacuous.** `apps/web/src/proxy.ts` deliberately gates every path with no exclusions, and `scripts/production.test.mjs` proves that against `next start`. A hosted platform serves `/_next/static` from a CDN, which may answer before the proxy runs. If it does, compiled assets are public on the deployed origin while every local check stays green. `deployed-smoke.mjs` fetches each linked asset unauthenticated and fails if any returns 200 — and on 2026-09-08 that assertion was **demonstrated to fire** against a deliberately broken origin: a local proxy standing in for a CDN edge, serving `/_next/static` without credentials and passing everything else through. The script failed on the first asset with the intended message. Five other negative controls behaved correctly; see the verification snapshot.
-
-**Not this task:** mobile capture acceptance (its own task, once a deployed origin exists), WEB-004's browser acceptance, and any server-side storage decision.
-
-**WEB-004 merged underneath this branch (PR #9, `main` @ `6cee6fd`) and is folded in here.** Echo now saves completed audio containers in browser-local IndexedDB. That does not change ENG-010's scope, but it raises the stakes of deploying correctly: recorded audio now persists in the browser, and `checksum()` still needs `crypto.subtle`, so a deployed origin must be HTTPS for the queue to work at all. WEB-004's own remaining item — native browser acceptance of the IndexedDB path — is untouched by this task and still outstanding.
-
-Whoever picks up work writes here **before starting**: what is being attempted, what is already done, and what is not. This section is what the next session reads if this one stops without warning. See *Update protocol*.
+**What this directory shows, precisely.** On a task branch, it holds that task's working state — the thing the next session reads if this one stops without warning. On `main` it holds only work that is **started but not finished across merges**, such as WEB-004, whose code is merged while its browser acceptance is not. A task that begins and finishes inside one pull request deletes its own file there, so it never appears on `main` at all. **To see everything currently in progress, read the open pull requests** — `.github/workflows/open-pull-request.yml` guarantees one exists for every pushed task branch — and the *Status* column of the table below.
 
 ## Vocabulary
 
@@ -54,25 +38,47 @@ Short definitions so nobody has to reconstruct them from context.
 
 ## Where the project is
 
-Echo is a private-first web AI note taker. Everything through WEB-004 is merged into `main` @ `6cee6fd`. ENG-010 has since merged in PR #11; this WEB-004 acceptance branch remains open.
+Echo is a private-first web AI note taker, **deployed and verified over HTTPS** as of 2026-09-08. `main` is at `b44ec5b`, which includes ENG-013, DOC-004 and ENG-014.
 
-| Task | Status | Where |
+<!-- BEGIN GENERATED TASK TABLE -->
+
+*Generated from `TASKS.md` by `npm run status:table`. **Do not edit this table by hand** — change the task's `**Status:**` line in `TASKS.md` instead, which is the source of truth. `npm run check` fails when the two disagree.*
+
+| Task | Status | Branch |
 | --- | --- | --- |
-| DOC-001 Repository foundation | Done | `main` |
-| ENG-001 Bounded builder/checker workflow | Done | `main` |
-| WEB-001 Web shell, access gate, verification tooling | Done | `main` |
-| ADR-009 / ADR-010 provider ports and deployment portability | Accepted, **not on `main`** | `docs/ADR-009-provider-selection` @ `93ec5b5` |
-| WEB-002 Short recording vertical slice | Implemented, verified live, **awaiting owner review** | `feat/WEB-002-recording-slice` |
-| ENG-003 Status file and reading map | Done | `feat/WEB-002-recording-slice` |
-| ENG-002 Self-host parity verification | **Done** — merged, and the container image built and passed its smoke check in CI | `main` |
-| ENG-007 Pull request workflow | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
-| ENG-005 Provider doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
-| WEB-003 Session and playable chunk model | **Done** — merged; ADR-011 validated on Chrome 150 and Safari 26.4 | `main` |
-| ENG-008 Secure-context diagnosis | **Done** — merged; its `dev:lan` half was withdrawn by ADR-013 | `main` |
-| ENG-009 Withdraw LAN exposure; pause mobile | **Done** — merged (PR #10); recorded ADR-013 | `main` |
-| WEB-004 Browser-local durable queue | Merged (PR #9); **native browser acceptance outstanding** and it is the only thing still open | `main` |
-| ENG-010 Reproducible deployment and deployed-origin check | Implemented and locally verified; **nothing is deployed** — provisioning is the owner's step | `eng/ENG-010-deploy-hosted-origin` |
+| DOC-001 Shared repository foundation | Done | — |
+| ENG-001 Bounded builder/checker workflow | Done | — |
+| ENG-002 Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
+| ENG-007 Pull request workflow and branch protection | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
+| ENG-008 Secure-context development server and diagnosis | Partially withdrawn — the `secure-context` diagnosis is Done and merged in `a032a01`; the… | `eng/ENG-008-https-dev-server` |
+| ENG-009 Withdraw the LAN development server; pause mobile acceptance | Done | `eng/ENG-009-withdraw-lan-exposure` |
+| ENG-010 Reproducible hosted deployment and deployed-origin verification | Done and fully verified. Merged to `main`; Echo is deployed, and on 2026-09-08 npm run… | `eng/ENG-010-deploy-hosted-origin` |
+| ENG-011 The first production deployment failed: Vercel installs without devDependencies | Merged, but it was not the cause — corrected by ENG-012 | `eng/ENG-011-vercel-dev-dependencies` |
+| ENG-012 `output: "standalone"` breaks Vercel's build hook | Confirmed against Vercel — the build completes. Merged as `main` @ `53c0851` | `eng/ENG-012-vercel-build-output` |
+| ENG-013 Name Vercel Deployment Protection instead of failing with `302 !== 401` | Done; verified against the live deployment | `eng/ENG-013-deployment-protection` |
+| DOC-004 Record the first full pass of the deployed check | Done | `docs/DOC-004-deployed-check-passes` |
+| DOC-005 The living documents still said nothing was deployed | Done | `docs/DOC-005-deployed-doc-drift` |
+| ENG-014 Stop STATUS.md from causing merge conflicts | Done | `eng/ENG-014-status-per-task-files` |
+| ENG-015 Scope the container job to where its result can change | Implemented; awaiting owner review | `eng/ENG-015-container-job-scope` |
+| ENG-003 Shared status file and reading map | Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 | — |
+| WEB-001 Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
+| WEB-002 Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
+| ENG-005 Provider configuration doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
+| WEB-003 Session and playable chunk model | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-002-recording-slice` |
+| WEB-004 Durable offline queue | Implemented; native browser/local verification and owner acceptance pending — NOT Done | — |
+| WEB-005 Incremental upload and transcription | Implemented and verified by test; the hook wiring that drains during capture is… | — |
+| WEB-006 Transcript stitching | Todo | — |
+| WEB-007 Structured artifacts | Todo | — |
+| WEB-008 Quick Note mode | Todo | — |
+| WEB-009 Session history | Todo | — |
+| WEB-010 Guarded audio retention | Todo | — |
+| WEB-011 Settings and privacy hardening | Todo | — |
+| WEB-012 Private deployment and recovery validation | Todo | — |
+| WEB-013 Opt-in research | Todo | — |
+| WEB-014 Confirmed reminder/calendar export | Todo | — |
+| INT-001 Branch integration and architecture documentation | Done | — |
 
+<!-- END GENERATED TASK TABLE -->
 
 ## What exists today
 
@@ -81,51 +87,61 @@ Echo is a private-first web AI note taker. Everything through WEB-004 is merged 
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks, then a transcript and notes per chunk. WEB-003 synthetic browser decoding was previously validated; WEB-004 native persistence acceptance remains outstanding. No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
+- Incremental upload during capture (WEB-005): a chunk is sent as soon as it is durably committed rather than at session end, a failing chunk no longer blocks the ones behind it, retry is bounded before an entry blocks with a readable reason, and `uploading` is a **persisted** state so a page that died mid-upload is recoverable as *in flight, outcome unknown*. `POST /api/recordings` keeps a job ledger keyed by chunk identity, so a retry after a lost response replays the stored result instead of paying for a second provider call. **The ledger is in-process and best-effort, not exactly-once** — a cold start, a redeploy, a second instance or a TTL expiry all lose it (ADR-016). The drain-during-capture wiring itself is code-verified but has no automated test and awaits browser acceptance.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
 - Browser-local durable storage (WEB-004): each completed audio container and its metadata are saved in IndexedDB, recovered and checksummed after a reload, and retried while the page is active, with a 64 MiB audio budget and a 4 MiB warning reserve. Results never delete raw audio and no HTTP response is counted as a verified remote copy. Development-only, owner-gated `/diagnostics/queue` exercises the adapter natively. **No browser has yet run that acceptance.**
-- A deployment defined in version control (ENG-010): `vercel.json`, and `npm run test:deployed` → `scripts/deployed-smoke.mjs`, which verifies a live origin over its real certificate — the gate, wrong-credential refusal, every linked compiled asset refused without credentials, `/diagnostics/*` absent, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Host-agnostic by design (ADR-010): it checks an origin, not a platform. **It has never met a hosted deployment.**
+- A deployment defined in version control (ENG-010): `vercel.json`, and `npm run test:deployed` → `scripts/deployed-smoke.mjs`, which verifies a live origin over its real certificate — the gate, wrong-credential refusal, every linked compiled asset refused without credentials, `/diagnostics/*` absent, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Host-agnostic by design (ADR-010): it checks an origin, not a platform.
 - The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
+
+### The deployed origin, and what it settled
+
+**Echo is deployed over HTTPS, behind its own gate, and `npm run test:deployed` passes against it** (2026-09-08). The Vercel project exists, this checkout is linked to it (`.vercel/project.json`, project `echo`), and the owner set all ten environment variables for Production and Preview: `ECHO_OWNER_USERNAME`, `ECHO_OWNER_PASSWORD`, and the `TRANSCRIPTION_*` and `LLM_*` groups. The deployed check confirms the provider groups actually reach the running application rather than merely existing in the dashboard.
+
+**The CDN question ENG-010 exists to answer is answered: Vercel's edge does not bypass Echo's gate.** The risk was that a CDN serves `/_next/static` before the application runs, leaving compiled assets public on the deployed origin while every loopback suite stays green — a failure no local check can see. **All 9 linked compiled assets were refused unauthenticated over the real certificate and served only to the owner.** The same run confirmed, on the platform rather than on loopback: the Basic challenge, refusal of wrong credentials, the owner reaching the page, an unknown path challenged rather than answered, both `/diagnostics/*` pages 404 for the authenticated owner, `POST /api/recordings` guarding itself independently of the proxy, and no owner password or `NEXT_PUBLIC_` value in the page, in any asset, or in an error body.
+
+**Two limits on how far that generalises.** The URL tested was deployment-specific, not a project alias — same edge, same settings, but an alias should be re-checked rather than assumed. And **with Vercel Deployment Protection off, Echo's own fail-closed gate is the only thing in front of the origin.** That is the intended design under ADR-008 and the passing run is evidence it holds on the platform, but it makes `apps/web/src/proxy.ts` load-bearing in production: adding a path exclusion there is now a production access change.
+
+**Deploying and checking are owner-only.** `npx vercel` needs the owner's account, and `npx` also fails from an agent sandbox on npm cache permissions. An agent can run neither the deploy nor `npm run test:deployed` against the hosted origin, and must record `not run` rather than infer a result.
+
+**What this unblocks.** ADR-013 deferred mobile capture until a deployed HTTPS origin existed. It exists and is verified, so **mobile capture acceptance can be opened as its own task.** HTTPS also closes the `crypto.subtle` secure-context gap, so `checksum()` works and WEB-004's durable queue can operate somewhere other than the development machine.
 
 ## What does not exist
 
-Overlap stitching, incremental processing during capture, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts. **Nothing is deployed:** no Vercel project, no environment variables, no hosted origin — ENG-010 added the procedure and the check, not a running service.
+Overlap stitching, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 
-**No network access to Echo, by decision (ADR-013).** `dev` and `start` bind `127.0.0.1` and no script binds any other interface, so Echo is reachable only from the machine running it. Capture therefore cannot be exercised from a phone or any second device, and mobile acceptance is deferred until a deployed HTTPS origin exists. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR.
+**No network access to a local Echo, by decision (ADR-013).** `dev` and `start` bind `127.0.0.1` and no script binds any other interface, so a locally run Echo is reachable only from the machine running it. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR. Mobile acceptance is no longer blocked by this — it goes against the deployed origin.
 
-## Verification snapshot
+## Standing facts and hard-won lessons
 
-**WEB-004 acceptance attempt, 2026-09-08, from the separate worktree repository root at `6cee6fd`; Node 22.23.2 / npm 10.9.8 / Python 3.9.6.** These are observed results, not the earlier successful run copied forward.
+Cheaper here than in a search, and each one cost something to learn.
 
-| Command | Exit | Observed result |
-| --- | --- | --- |
-| `npm ci` | 0 | 373 packages installed, 0 vulnerabilities; optional-package cleanup emitted EPERM warnings |
-| `npm run check` | 1 | Source tracking and lint passed; generated `.next/types/validator.ts` failed TS2344 (`Route` does not satisfy `never`). Same result on standalone and escalated retries. Unit, production build, production HTTP and self-host parity stages **not run** |
-| `python3 -m unittest discover -s tests` | 1 | RecursionError during cleanup/error reporting; no final test count. Escalated retry also exit 1 with no final count |
-| `npm run dev` | 0 on stop | Initially Ready at 127.0.0.1:3000, then repeated EMFILE watcher errors and development-directory restarts; Safari could not connect; stopped by agent |
-| Chrome native acceptance | not run | No test result or browser version obtained; app-state interference blocked actions |
-| Safari native acceptance | not run | Version 26.4 (21624.1.16.11.4) observed; diagnostic navigation could not connect |
+- **Provider credentials are server-side only, never `NEXT_PUBLIC_*`.**
+- **This is Next.js 16** — its APIs differ from model training data, so check `node_modules/next/dist/docs/` before assuming an API exists.
+- **Merged and deployed are different states** and neither implies the other. A push deploys nothing (ADR-014); deploying is an explicit `npx vercel`. Check which commit is live before drawing conclusions from a deployed origin.
+- **For a build that passes locally and fails on the platform, read the platform's log before changing anything.** ENG-011 blamed Vercel installing without devDependencies and was merged; the build log disproved it — Vercel reported `added 378 packages`, the full tree. The local reproduction recreated a condition the platform does not create, and the conclusion was drawn before the log was read. ENG-012 found the real cause: `output: "standalone"` moved the file Vercel's `onBuildComplete` hook reads.
+- **Not every deployment failure is the build.** Three in a row were the platform around it. The upload-step failure `Cannot patch preview comments when immutable static file upload is enabled` was Vercel's **preview comments / Toolbar** feature; **disabling the Vercel Toolbar for the project resolved it.** Its advice to upgrade Next was inapplicable. No repository change was involved, and none should be made if it recurs.
+- **Secrets go in by hand.** A scripted `vercel env add` pipeline was tried and did not land the values correctly. For one-time setup the dashboard is the right path; `npm run test:deployed` reports whether the provider group actually reaches the application, which is the check that matters.
+- **An agent sandbox cannot reach `api.github.com`** — TLS interception breaks certificate verification, so `gh` fails. **`git push` over the same HTTPS works**, and so does the git protocol, which is how to check pull requests from a sandbox: `git ls-remote origin 'refs/pull/*/head'` maps pull request numbers to head commits, and a matching `refs/pull/<n>/merge` means open and mergeable. **An unreachable API is not an absent pull request** — `.github/workflows/open-pull-request.yml` opens them automatically on push (ENG-007), which is why the sandbox never needs to.
+- **`npm run check` cannot pass inside a git worktree** until ENG-012's test is fixed. `apps/web/tests/next-config.test.ts` asserts `config.outputFileTracingRoot?.endsWith("echo")`, and a worktree's root is `.claude/worktrees/<branch>`, so it fails on the directory name while `next.config.ts` is correct — it derives the root from `import.meta.url`, which is right in both places. Confirmed both ways at one commit on 2026-09-08: **72 pass, 0 fail** in `~/Documents/GitHub/echo`, **71 pass, 1 fail** in a worktree. Run the suite from a checkout named `echo` for a true result.
 
-The required floor remains **69 unit, 7 production HTTP, 4 self-host parity, 16 controller**. This attempt establishes no new passing counts; unavailable stages are not a count reduction or a pass. Historical successful runs remain in the WEB-004 handoff. No verification code or assertions were changed. Full acceptance remains outstanding.
+## Verification floor
 
-**Preserved ENG-010 verification, a separate earlier run:**
+**The floor is 91 unit, 8 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
 
-Run from the repository root. **Rows below are the ENG-010 run after merging `main` @ `6cee6fd` (which brought WEB-004) into this branch: 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6.** Every command was executed here; nothing is copied forward.
+| Command | What it covers |
+| --- | --- |
+| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **91 unit** → production build → **8 production HTTP** → **4 self-host parity** |
+| `python3 -m unittest discover -s tests` | **16 tests**, bounded controller only — it certifies the controller, never the web application |
+| `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
+| `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |
+| `selfhost-container` CI job | The container image. Docker is unavailable on the development machine, so this is verified in CI only; last passed 2026-09-08 |
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `npm ci` | 0 | Clean install, 0 vulnerabilities |
-| `npm run check` | 0 | `check:tracked` OK · lint clean · typecheck clean · **69 unit tests, 69 pass, 0 fail** · production build succeeded · **7 production HTTP tests, 7 pass, 0 fail** · **4 self-host parity tests, 4 pass, 0 fail** |
-| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** (bounded controller only) |
-| `npm run test:deployed -- http://127.0.0.1:3121` | 0 | Against a local `next start` production server built from this merged tree: gate challenged, wrong credentials refused, page served to the owner, **9 compiled assets each refused unauthenticated and served to the owner**, **both `/diagnostics/capture` and WEB-004's `/diagnostics/queue` 404 for the authenticated owner**, `POST /api/recordings` refused anonymously and 503 to an empty authorized body. Noted providers unconfigured and that loopback does not verify transport |
-| `npm run doctor` (fixture mode) | not run | Not executed for ENG-010; this change touches no provider code |
-| `selfhost-container` CI job | not run locally | Docker is unavailable on this machine; last passed in CI on 2026-09-08 |
-| Against a **hosted** deployment | **not run** | No deployment exists. `vercel.json` has never been built by Vercel and the script has never met a CDN or a real certificate |
-| Native IndexedDB/capture diagnostics (WEB-004) | **not verified** | Inherited from WEB-004 and not this task's to close: no browser has run `/diagnostics/queue` |
+**The numbers from a particular run belong to the task that ran them** — its `status/in-flight/` file and its pull request body — not here (ADR-015). Record the exit codes and counts you actually observed, never a previous run's, and write `not run` for anything you did not execute. A substitute runner or a subset of tests is not verification.
 
-**Negative controls — the deployed check was made to fail on purpose, six ways.** A check that has only ever passed proves nothing:
+**Negative controls — the deployed check was made to fail on purpose, seven ways.** A check that has only ever passed proves nothing:
 
 | Broken condition | Exit | Behaviour |
 | --- | --- | --- |
@@ -135,14 +151,11 @@ Run from the repository root. **Rows below are the ENG-010 run after merging `ma
 | Credentials embedded in the URL | 2 | Refused; directs them to the environment instead |
 | Unreachable origin | 1 | *"nothing answered … (ECONNREFUSED)"*, not an undici stack trace |
 | Missing `ECHO_OWNER_*` in the environment | 2 | Usage error naming both variables |
-
-Counts only ever rise: **33 → 46 → 52 → 53 → 69 unit** and **4 → 6 → 7 production HTTP**, plus 4 self-host parity and 16 controller. ENG-010 adds no test to `npm run check` and removes none: `test:deployed` is deliberately outside the gate because it needs a live URL and real credentials, so CI cannot run it and must not appear to.
-
-`npm run check` is the gate CI runs. These counts are a floor: **if a change makes a count go down, that is a regression, not a cleanup.**
+| **Vercel Deployment Protection in front of the origin** (ENG-013, observed live, not simulated) | 1 | Named the platform, the consequence and the owner-side fix instead of a bare `302 !== 401`. **The only control that fired against the real deployment rather than a stand-in** — turning that setting off is what let the passing run happen |
 
 **Live service check — 2026-09-06.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in **1.4 s**, correct transcript, sensible notes and action items, timestamps normalized. REQ-006 targets 5–10 s from stop to result; 1.4 s for a 7-second clip is inside it, but that is one measurement of one short clip on one connection, not a measured latency claim.
 
-**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding; WEB-004's IndexedDB acceptance in a native browser; and everything that needs a hosted origin — the transport itself, Vercel's build of `vercel.json`, and whether a CDN edge answers for `/_next/static` in practice. **Mobile capture is deferred under ADR-013** until that origin exists.
+**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding; and WEB-004's IndexedDB acceptance in a native browser. The hosted-origin items **are** now verified — the transport, Vercel's build of `vercel.json`, and whether a CDN edge answers for `/_next/static` in practice (it does not).
 
 ## Reading map
 
@@ -151,25 +164,26 @@ Read `STATUS.md`, then **only** the rows that match your task. Do not read a doc
 | If you are… | Read | Skip |
 | --- | --- | --- |
 | Doing anything | this file | — |
+| Starting or resuming a task | `status/in-flight/README.md`, and your own `status/in-flight/<TASK-ID>.md` | other tasks' in-flight files |
 | Implementing a `WEB-###` task | that one task entry in `TASKS.md`; `ARCHITECTURE.md` § *Technology Stack*; the § *… boundaries* section of the nearest shipped task | other task entries, `ROADMAP.md`, full `REQUIREMENTS.md` |
 | Adding or swapping a transcription / notes service | `DECISIONS.md` ADR-009 and ADR-010; `ARCHITECTURE.md` § *External AI Services* and § *Provider boundaries* | the rest of `DECISIONS.md` |
 | Touching login, access or credentials | `ARCHITECTURE.md` § *WEB-001 access and verification boundaries*; `apps/web/src/lib/access.ts` | product docs |
-| Touching hosting, deployment or infrastructure | `DECISIONS.md` ADR-008 and ADR-010; `ARCHITECTURE.md` § *Hosting and Deployment* | product docs |
+| Touching hosting, deployment or infrastructure | `DECISIONS.md` ADR-008, ADR-010 and ADR-014; `ARCHITECTURE.md` § *Hosting and Deployment* | product docs |
 | Working on retention or deletion | `REQUIREMENTS.md` § *Raw audio lifecycle*; `DECISIONS.md` ADR-004 | the rest |
 | Introducing **any** framework, database, host, UI library or major service | `AGENTS.md` § *Technology stack constraints*; `ARCHITECTURE.md` § *Changing a stack decision* — **before writing code** | — |
 | Running or enabling the bounded loop | `AGENT_WORKFLOW.md` | — |
 | Writing documentation only | this file and the file you are editing | — |
 
-Two standing facts, cheaper here than in a search: **provider credentials are server-side only, never `NEXT_PUBLIC_*`**, and **this is Next.js 16** — its APIs differ from model training data, so check `node_modules/next/dist/docs/` before assuming an API exists.
-
 ## Update protocol
 
 The point of this section is that **an interrupted task must still be recoverable.** A session can stop at any moment — context exhausted, a crash, an interruption — and what it wrote down is all the next one gets.
 
-1. **Before starting work**, write the *In flight* section: the task, the branch, what you are attempting, and what is not done yet. Do this first, not last.
-2. **As you go**, keep it current — especially after finishing a piece. If you are running low on context, **stop and update this file before doing anything else.** An interrupted task with an accurate note is recoverable; finished work nobody recorded is not.
-3. **When the task is done**, flip its row in the table, update the verification snapshot with the numbers you actually observed, clear *In flight*, and write the handoff in `TASKS.md`.
+1. **Before starting work**, create `status/in-flight/<TASK-ID>.md`: the task, the branch and its base, what you are attempting, and what is not done yet. Do this first, not last. See that directory's `README.md`.
+2. **As you go**, keep your file current — especially after finishing a piece. If you are running low on context, **stop and update it before doing anything else.** An interrupted task with an accurate note is recoverable; finished work nobody recorded is not.
+3. **When the task is done**, in the same pull request: update the task's `**Status:**` line and handoff in `TASKS.md`, run `npm run status:table` so this file's table matches, **delete your `status/in-flight/` file**, and move anything durable into this file or the document that owns it.
 
-Update this file in the same commit as any change to task status, the verification snapshot, an accepted ADR, or what does and does not exist. A task is not done until its `TASKS.md` handoff and this file both say so.
+**Step 3's last clause is the one that gets skipped, and it is the one that matters.** Your in-flight file is deleted on merge. Anything worth keeping — a fact about what exists, a decision, a lesson that cost a day — must be moved somewhere permanent before then, or it is gone. The old single *In flight* section failed the opposite way: nothing was ever moved out, so it grew to 51 lines and ended up asserting both "nothing deployed yet" and "ECHO IS DEPLOYED" three paragraphs apart.
 
-Record the exit codes and counts you actually observed. Never copy a previous run's numbers forward, and never record a check you did not run — write `not run` instead. Keep this file short: if a section grows past a screen, the detail belongs in the document that owns it, and this file should link there.
+**Do not edit this file's task table by hand.** It is generated from `TASKS.md` by `npm run status:table`, and `npm run check` fails when the two disagree. Update `STATUS.md` itself in the same commit as any change to an accepted ADR, the verification floor, or what does and does not exist.
+
+**Keep this file short.** If a section grows past a screen, the detail belongs in the document that owns it, and this file should link there.

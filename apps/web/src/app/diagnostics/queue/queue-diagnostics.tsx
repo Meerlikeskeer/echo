@@ -49,9 +49,32 @@ async function nativeTests(): Promise<string[]> {
   });
   check((await store.list())[0].state === "pending", "aborted state must roll back");
   passed.push("PASS native write request success followed by abort rolls back atomically");
+  // A page that dies mid-upload leaves `uploading` behind and nothing to finish
+  // it. recover() must hand it back as pending and leave a processed row alone.
+  // The unit tests only cover the pure helper; this is the real transaction.
+  const interrupted = new IndexedDBQueue(`${name}-interrupted`);
+  await interrupted.offer(chunks[0]);
+  await interrupted.offer(chunks[1]);
+  const [inFlight, completed] = await interrupted.list();
+  await interrupted.update({ ...inFlight, state: "uploading", attempts: 2, nextAttemptAt: 5000 });
+  await interrupted.update({ ...completed, state: "processed", nextAttemptAt: 0 });
+  // update() is handed different bytes under the same identity; the stored Blob
+  // is the only copy that exists and must survive that untouched. list()
+  // re-verifies every checksum, so a replaced Blob fails here rather than later.
+  await interrupted.update({ ...inFlight, audio: new Blob(["tampered"]), state: "uploading", attempts: 2, nextAttemptAt: 5000 });
+  await new IndexedDBQueue(`${name}-interrupted`).recover();
+  const restored = await interrupted.list();
+  check(restored[0].state === "pending" && restored[1].state === "processed", "stale uploading must recover; processed must not");
+  check(restored[0].attempts === 2 && restored[0].nextAttemptAt === 5000, "the attempt really happened; its count and backoff survive");
+  check(await restored[0].audio.text() === "synthetic-container-0", "recovery and update must never replace raw audio");
+  passed.push("PASS native recover() returns a stale uploading row to pending, leaves processed alone and keeps the raw Blob");
   const recovery = new IndexedDBQueue(RECOVERY_DB);
   for (const chunk of chunks) await recovery.offer(chunk);
-  passed.push("PASS pending reload fixture committed; reload page, then select Recover pending clips");
+  // Left mid-upload on purpose, so the reload check below exercises the state a
+  // terminated page actually leaves behind rather than a tidy one.
+  const [first] = await recovery.list();
+  await recovery.update({ ...first, state: "uploading", attempts: 1, nextAttemptAt: 1000 });
+  passed.push("PASS pending reload fixture committed with one chunk left uploading; reload page, then select Recover pending clips");
   return passed;
 }
 
@@ -88,9 +111,13 @@ export function QueueDiagnostics() {
     <button disabled={busy} className="rounded border p-3" onClick={() => { void run(nativeTests); }}>Run native storage tests</button>{" "}
     <button disabled={busy} className="rounded border p-3" onClick={() => { void run(capture); }}>Test capture persistence</button>{" "}
     <button disabled={busy} className="rounded border p-3" onClick={() => { void run(async () => {
+      const store = new IndexedDBQueue(RECOVERY_DB);
+      const before = await store.list();
+      check(before.some((row) => row.state === "uploading"), "expected one chunk left mid-upload: run the storage tests, reload, then recover");
+      await store.recover();
       const rows = await new IndexedDBQueue(RECOVERY_DB).list();
       check(rows.length === 3 && rows.every((row) => row.state === "pending"), "expected three pending chunks after reload");
-      return ["PASS recovered 3 pending chunks and verified Blob checksums after page reload"];
+      return ["PASS recovered 3 pending chunks, including one left mid-upload, and verified Blob checksums after page reload"];
     }); }}>Recover pending clips</button>
     <pre aria-live="polite" className="whitespace-pre-wrap">{busy ? "Running…" : report.join("\n")}</pre>
     <p>For reload evidence, run storage tests, reload this page, then recover. Budget tests exercise a real aborted transaction, but do not simulate physical disk exhaustion. Mobile termination and OS eviction remain manual tests.</p>

@@ -305,13 +305,13 @@ Next.js 16 provides `--experimental-https`, which generates a locally trusted ce
 
 ## ENG-010 — Reproducible hosted deployment and deployed-origin verification
 
-**Status:** Implemented; **nothing is deployed** and the deployed check has never run against a hosted origin · **Branch:** `eng/ENG-010-deploy-hosted-origin`, off `main` @ `f234040` · **Dependencies:** ENG-002 (satisfied) · **Decisions:** ADR-008, ADR-010, ADR-013 — none changed
+**Status:** **Done and fully verified.** Merged to `main`; Echo is deployed, and on 2026-09-08 `npm run test:deployed` completed its first full pass against the hosted origin · **Branch:** `eng/ENG-010-deploy-hosted-origin`, off `main` @ `f234040`; completion recorded by DOC-004 · **Dependencies:** ENG-002 (satisfied) · **Decisions:** ADR-008, ADR-010, ADR-013, ADR-014 — none changed
 
 **Acceptance:** A deployment can be produced from the repository rather than reconstructed from memory, and a deployed origin can be verified rather than assumed. Concretely: the build is defined in version control; a single command checks a live origin end to end without printing credentials; and the README names every step and variable the owner must supply. No new dependency, framework, host, storage or authentication decision.
 
 **Rationale.** ADR-013 put deployment ahead of mobile capture, and it is a prerequisite for more than mobile. `checksum()` needs `crypto.subtle`, which browsers expose only in a secure context, so until Echo is served over HTTPS from a real origin, recording works nowhere except the machine running it. Nothing had been provisioned and nothing recorded how it would be — a Vercel project configured through the dashboard would leave the build arrangement invisible to Git and unreviewable.
 
-**Scope.** Added `vercel.json` (framework, `npm ci`, `npm run build`, `apps/web/.next`), `scripts/deployed-smoke.mjs`, and `npm run test:deployed`. Rewrote the README *Vercel* section as a six-step provisioning runbook and cross-linked the check from the self-hosted section, since it is host-agnostic. Added an *ENG-010 deployment boundaries* section to `ARCHITECTURE.md`. Corrected two stale README claims found in the same section: the `selfhost-container` job **is** in `.github/workflows/pull-request.yml`, and the container image is therefore verified in CI.
+**Scope.** Added `vercel.json` (framework, `npm ci`, `npm run build`, `apps/web/.next`, and `git.deploymentEnabled: false` per **ADR-014** — a push deploys nothing; deploying is always an explicit `npx vercel`), `scripts/deployed-smoke.mjs`, and `npm run test:deployed`. Rewrote the README *Vercel* section as a six-step provisioning runbook and cross-linked the check from the self-hosted section, since it is host-agnostic. Added an *ENG-010 deployment boundaries* section to `ARCHITECTURE.md`. Corrected two stale README claims found in the same section: the `selfhost-container` job **is** in `.github/workflows/pull-request.yml`, and the container image is therefore verified in CI.
 
 **The failure mode the check exists to catch.** `apps/web/src/proxy.ts` gates every path with no exclusions, and `scripts/production.test.mjs` proves that against `next start`. A hosting platform commonly serves `/_next/static` from a CDN edge that answers *before* the application runs. If it does, every compiled asset is public on the deployed origin while every local check stays green — the ENG-002 static-asset failure shape, one layer further out, and invisible to any suite that runs on loopback. `deployed-smoke.mjs` fetches each linked asset without credentials and fails if any returns 200.
 
@@ -322,9 +322,168 @@ Next.js 16 provides `--experimental-https`, which generates a locally trusted ce
 - **What changed:** `vercel.json` (new), `scripts/deployed-smoke.mjs` (new), `package.json` (`test:deployed` added), `README.md`, `ARCHITECTURE.md`, `TASKS.md`, `STATUS.md`. No application source file is touched.
 - **Verified:** `npm ci` (0), `npm run check` (0 — 53 unit, 6 production HTTP, 4 self-host parity, production build) and the bounded-controller tests (0 — 16 tests), plus `deployed-smoke.mjs` against a local `next start` production server built from this branch, which exercises every check in it except the transport: 9 compiled assets each refused unauthenticated and served to the owner. Exact exit codes are in the `STATUS.md` snapshot.
 - **The check was made to fail on purpose, six ways**, because a check that has only ever passed proves nothing. The important one: a local proxy standing in for a CDN edge, serving `/_next/static` without credentials and passing everything else through, made the script fail on the first asset with the intended message. The other five cover a wrong owner password, plain HTTP on a non-loopback host, credentials embedded in the URL, an unreachable origin and missing `ECHO_OWNER_*`. The table is in the `STATUS.md` verification snapshot.
-- **Not verified, and this is the point of the task:** no hosted deployment exists, so the script has never met a CDN, a real certificate, or Vercel's build. `vercel.json` is unexercised until the first build runs. If that build fails, the documented fallback is setting Root Directory to `apps/web` with "Include source files outside of the Root Directory" enabled — record in this entry why it was needed.
-- **Owner steps, which an agent cannot perform:** `vercel login` and `vercel link` are interactive, and `ECHO_OWNER_PASSWORD` and the provider keys are the owner's secrets. Follow the README runbook: generate the password, create the project, set the variables server-side for Production and Preview, deploy a preview, run `npm run test:deployed` against it, then promote and run it again against production. A preview passing does not verify production; they carry different variables.
-- **Next task this unblocks:** mobile capture acceptance against the deployed origin — the task ADR-013 deferred. Open it once step 6 of the runbook passes, not before.
+- **Now verified, and this was the point of the task (2026-09-08).** A hosted deployment exists and the script has met a real CDN, a real certificate and Vercel's build. `npm run test:deployed` against `https://echo-73alocfwt-…vercel.app/` exited **0**: anonymous requests challenged, wrong credentials refused, the page and **9 compiled assets served to the owner only**, diagnostics hidden, the recording endpoint guarded, providers reported configured. **The CDN answers behind Echo's gate, not in front of it** — the failure this task was built to detect does not occur on Vercel. `vercel.json` is exercised; the Root Directory fallback was never needed. Getting here took three platform-side problems, none of them a code defect: `devDependencies` (ENG-011, later disproved), the `standalone` build hook (ENG-012, a real fix), the Vercel Toolbar upload error (DOC-003, resolved by disabling the toolbar), and finally Deployment Protection (ENG-013, an owner setting).
+- **Owner decision recorded mid-task:** on 2026-09-08 the owner declined deploy-on-push, because parallel task branches push several times an hour and the plan's build allowance would be spent on version-control activity rather than on deployments anyone asked for — exhausting it mid-day would take the deployed origin down for reasons unrelated to the code. Recorded as ADR-014 and enforced in `vercel.json`, not by habit. CI is untouched.
+- **Owner steps, which an agent cannot perform:** `vercel login` and `vercel link` are interactive (answer `./` to the code-directory prompt), and `ECHO_OWNER_PASSWORD` and the provider keys are the owner's secrets. Follow the README runbook: generate the password, create the project, set the variables server-side for Production and Preview, deploy a preview, run `npm run test:deployed` against it, then promote and run it again against production. A preview passing does not verify production; they carry different variables.
+- **Next task this unblocks, and the precondition is now met:** mobile capture acceptance against the deployed origin — the task ADR-013 deferred. Step 6 of the runbook has passed, so **this can now be opened.** It has not been opened yet; doing so is the next piece of product work alongside WEB-004's browser acceptance.
+
+## ENG-011 — The first production deployment failed: Vercel installs without devDependencies
+
+**Status:** Merged, but **it was not the cause** — corrected by ENG-012 · **Branch:** `eng/ENG-011-vercel-dev-dependencies`, off `main` @ `318c356` · **Decisions:** none changed
+
+> **Correction, 2026-09-08.** The build log from the real deployment disproves the diagnosis below. Vercel's install reported `added 378 packages` — the full tree, devDependencies included — so Vercel does **not** set `NODE_ENV=production` for the install step and a plain `npm ci` was never the problem. The local reproduction was real but recreated a condition the platform does not create, and the conclusion was drawn from it before the build log was read. `--include=dev` is kept: it is correct, explicit and harmless. The actual cause is in **ENG-012**.
+
+**Symptom.** The first `npx vercel --prod` failed at `318c356` with `Command "npm run build" exited with 1` and nothing else. The same commit builds cleanly on the development machine, and CI is green, so the failure was invisible to every check the repository had.
+
+**Cause, reproduced rather than guessed.** Vercel sets `NODE_ENV=production` for the install step. npm reads that as `--omit=dev`, so ENG-010's `"installCommand": "npm ci"` installed **26 packages instead of 373**. Everything `next build` needs to compile is a devDependency — `typescript`, `tailwindcss`, `@tailwindcss/postcss`, `@types/*` — and correctly so: they are build-time tools, not runtime dependencies. The build died resolving `@tailwindcss/postcss` from `apps/web/src/app/globals.css`, and Vercel surfaced only the exit code.
+
+**Fix.** `"installCommand": "npm ci --include=dev"` in `vercel.json`. `--include=dev` overrides the inherited `--omit=dev` and restores the full tree. Moving the packages into `dependencies` would also work and is wrong: it misdescribes them and ships build tooling into the runtime bundle, which ADR-010's self-hosted image would then carry.
+
+**Why nothing caught it.** Every existing check installs with the development default. `npm run check`, CI and the container build all run `npm ci` with `NODE_ENV` unset, so all three install devDependencies and pass. The failure needs `NODE_ENV=production` at install time, which only the hosting platform supplies — the same shape as the risk ENG-010's deployed check exists for, one step earlier in the pipeline: a condition no local suite reproduces.
+
+### Handoff
+
+- **What changed:** `vercel.json` (`installCommand`), `README.md` (why `--include=dev` is required, with the local reproduction), `TASKS.md`, `STATUS.md`. No application source.
+- **Verified by reproduction, in a clean clone of `318c356` with no environment file:** `NODE_ENV=production npm ci` installed 26 packages, `typescript` and `tailwindcss` absent, and `npm run build` exited **1** with the PostCSS resolution failure — the reported symptom. The same clone with `NODE_ENV=production npm ci --include=dev` installed 373 packages and `npm run build` exited **0**.
+- **Not verified:** that Vercel now builds. Only a real deployment shows that, and `npx vercel` cannot run from an agent sandbox (npm cache permissions). The owner runs `npx vercel` after merging this.
+- **If the build still fails**, the next suspects are the Root Directory setting on the Vercel project and `output: "standalone"` in `next.config.ts`, which ENG-002 requires for ADR-010 and which Vercel handles differently from a self-hosted bundle. Neither was implicated in this failure; get the build log from the deployment's Inspect URL before changing either.
+
+## ENG-012 — `output: "standalone"` breaks Vercel's build hook
+
+**Status:** **Confirmed against Vercel — the build completes.** Merged as `main` @ `53c0851` · **Branch:** `eng/ENG-012-vercel-build-output`, off `main` @ `617a385` · **Decisions:** ADR-010 unchanged and the reason this is conditional rather than removed
+
+> **Confirmed 2026-09-08.** The deployment at `53c0851` logged `Running onBuildComplete from Vercel`, the full route table and `Build Completed in /vercel/output [20s]`. The `ENOENT` is gone and the diagnosis held. Deployment then failed at Vercel's *upload* step, which is a separate matter recorded in STATUS.md and not a repository defect: `Cannot patch preview comments when immutable static file upload is enabled. Upgrade to next@v16.3.0-canary.32 or newer` — advice that does not apply, since the repository runs Next **16.3.4** and `16.3.0-canary.32` is a prerelease of `16.3.0`. Preview comments and the Vercel Toolbar are account/project features this repository neither sets nor can set.
+
+**Symptom, from the deployment build log.** Install succeeded with all 378 packages, `next build` compiled successfully in 5.1 s, TypeScript finished, static pages generated — then:
+
+```
+Running onBuildComplete from Vercel
+> Build error occurred
+Error: ENOENT: no such file or directory, open
+  '/vercel/path0/apps/web/.next/next-server.js.nft.json'
+```
+
+**Cause.** `onBuildComplete` is Vercel's own hook, not Next's, and it reads `.next/next-server.js.nft.json`. Vercel applies its `modifyConfig` to the project first (the log says so), and with `output: "standalone"` the trace file is not where the hook looks. Everything before it passes, so the failure arrives after a successful build and reads as a code error. It is not one: the same commit builds and runs locally, in CI and in the container.
+
+**Fix.** `apps/web/next.config.ts` sets `output` from `process.env.VERCEL`: `standalone` everywhere Echo is self-hosted, absent on Vercel, which does its own output tracing. `vercel.json` also drops `outputDirectory`; the Next.js builder locates its own output and naming one competed with it. ADR-010 is untouched — the container path still gets exactly what it needs, which is why this is conditional rather than a removal.
+
+**Guarded, because this class of bug is invisible locally.** `apps/web/tests/next-config.test.ts` asserts standalone off Vercel, absent on it, and the tracing root in both. Verified the guard fails without the fix: reverting `output` to an unconditional `"standalone"` fails *"Vercel builds do not, because its build hook cannot find the trace file"*, 71 of 72 passing. Unit count 69 → **72**.
+
+### Handoff
+
+- **What changed:** `apps/web/next.config.ts`, `vercel.json` (`outputDirectory` removed), `apps/web/tests/next-config.test.ts` (new), `README.md`, `ARCHITECTURE.md`, `TASKS.md` (including a correction to ENG-011), `STATUS.md`.
+- **Verified locally, both paths:** `VERCEL=1 CI=1 npm run build` exits **0**, emits `apps/web/.next/next-server.js.nft.json` and **no** `standalone` directory — the shape Vercel's hook expects. A normal `npm run check` exits **0** with **72 unit, 7 production HTTP, 4 self-host parity**, and `.next/standalone` is still produced, so ADR-010's container path is intact. Controller **0**, 16 tests.
+- **Not verified:** that Vercel now builds. Only a deployment shows that, and the CLI cannot run from an agent sandbox.
+- **If it still fails**, the next suspect is the project's **Root Directory** setting, which lives in Vercel's dashboard rather than in Git and so is invisible from here. Get the build log again before changing anything; two diagnoses in this task have already been made without one, and one of them was wrong.
+
+## ENG-013 — Name Vercel Deployment Protection instead of failing with `302 !== 401`
+
+**Status:** Done; **verified against the live deployment** · **Branch:** `eng/ENG-013-deployment-protection`, off `main` @ `53c0851` · **Decisions:** none changed
+
+**What the first real run of `npm run test:deployed` found.** The deployed origin answered **302**, not 401, and redirected anonymous requests to `https://vercel.com/sso-api`. **Vercel Deployment Protection is enabled, so Echo's own access gate is never reached.** Access to the deployment is controlled by the owner's Vercel account rather than by `ECHO_OWNER_USERNAME` / `ECHO_OWNER_PASSWORD`, and every later assertion in the script would have been testing Vercel's login page rather than Echo.
+
+**This is the check doing its job.** It is the same class of finding ENG-010 was built for — the platform answering in front of the application, invisible to every suite that runs on loopback — and it is the second one this script has caught before a human did.
+
+**Change.** `scripts/deployed-smoke.mjs` now detects a 3xx to Vercel's SSO (by `location` or the `_vercel_sso` cookie) before asserting, and exits 1 naming the cause, the consequence and the fix. A bare `302 !== 401` sends the reader to `proxy.ts`, which is not where the problem is.
+
+**Owner action, not a code change:** Vercel dashboard → Project → Settings → **Deployment Protection** → turn **Vercel Authentication** off, then re-run the check. Echo gates every path itself with no exclusions; that gate is what the deployment is supposed to be protected by, and it cannot be verified while Vercel's own login sits in front of it.
+
+### Handoff
+
+- **What changed:** `scripts/deployed-smoke.mjs`, `TASKS.md`, `STATUS.md`. No application source.
+- **Verified against the real origin** at `https://echo-73alocfwt-…vercel.app`: the new branch fires and prints the diagnosis instead of an assertion trace. Locally `npm run check` exit 0 — 72 unit, 7 production HTTP, 4 self-host parity.
+- **Resolved 2026-09-08.** The owner turned Vercel Authentication off and the deployed check completed a **full pass** — see DOC-004 and the `STATUS.md` snapshot. The CDN static-asset question ENG-010 exists to answer is now answered: the edge does not serve `/_next/static` in front of the gate.
+- **A consequence worth stating plainly:** with Deployment Protection off, **Echo's own fail-closed Basic gate is the only thing in front of the deployed origin.** That is the intended design under ADR-008, and the passing run is the evidence it holds on the platform — but it means the gate is now load-bearing in production, not merely a second layer behind Vercel's login. Weakening `proxy.ts` or adding a path exclusion is now a production access change.
+- **This branch's diagnostic can no longer fire against the live origin,** because the condition it detects has been removed. It stays as a regression guard: if Deployment Protection is ever re-enabled, the script says so in one sentence instead of a `302 !== 401` assertion trace. It is recorded as the seventh negative control in `STATUS.md`, and it is the only one observed live rather than simulated.
+
+## DOC-004 — Record the first full pass of the deployed check
+
+**Status:** Done · **Branch:** `docs/DOC-004-deployed-check-passes`, off `eng/ENG-013-deployment-protection` @ `4fe9f03` (which is `main` @ `26006fb` plus DOC-003 and ENG-013) · **Decisions:** none changed
+
+**Why it is stacked, not branched from `main`.** The run it records is the run that made ENG-013's new diagnostic stop firing, and it edits the same `STATUS.md` paragraphs ENG-013 wrote. Branching from `main` would have produced a guaranteed conflict and split one story across two reviews. Declared here per `AGENTS.md`.
+
+**What happened.** The owner turned Vercel Authentication off in Settings → Deployment Protection and ran `npm run test:deployed` against the hosted origin. It exited **0** — the first time the check has completed a full pass against a real deployment in the project's history. Every assertion in `scripts/deployed-smoke.mjs` ran against a real CDN and a real certificate rather than loopback.
+
+**Why this specific result matters more than "the tests pass".** ENG-010 was built around one risk that no local suite can see: a hosting platform serving `/_next/static` from an edge that answers *before* the application does, leaving every compiled asset public on the deployed origin while `npm run check` stays green. **All 9 linked assets were refused unauthenticated and served only to the owner.** Vercel's edge respects `apps/web/src/proxy.ts`. The risk was real, the check was built to detect it, the check ran, and the answer is negative — which is the only way that question could ever have been closed honestly.
+
+### Handoff
+
+- **What changed:** `STATUS.md` and `TASKS.md` only. No application source, no script, no configuration.
+- **Verified on this branch, 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6:** `npm ci` exit 0. `npm run check` exit 0 in a checkout named `echo` — **72 unit, 72 pass**; production build; **7 production HTTP, 7 pass**; **4 self-host parity, 4 pass**. `python3 -m unittest discover -s tests` exit 0 — **16 tests, OK**. The verification floor holds: 72 / 7 / 4 / 16, nothing removed, nothing weakened.
+- **One test is coupled to the checkout's directory name, and it is worth fixing under ENG-012, not here.** `apps/web/tests/next-config.test.ts` asserts `config.outputFileTracingRoot?.endsWith("echo")`. In a git worktree the repository root is `.claude/worktrees/<branch>`, so that assertion fails on the folder name while `next.config.ts` behaves correctly — it derives the root from `import.meta.url`, which is right in both locations. Confirmed both ways at the same commit: 72/72 in `~/Documents/GitHub/echo`, 71/72 in a worktree. **This is not a regression and not a code defect**, but it does mean `npm run check` cannot pass in any worktree, which matters now that parallel branches are the normal way of working here. The fix is one line — compare against the resolved repository root instead of a hard-coded name — and it belongs to ENG-012, whose test it is. Not done here: one task per branch.
+- **Not verified here:** the deployed run itself was the owner's, not this session's — an agent sandbox cannot reach the platform. It is recorded as the owner's run and marked as such in the snapshot. The URL is deployment-specific rather than a project alias; a future alias should be re-checked rather than assumed.
+- **Next:** open mobile capture acceptance as its own task (ADR-013's precondition is now met), finish WEB-004's four native browser checks, and decide the proposed `status/in-flight/<TASK-ID>.md` split, which needs an ADR.
+
+## DOC-005 — The living documents still said nothing was deployed
+
+**Status:** Done · **Branch:** `docs/DOC-005-deployed-doc-drift`, off `main` @ `b44ec5b` · **Decisions:** none changed
+
+**What was wrong.** `ARCHITECTURE.md` and `README.md` asserted in seven places that Vercel was **not yet provisioned**, that `scripts/deployed-smoke.mjs` had **never been run against a deployment**, and that **"Nothing is deployed today: no Vercel project, environment variables, or preview deployments are configured."** ENG-010, ENG-013 and DOC-004 had disproved all of it: the project exists, the owner set all ten environment variables for Production and Preview, and the deployed check passed on 2026-09-08.
+
+**Why this was worth a task rather than a passing edit.** `STATUS.md` states that where it disagrees with `ARCHITECTURE.md`, **`ARCHITECTURE.md` wins and `STATUS.md` is stale**. The authoritative document was therefore telling every future session that no Vercel project existed, and a session correctly following that routing rule could have tried to provision one that was already live — a real action against the owner's account, not merely a confusing sentence. This is the same failure mode ADR-015 was written about, in a different file: documentation that nobody was obliged to move forward when the facts moved.
+
+**What the corrections say.** They record what DOC-004 actually established, and they carry its two limits forward rather than replacing one overclaim with another: the URL tested was deployment-specific rather than a project alias, so an alias must be re-checked rather than assumed; and with Vercel Deployment Protection off, **Echo's own fail-closed gate is the only thing in front of the origin**, which makes `apps/web/src/proxy.ts` load-bearing in production. Deploying remains an explicit owner-run command, never a push (ADR-014).
+
+**The container claim was left alone, because it is true.** The self-hosted image is built and smoke-checked in CI and has never been deployed anywhere — no registry, no host, no TLS. That row now says so precisely, instead of sharing a "not yet provisioned" label with a Vercel target that no longer needs one.
+
+### Handoff
+
+- **What changed:** `ARCHITECTURE.md` (three Hosting and Deployment rows, and the sentence at the end of the ADR-010 paragraph) and `README.md` (the stack-table Hosting row, the Deployment section intro, and the bolded "Nothing is deployed today"). **No application source, no script, no configuration, no decision.**
+- **Deliberately not touched, and this is the point of the task rather than an omission.** `DECISIONS.md` ADR-008 and ADR-013 both contain "not yet provisioned". **ADRs are dated records of what was decided and what was true then, not living status.** ADR-008's consequence was accurate when written; this repository amends or supersedes ADRs rather than rewriting them, and rewriting them here would destroy the audit trail the format exists for. `TASKS.md`'s ENG-002 *Limitations and blockers* was also left: it is a dated handoff, and it is not even wrong — it describes the **container** path, which still has no registry, no host and no TLS.
+- **How the scope was found:** a repository-wide search for `not yet provisioned`, `nothing is deployed` and `never yet run against a deployment`. Nine hits: seven corrected, two left for the reasons above. The same search after the change returns only those two.
+- **Verified, 2026-09-08, Node 22.23.2 / npm 10.9.8**, in the worktree `.claude/worktrees/doc-004-deployed-check-passes`: `check:tracked` 0 · `status:check` 0 (30 tasks) · lint 0 · typecheck 0 · **72 unit, 71 pass, 1 fail** · build 0 · **7 production HTTP, 7 pass** · **4 self-host parity, 4 pass**. Documentation-only, so the counts are **unchanged rather than higher**, which is the correct outcome here. The single unit failure is the known worktree artefact asserting the checkout is named `echo`, identical before and after.
+- **This branch does not contain WEB-005.** It is cut from `main` @ `b44ec5b`, so its floor is the pre-WEB-005 one (72 / 7 / 4 / 16). WEB-005 raises that floor to 91 / 8 / 4 / 16 on its own branch; whichever merges second inherits the other's counts and neither weakens anything.
+- **Next:** nothing follows from this task. It closes a gap rather than opening one.
+
+## ENG-014 — Stop STATUS.md from causing merge conflicts
+
+**Status:** Done · **Branch:** `eng/ENG-014-status-per-task-files`, branched off `docs/DOC-004-deployed-check-passes` @ `96a1b2a` and since merged with `main` @ `5402d30`, which now contains that work · **Decisions:** ADR-015 accepted
+
+**Acceptance:** Two parallel task branches can each follow the update protocol in full without touching the same lines of any file. `STATUS.md` stops carrying per-task content, and the task table can no longer drift from `TASKS.md` without a check failing.
+
+**The problem, measured.** `STATUS.md`'s update protocol required **every** task to write the same three regions: the *In flight* section, one row of a shared fifteen-row table, and the verification snapshot. Git conflicts when branches touch the same region, so the protocol did not merely permit collisions — it mandated them. **29 of the 61 commits on `main` touched `STATUS.md`** (48%), and the two volatile sections were **92 of its 192 lines** (also 48%). Half the file was the half everyone had to rewrite.
+
+**The cost was mostly invisible**, because the usual escape was stacking branches rather than resolving conflicts: DOC-003 under ENG-013 under DOC-004 under this task, four deep. `AGENTS.md` warns against stacking for unrelated and better reasons — a stacked branch inherits its base's review burden and cannot be reverted alone. One rule in the repository was pushing directly against another.
+
+**A second failure came from the same shape.** Because *In flight* was shared and easy to append to, finished work accumulated there instead of moving somewhere durable. It reached 51 lines and simultaneously contained "provisioning started, nothing deployed yet" and, three paragraphs later, "ECHO IS DEPLOYED". Removing it surfaced a second stale claim that had been sitting in the task table: a row asserting ADR-009 and ADR-010 were "Accepted, **not on `main`**" when both have been on `main` for some time.
+
+**Scope delivered**
+
+- `status/in-flight/<TASK-ID>.md`, one file per active task, with a `README.md` stating the convention and — more importantly — what must **not** go in these files, since they are deleted on merge.
+- `scripts/status-table.mjs` and `npm run status:table` / `npm run status:check`. The table in `STATUS.md` is generated from the `**Status:**` lines already in `TASKS.md` and lives between two HTML comment markers. `npm run check` now runs `status:check` second, right after `check:tracked`.
+- `STATUS.md` restructured: *In flight* becomes a pointer, the per-run verification snapshot becomes a **verification floor**, and the durable content that was buried in *In flight* moves into *What exists today* and a new *Standing facts and hard-won lessons* section. **Nothing was dropped except claims that were false.**
+- **ADR-015** in `DECISIONS.md`, and the update protocol rewritten in `STATUS.md`, `AGENTS.md` and `CLAUDE.md` to match.
+
+**What deliberately did not change.** None of the version-control discipline in `AGENTS.md` is relaxed. `STATUS.md` is still the first and only file every session must read. The protocol still applies in full — record before starting, keep it current, a task is not done until its `TASKS.md` handoff says so — and the counts are still a floor. This task changed *where* status is written, not *whether* it is.
+
+### Handoff
+
+- **What changed:** `STATUS.md`, `TASKS.md`, `AGENTS.md`, `CLAUDE.md`, `DECISIONS.md` (ADR-015), `package.json`, `scripts/status-table.mjs` (new), `status/in-flight/README.md` (new), `status/in-flight/ENG-014.md` (new), `status/in-flight/WEB-004.md` (new). **No application source is touched.**
+- **Verified, 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6**, on `eng/ENG-014-status-per-task-files` @ `3858bd9`. `check:tracked` 0 · **`status:check` 0 (29 tasks)** · lint 0 · typecheck 0 · **72 unit, 71 pass, 1 fail** · production build 0 · **7 production HTTP, 7 pass** · **4 self-host parity, 4 pass** · **16 controller tests, OK**.
+- **The single unit failure is the known worktree one and nothing else.** It is `output file tracing still points at the repository root in both cases`, which asserts the checkout is named `echo`; this branch was verified inside `.claude/worktrees/doc-004-deployed-check-passes`. Because `npm run check` halts on it, the four steps after it were run individually and all passed — that is where the build, HTTP, parity and controller numbers above come from. **This branch changes nothing under `apps/`** — `git diff --stat 96a1b2a HEAD -- apps/` is empty — so the unit suite is byte-identical to DOC-004's, which ran **72 pass, 0 fail** in a checkout named `echo`. **The 72/7/4/16 floor holds.**
+- **The new check was made to fail on purpose, two ways**, because a check that has only ever passed proves nothing. Editing a generated row by hand: **exit 1**, naming `TASKS.md` as the source of truth and `npm run status:table` as the fix. Removing a marker from `STATUS.md`: **exit 2**, naming the missing marker. Restored, and `status:check` returns to exit 0 on 28 tasks.
+- **The base was not `main` when this branch started, and that is declared.** At the time, `main` lacked DOC-004 and ENG-013 (pull requests #20 and #19), and restructuring `STATUS.md` from `main` would have conflicted with both across most of the file — the exact problem this task removes, and a fourth instance of it. **Both have since been merged**, so `main` @ `5402d30` now contains them; this branch was merged with that `main` and the merge was clean, because the content was already in its history. **No stacking remains: this pull request stands alone against `main`.**
+- **Transitional, and worth knowing:** branches that were already in flight when ADR-015 landed have no `status/in-flight/` file. `test/WEB-004-browser-acceptance` was migrated here by hand so its content was not lost with the old section. **WEB-005 on `feat/WEB-005-incremental-upload` has not been**, deliberately — another contributor owns it, and writing their in-flight file would both guess at their state and break the rule that a task's file is its own. They should add it.
+- **Not verified:** nothing about the running application changed, so no application behaviour was re-checked beyond the full suite. The generator parses the `**Status:**` line format that all 28 current entries share; an entry written in a different shape would silently fall back to `Todo`, which `status:check` would then show as a mismatch rather than a wrong row.
+- **Next:** the one-line ENG-012 fix so `npm run check` passes inside a worktree; opening mobile capture acceptance as its own task; WEB-004's four browser checks.
+
+
+## ENG-015 — Scope the container job to where its result can change
+
+**Status:** Implemented; awaiting owner review · **Branch:** `eng/ENG-015-container-job-scope` · **Dependencies:** ENG-002, ENG-007
+
+**Acceptance:** The self-hosted container image is still verified before anything merges, and is no longer rebuilt on work-in-progress pushes whose result it cannot change.
+
+### Handoff (2026-09-08)
+
+- **Branch/base:** `eng/ENG-015-container-job-scope`, from `main` @ `1559da2`.
+- **Why.** `.github/workflows/pull-request.yml` triggers `on: push` with no branch filter, so every push to every branch ran both `verify` and a full `docker build` plus image inspection and container smoke check. Echo's builder/checker protocol freezes acceptance tests *before* the builder starts, so a task branch is deliberately red from the freeze commit until implementation lands — five pushes on WEB-006 — each paying for a container build whose result could not change until the code existed.
+- **Change.** The container job moves to its own `.github/workflows/selfhost-container.yml`, triggered on `main`, on `pull_request` (`opened`, `synchronize`, `reopened`, `ready_for_review`) guarded by `if: github.event_name != 'pull_request' || github.event.pull_request.draft == false`, and on `workflow_dispatch`. `verify` is untouched and still runs `npm run check` on every push to every branch.
+- **This does not weaken the gate.** A draft cannot be merged, and marking a pull request ready for review runs the job before the merge button means anything. Docker is unavailable on the development machine, so this job remains the only place the image is ever built — which is the argument for spending it where it counts.
+- **Verified before commit:** both files parse as YAML, and the `verify` and `selfhost-container` job bodies were compared against `origin/main` after parsing and are identical — same runner, timeout, env and all nine container steps. Only the trigger, the `if` guard and the concurrency group differ.
+- **Not claimed.** This changes no notification volume for a genuinely failing branch: `verify` and `selfhost-container` are independent jobs, so a red `verify` reports once per push either way, which is correct. What it removes is roughly fifteen minutes of CI compute per work-in-progress commit.
+
+**Next:** owner reviews. The workflows themselves can only be exercised by GitHub, so this branch's own first push is their first real run — confirm that `verify` ran and `Self-hosted container` did **not**, since its pull request opens as a draft.
 
 ## ENG-003 — Shared status file and reading map
 
@@ -518,9 +677,40 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 ## WEB-005 — Incremental upload and transcription
 
-**Status:** Todo · **Dependencies:** WEB-003, WEB-004
+**Status:** Implemented and verified by test; the hook wiring that drains during capture is code-verified but untested and needs browser acceptance — NOT Done · **Dependencies:** WEB-003, WEB-004
 
 **Acceptance:** Upload/transcribe during recording with durable status, bounded retry/backoff and idempotent jobs; demonstrate reordered uploads and provider failures recover without duplicated work.
+
+### Handoff (2026-09-08)
+
+- **Branch/base:** `feat/WEB-005-incremental-upload`, from `main` @ `b44ec5b` (the merge of ENG-014, PR #21). The branch already existed as an empty placeholder pointing at `main` with no commits of its own; ENG-014's handoff had noted that whoever owned it should add its `status/in-flight/` file, which this task did before starting work.
+- **Decision first:** **ADR-016** was written and committed before any code, as ADR-012 was for WEB-004. It records both halves of REQ-003 — draining during capture, and a job ledger keyed by chunk identity — and is emphatic about what the ledger does **not** promise.
+- **Implemented.** Client: `sync()` no longer refuses while capture is active and `persist()` fires a drain after each durable commit without awaiting it, so the microphone never waits on the network; `drainQueue` continues past a failed entry instead of stopping the queue behind it; retry is bounded at 8 attempts before `blocked` with a readable reason; `uploading` is a **persisted** state, and recovery on load returns a stale `uploading` row to `pending` while never touching a `processed` one. Server: `POST /api/recordings` consults a `JobLedger` keyed `sessionId/id/checksum`, replaying a stored result or joining an in-flight job rather than paying for a second provider call, marked in both a `replayed` body field and an `x-echo-replayed` header.
+- **The ledger is deliberately in-process and best-effort, and the code says so.** A cold start, a redeploy, a second instance or a TTL expiry all lose it, and the retry then costs a provider call exactly as before. Nothing in the code, comments, UI or tests claims exactly-once; the only two matches for that phrase in the tree are explicit denials. Exactly-once needs a ledger that outlives the process — the relational-database decision, which stays **Open**.
+- **Builder/checker, run manually.** The Codex-backed controller in `AGENT_WORKFLOW.md` was not used: it needs Codex credentials and `agent-loop.json` is still `"ready": false`. Acceptance criteria were written before the builder saw the task, and an independent read-only checker reviewed the result. This is the same manual discipline WEB-004 used, and it carries none of the executable loop's guarantees.
+- **The checker found no behavioural defect** and returned `goal_met: false` on coverage alone. Two of its findings were repaired rather than documented:
+  1. Updating one existing assertion from `pending` to `uploading` (required by ADR-016) had quietly left *"what is on disk after a failed result-write is still retryable"* pinned by nothing. New test `a row left uploading is re-attempted by the next drain, not stranded` restores it, and names the plausible future hardening that would break it.
+  2. A **pre-existing** production test posted the same chunk twice to prove MIME normalization; once both posts shared a ledger key, its second assertion came from the replay branch instead of a real transcription. The second post now carries a distinct id, plus a new `x-echo-replayed: "false"` assertion so it cannot silently regress.
+- **`IndexedDBQueue.recover()` and `.update()` execute in no automated test** — only the pure functions they delegate to. The browser harness at `/diagnostics/queue` gained a scenario for `recover()` and the `uploading` state so the real implementation is at least exercised when WEB-004's pending browser acceptance is run.
+
+**Verified, 2026-09-08, Node 22.23.2 / npm 10.9.8, Python 3.9.6**, in the worktree `.claude/worktrees/doc-004-deployed-check-passes`. Every command below was re-run by the coordinator, not taken from the builder's report.
+
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm run check:tracked` | 0 | no source file is hidden from version control |
+| `npm run status:check` | 0 | table matches `TASKS.md` |
+| `npm run lint` | 0 | clean |
+| `npm run typecheck` | 0 | clean |
+| `npm test` | 1 | **91 tests, 90 pass, 1 fail** — up from 72. The single failure is the known worktree artefact `output file tracing still points at the repository root in both cases`, unchanged from the baseline taken before this work started |
+| `npm run build` | 0 | compiled |
+| `npm run test:production` | 0 | **8 tests, 8 pass** — up from 7 |
+| `npm run test:selfhost` | 0 | **4 pass** — floor held |
+| `python3 -m unittest discover -s tests` | 0 | **16 tests, OK** — floor held |
+| `npm run test:deployed` | not run | owner-only; needs a live URL and real credentials |
+
+**Not verified, and this is why the task is not Done.** Acceptance items A1–A3 — that the queue actually drains during capture, that `persist()` triggers it, and that capture never waits on it — **have no automated test.** They live in `useAudioQueue`, which needs a DOM, `navigator.locks` and IndexedDB, and this repository has no browser test runner; adding one would mean a new dependency. The pieces underneath them are tested and the wiring was read and traced by an independent checker, but read is not run. The same applies to the `navigator.locks` fail-closed branch and to `IndexedDBQueue`'s own methods.
+
+**Next:** owner reviews; the browser acceptance for this task should be run together with WEB-004's four outstanding checks at `/diagnostics/queue`, since both need the same session in a real Chrome and Safari.
 
 ## WEB-006 — Transcript stitching
 
