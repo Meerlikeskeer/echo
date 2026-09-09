@@ -760,9 +760,39 @@ It returned `goal_met: false` on **evidence**, and its findings were repaired ra
 
 ## WEB-007 — Structured artifacts
 
-**Status:** Todo · **Dependencies:** WEB-006
+**Status:** Implemented and verified by test; browser acceptance outstanding · **Branch:** `feat/WEB-007-structured-artifacts` · **Dependencies:** WEB-006
 
 **Acceptance:** Generate validated title, summary, notes, action items and research topics tied to transcript revision; reject malformed output and prevent stale generation overwrites.
+
+### Handoff (2026-09-09)
+
+- **Branch/base:** `feat/WEB-007-structured-artifacts`, from `main` @ `f68ccca`.
+- **No stack decision, and no new port.** `ARCHITECTURE.md` § *Provider boundaries* already states the LLM contract as "Transcript + schema → validated artifacts", so this extends the existing `notes` port with `generateArtifacts`. `generateNotes` is untouched and still produces per-chunk notes during capture, when no session transcript exists yet.
+
+**The rule the whole task turns on.** Artifacts are accepted only when their revision **equals** the transcript's revision at the moment the answer lands. The obvious alternative — order two revisions and keep the newer — cannot work, because a revision is a content hash and hashes do not order. Requiring an exact match makes a stale overwrite impossible *by construction* rather than by a comparison someone can get wrong: a generation that started from an older transcript does not match the transcript on screen and is discarded without ever being compared. A second, separate rule handles the one case equality cannot see — two generations racing for the *same* revision, where a retry overtakes the attempt it replaced — using a monotonic `generation` assigned when a generation starts. It is deliberately not consulted across revisions, so artifacts matching the current transcript always win.
+
+- **Implemented.** `lib/recording/artifacts.ts` holds the domain type, a strict validator, the revision function, the endpoint's input guard and the acceptance rule. `POST /api/sessions/artifacts` generates server-side, because provider credentials never reach the browser (REQ-009). `useSessionArtifacts` and `SessionArtifacts` request on demand and render the result inside the existing session transcript section.
+- **The endpoint computes the revision; it never accepts one.** Echo has one owner, so this is not about an untrusted caller. It is that a mislabelled revision defeats the staleness rule silently: artifacts bound to a revision their transcript never had would match the wrong transcript and overwrite newer ones, which is the exact defect this task exists to prevent. The caller therefore sends the transcript and no revision at all.
+- **Malformed output is refused, not repaired.** The validator rejects missing fields, wrong types, empty and oversize values, duplicates, and **unknown fields** — `ARCHITECTURE.md` forbids a vendor response shape reaching a domain type, and a tolerated extra key is exactly how one arrives. Rejections name a field and a reason code and never the offending value, because a provider response is untrusted text and `ProviderError` already refuses free-form messages. The `openai-compatible` adapter reuses that same validator rather than a second lenient parser, and unlike `generateNotes` it refuses a thin answer instead of substituting "Untitled recording": a placeholder bound to a revision is indistinguishable from a real result.
+- **Research topics are suggestions and nothing else.** REQ-005 separates suggested research from opt-in external research, which is WEB-013. Nothing looks anything up, the prompt says so, and the rendered section says so, because a topic list beside a summary reads as findings unless it is labelled.
+- **Generation is on demand.** A transcript changes on every chunk during capture; regenerating automatically would spend a provider call per chunk for a summary nobody asked for. Artifacts that no longer match the transcript stay on screen with a label rather than disappearing — outdated notes with a reason beat no notes and no reason.
+
+**A test in the first draft asserted something it did not prove, and was corrected.** It claimed length-prefixed revision encoding prevents a forged revision. A negative control disproved it: the test passes with the prefixes removed, because every record contributes a fixed number of fields and both counts are encoded, so the naive delimiter is already collision-free *given the surrounding structure*. The prefixes were kept — they are unambiguous without depending on anything around them, which is what survives the next variable-arity field — but the comment and the test now say only what is demonstrated. A second negative control confirmed the acceptance rule is load-bearing: disabling the equality check fails exactly the two stale-transcript tests.
+
+**Required command results, not substituted** (worktree `doc-web004-browser-evidence`):
+
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm run lint` | 0 | Clean, `--max-warnings=0`. |
+| `npm run typecheck` | 0 | Route types generated, `tsc --noEmit` clean. |
+| `npm test` | 1 | **149 unit, 148 pass, 1 fail.** The single failure is `next-config.test.ts`, which asserts the checkout directory is named `echo` and cannot pass in a worktree (ENG-012). Baseline on `main` was 114/113/1 with the same single failure. |
+| `npm run build` | 0 | Production build succeeded; `/api/sessions/artifacts` appears in the route table. |
+| `npm run test:production` | 0 | **9 pass, 0 fail**, up from the floor of 8. The new one exercises the endpoint over real HTTP against a production build. |
+| `npm run selfhost:assemble` then `npm run test:selfhost` | 0 / 0 | **4 parity tests pass.** |
+| `npm run check` | not run as a chain | Stops at the unit stage on the same worktree-only failure. Every stage after it was run individually, above. |
+| `python3 -m unittest discover -s tests` | not run | Controller only; this task touches no controller code. |
+
+**Next:** run the full `npm run check` from a checkout named `echo` for a true result, then owner review. **No browser acceptance is claimed.** Nothing here has run in a real browser: the on-demand request, the stale label appearing when a chunk lands mid-generation, and `crypto.subtle` computing a revision on the deployed origin all need the same Chrome and Safari session as the WEB-003 through WEB-006 items, and belong in [`status/acceptance/browser-acceptance.md`](status/acceptance/browser-acceptance.md).
 
 ## WEB-008 — Quick Note mode
 

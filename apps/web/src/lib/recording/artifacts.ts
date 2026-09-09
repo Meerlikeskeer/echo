@@ -228,6 +228,27 @@ export async function transcriptRevision(stitched: RevisionInput): Promise<strin
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * What the artifact endpoint answered, checked before it is believed.
+ *
+ * It is Echo's own endpoint, and the shape is still validated: a truncated read,
+ * an error page or a proxy's interception all arrive as "a response", and a
+ * malformed answer is refused wherever it appears. Extracted from the hook so
+ * this is covered by a test rather than only by review — it is where a wrong
+ * revision would enter the acceptance rule.
+ */
+export function readArtifactResponse(body: unknown): { readonly ok: true; readonly revision: string; readonly artifacts: SessionArtifacts } | { readonly ok: false } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false };
+  const envelope = body as Record<string, unknown>;
+  // A revision Echo did not compute is not a revision. Requiring the exact
+  // shape it produces stops a truncated or invented value reaching
+  // acceptArtifacts, where it would be compared as if it meant something.
+  if (typeof envelope.transcriptRevision !== "string" || !/^[a-f0-9]{64}$/.test(envelope.transcriptRevision)) return { ok: false };
+  const validated = validateArtifacts(envelope.artifacts);
+  if (!validated.ok) return { ok: false };
+  return { ok: true, revision: envelope.transcriptRevision, artifacts: validated.artifacts };
+}
+
 export type ArtifactDecision =
   | { readonly accepted: true; readonly record: ArtifactRecord }
   | { readonly accepted: false; readonly reason: "stale-transcript" | "superseded-generation" | "invalid-generation" };

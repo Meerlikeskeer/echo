@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  ARTIFACT_LIMITS, STITCHED_LIMITS, acceptArtifacts, isRevisionInput, transcriptForArtifacts, transcriptRevision, validateArtifacts,
+  ARTIFACT_LIMITS, STITCHED_LIMITS, acceptArtifacts, isRevisionInput, readArtifactResponse, transcriptForArtifacts, transcriptRevision, validateArtifacts,
   type ArtifactRecord, type SessionArtifacts,
 } from "../src/lib/recording/artifacts";
 import type { StitchedTranscript } from "../src/lib/recording/stitching";
@@ -222,6 +222,32 @@ test("the generator is given the stitched segments and their timings", () => {
   assert.deepEqual(transcript.segments.map((segment) => segment.text), ["One.", "Two."]);
   assert.equal(transcript.durationMs, 2000);
   assert.equal(transcriptForArtifacts(stitched({ segments: [], text: "" })).durationMs, 0);
+});
+
+// Where a wrong revision would enter the acceptance rule, so it is checked here
+// rather than believed because the endpoint is Echo's own. A truncated read, an
+// error page or an intercepting proxy all arrive as "a response".
+test("a well-formed endpoint answer is read back", () => {
+  const answer = readArtifactResponse({ transcriptRevision: "a".repeat(64), artifacts: good, sessionId: "session-a" });
+  assert.ok(answer.ok);
+  assert.equal(answer.revision, "a".repeat(64));
+  assert.equal(answer.artifacts.title, "Weekly planning");
+});
+
+test("an answer whose revision Echo could not have computed is refused", () => {
+  for (const revision of [undefined, null, 12, "", "not-a-digest", "A".repeat(64), "a".repeat(63), "a".repeat(65), "g".repeat(64)]) {
+    assert.equal(readArtifactResponse({ transcriptRevision: revision, artifacts: good }).ok, false, `expected refusal for ${String(revision)}`);
+  }
+});
+
+test("an answer carrying malformed artifacts is refused whole", () => {
+  const revision = "a".repeat(64);
+  for (const artifacts of [undefined, null, {}, { ...good, researchTopics: undefined }, { ...good, choices: [] }, [good]]) {
+    assert.equal(readArtifactResponse({ transcriptRevision: revision, artifacts }).ok, false);
+  }
+  for (const body of [null, undefined, "text", 42, [], [{ transcriptRevision: revision, artifacts: good }]]) {
+    assert.equal(readArtifactResponse(body).ok, false);
+  }
 });
 
 test("artifacts generated from the current transcript are accepted", () => {
