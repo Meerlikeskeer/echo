@@ -485,6 +485,162 @@ Error: ENOENT: no such file or directory, open
 
 **Next:** owner reviews. The workflows themselves can only be exercised by GitHub, so this branch's own first push is their first real run — confirm that `verify` ran and `Self-hosted container` did **not**, since its pull request opens as a draft.
 
+## ENG-016 — Auto-merge on green
+
+**Status:** Specified; owner must apply the workflow and settings · **Branch:** `eng/ENG-016-auto-merge-on-green` · **Dependencies:** ENG-007, ENG-015
+
+**Acceptance:** A branch whose required checks all pass merges into `main` without anyone pressing a button, and a branch whose checks fail never merges. What is checked does not change.
+
+### Handoff (2026-09-08)
+
+- **Branch/base:** `eng/ENG-016-auto-merge-on-green`, from `main` @ `f68ccca`.
+- **Why.** The owner is the merge button. Review latency, not check latency, is what holds finished work on a branch, and `main` has already fallen fourteen commits behind that way once. Auto-merge does not skip a check; it presses the button the moment every required check is green.
+- **Agents cannot apply this.** `.github/workflows/` is gated behind a scope agents here do not hold (`AGENTS.md` § *Version control discipline*), so the exact YAML is written out below for the owner, as that rule prescribes.
+
+#### The prerequisite that is easy to miss
+
+**Auto-merge is not an independent switch. It requires branch protection on `main` with at least one required status check.** GitHub refuses to enable auto-merge on a pull request that has nothing to wait for, because such a pull request is already mergeable. If *Allow auto-merge* is turned on and nothing happens, this is the reason.
+
+#### Settings, in order
+
+1. **Settings → General → Pull Requests:** enable **Allow auto-merge**. Enable **Allow squash merging**. Optionally enable **Automatically delete head branches**.
+2. **Settings → Rules → Rulesets** (or **Branches → Branch protection**) on `main`: require a pull request before merging, and under **Require status checks to pass**, add **`verify`**. Leave required approvals at 0 for the zero-touch path; set it to 1 to keep a human gate on everything.
+3. **Settings → Actions → General → Workflow permissions:** **Read and write permissions**, and **Allow GitHub Actions to create and approve pull requests** stays checked — `open-pull-request.yml` already depends on it.
+
+**Require `verify` and not `selfhost-container`.** `verify` triggers on `push`, so it fires on every branch regardless of who opened the pull request. `selfhost-container` triggers on `pull_request`, which is unreliable here (see the finding below), and a required check that never reports leaves every pull request blocked as pending forever.
+
+#### Scope: which branches merge themselves
+
+`eng/**` and `docs/**` merge themselves on green. They change tooling and prose. A `feat/**` branch changes what the owner sees in the app, and several of them are gated on browser acceptance that no check can perform, so it stays a deliberate act — one click on **Enable auto-merge** in the pull request, after which GitHub does the rest.
+
+#### Replacement `.github/workflows/open-pull-request.yml`
+
+Only `permissions` and the final step change.
+
+```yaml
+name: Open pull request
+
+# ENG-007. Agents cannot open pull requests: their sandboxes cannot reach
+# api.github.com, and a token that could would also let an agent approve its own
+# work. GitHub opens it instead, with a token scoped to this repository.
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'eng/**'
+      - 'docs/**'
+      - 'int/**'
+
+permissions:
+  # ENG-016. `contents` rises from read to write because enabling auto-merge
+  # ends in a merge commit on `main`. `pull-requests: write` alone can open a
+  # pull request but cannot land one.
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: open-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  open-pull-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open a pull request if one is not already open
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "A pull request is already open for $BRANCH; it picks up this push automatically."
+            exit 0
+          fi
+          # The agents' commit messages already carry the task ID, the exact
+          # commands run, and what stayed unverified. That is the review
+          # material, so it becomes the pull request body verbatim.
+          {
+            echo "Opened automatically on push. The body is the latest commit message."
+            echo
+            echo "---"
+            echo
+            git log -1 --pretty=%B
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$(git log -1 --pretty=%s)" \
+            --body-file "$RUNNER_TEMP/pr-body.md"
+
+      # ENG-016. Auto-merge skips no check. It presses the merge button the
+      # moment every required check is green, and never presses it otherwise.
+      # Scoped to eng/ and docs/ because those change tooling and prose; a
+      # feat/ branch changes what the owner sees and stays a deliberate click.
+      - name: Let eng/ and docs/ branches merge themselves once green
+        if: startsWith(github.ref_name, 'eng/') || startsWith(github.ref_name, 'docs/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          state=$(gh pr view "$BRANCH" --json isDraft,autoMergeRequest \
+            --jq '(.isDraft|tostring) + " " + ((.autoMergeRequest != null)|tostring)')
+          draft=${state% *}
+          armed=${state#* }
+
+          if [ "$draft" = "true" ]; then
+            echo "$BRANCH is a draft. Auto-merge is deliberately not enabled on drafts."
+            exit 0
+          fi
+          if [ "$armed" = "true" ]; then
+            echo "Auto-merge is already enabled for $BRANCH."
+            exit 0
+          fi
+
+          if ! gh pr merge "$BRANCH" --auto --squash; then
+            echo "::error::Could not enable auto-merge for $BRANCH."
+            echo "Check Settings > General > Pull Requests > 'Allow auto-merge',"
+            echo "and that main's ruleset requires at least one status check."
+            echo "GitHub refuses auto-merge on a pull request with nothing to wait for."
+            exit 1
+          fi
+```
+
+The last step **fails loudly** rather than continuing quietly, which is the fail-closed rule applied to CI: a misconfigured setting should be visible on the first push, not discovered later as work that silently never merged.
+
+#### A finding that belongs to ENG-015, and an optional patch
+
+**A pull request opened with `secrets.GITHUB_TOKEN` does not raise `pull_request` events.** GitHub suppresses them to prevent workflow recursion, and `open-pull-request.yml` opens every pull request with exactly that token. ENG-015 moved `selfhost-container` onto a `pull_request` trigger, so that job likely never fires on an auto-opened pull request — whether or not it is a draft. ENG-015's handoff attributes the absence to draft status, which may not be the whole cause. This is the same constraint that made `pull-request.yml` trigger on `push` in the first place.
+
+**Confirm before patching:** open the Actions tab and check whether `Self-hosted container` ever ran for pull request 26 from a `pull_request` event. If it did not, replace that workflow's `on:` block, which restores push coverage while keeping ENG-015's saving, because the image can only change when one of these paths does:
+
+```yaml
+on:
+  push:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.nvmrc'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'apps/web/next.config.ts'
+      - 'scripts/**'
+      - '.github/workflows/selfhost-container.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+```
+
+Keep the existing `if:` guard on the job. A path-filtered workflow that does not run reports nothing, which is a second reason not to make `selfhost-container` a required check.
+
+#### A consequence to watch on the first auto-merge
+
+A push made with `GITHUB_TOKEN` does not trigger workflows, so the merge commit auto-merge creates on `main` may not run `verify` again. The merged tree was verified on the branch, so this is a lost confirmation rather than a lost gate. If it matters, add **Require branches to be up to date before merging** to the ruleset, which forces the branch to be rebased onto current `main` before the tested state can merge.
+
+**Next:** owner applies the settings and the workflow, then pushes any `eng/` or `docs/` branch and confirms it merges itself once `verify` goes green. Nothing here has executed; a workflow can only be exercised by GitHub.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None

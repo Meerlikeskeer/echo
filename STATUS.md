@@ -60,6 +60,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | DOC-005 The living documents still said nothing was deployed | Done | `docs/DOC-005-deployed-doc-drift` |
 | ENG-014 Stop STATUS.md from causing merge conflicts | Done | `eng/ENG-014-status-per-task-files` |
 | ENG-015 Scope the container job to where its result can change | Implemented; awaiting owner review | `eng/ENG-015-container-job-scope` |
+| ENG-016 Auto-merge on green | Specified; owner must apply the workflow and settings | `eng/ENG-016-auto-merge-on-green` |
 | ENG-003 Shared status file and reading map | Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 | — |
 | WEB-001 Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | WEB-002 Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
