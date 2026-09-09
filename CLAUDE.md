@@ -18,7 +18,7 @@ Read `AGENTS.md` → *Version control discipline* before branching or committing
 
 ## Verification
 
-Run `npm ci` then `npm run check` from the repository root, and `python3 -m unittest discover -s tests` for the bounded controller. Report exactly what ran. Do not weaken existing checks or claim passing tests that did not execute. `STATUS.md` § *Verification floor* holds the counts every change must still meet; a count going down is a regression, not a cleanup. **`npm run check` cannot pass inside a git worktree** until ENG-012's `next-config.test.ts` stops asserting the checkout is named `echo` — run it from `~/Documents/GitHub/echo` for a true result.
+Run `npm ci` then `npm run check` from the repository root, and `python3 -m unittest discover -s tests` for the bounded controller. Report exactly what ran. Do not weaken existing checks or claim passing tests that did not execute. `STATUS.md` § *Verification floor* holds the counts every change must still meet; a count going down is a regression, not a cleanup. **`npm run check` passes inside a git worktree** as of ENG-018, so verify where you work. Two agents on one machine should each take their own worktree on their own branch: each then has its own `node_modules`, so a clean install in one cannot delete the tree the other is reading.
 
 ## Bounded loop
 

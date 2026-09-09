@@ -82,7 +82,9 @@ npm run check   # tracked-source guard → generated-table check → lint → ty
 python3 -m unittest discover -s tests   # bounded-controller tests only
 ```
 
-**`npm run check` cannot pass inside a git worktree** until ENG-012's `next-config.test.ts` is fixed: it asserts the repository directory is named `echo`, and a worktree's root is `.claude/worktrees/<branch>`. Run the suite from a checkout named `echo` for a true result, or expect exactly one failure named `output file tracing still points at the repository root in both cases`.
+**`npm run check` passes inside a git worktree** (ENG-018). It did not until then, because `next-config.test.ts` asserted the checkout directory was named `echo` while a worktree's root is `.claude/worktrees/<branch>`. Verify where you work.
+
+That is what makes the concurrency rule above practical on one machine. A worktree has its own `node_modules`, so two contributors never share a dependency tree — and a clean install in one cannot delete the tree the other is reading, which is a failure that has actually happened here and left the shared checkout unusable.
 
 Do not weaken or remove existing verification: lint checks, TypeScript checks, unit tests, production HTTP tests, GitHub Actions checks, and the authentication guards. Do not report tests as passing unless they actually executed successfully; if something cannot run in your environment, say so explicitly instead of inferring success.
 

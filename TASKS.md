@@ -485,6 +485,36 @@ Error: ENOENT: no such file or directory, open
 
 **Next:** owner reviews. The workflows themselves can only be exercised by GitHub, so this branch's own first push is their first real run — confirm that `verify` ran and `Self-hosted container` did **not**, since its pull request opens as a draft.
 
+## ENG-018 — `npm run check` could not pass in a worktree, because a test asserted a folder name
+
+**Status:** Implemented and verified; awaiting owner review · **Branch:** `eng/ENG-018-worktree-verification` · **Dependencies:** ENG-012
+
+**Acceptance:** `npm run check` passes inside a git worktree, and the assertion that blocked it is replaced by one that still catches the failure ENG-012 wrote it for, proven by a negative control.
+
+### Handoff (2026-09-09)
+
+- **Branch/base:** `eng/ENG-018-worktree-verification`, from `main` @ `f68ccca`.
+- **The defect.** `apps/web/tests/next-config.test.ts` asserted `config.outputFileTracingRoot?.endsWith("echo")`. A worktree's root is `.claude/worktrees/<branch>`, so the assertion failed on the directory's *name* while `next.config.ts` was correct in both places — it derives the root from `import.meta.url`, which resolves properly wherever the checkout sits.
+- **What it actually cost, which is why this is not cosmetic.** Three tasks recorded the production build, the production HTTP tests and the self-host parity tests as *not run*. Every agent had to verify in the one shared checkout, which `AGENTS.md` forbids sharing. Then a clean install in one session deleted the dependency tree another was reading, and left `~/Documents/GitHub/echo` unusable: all 307 packages present, `node_modules/.bin` empty at the root and under `apps/web`, `npm run check` exiting 127 because ESLint had no launcher. Two agent sandboxes were then denied the deletes and symlinks a repair needs, so `npm ci`, `npm rebuild` and `touch` all failed with `EPERM` on directories the operating system reports as owner-writable. That checkout still needs repairing from a plain terminal; **this task removes the reason anyone had to depend on it.**
+- **The replacement is stricter, not more permissive.** The property ENG-012 needs is that the tracing root is the **workspace root** — the directory whose `package.json` declares the workspaces, which is what hoists dependencies into its `node_modules` and the entire reason tracing from `apps/web` emits a bundle whose imports resolve to nothing. The test now asserts that manifest declares `apps/web` as a workspace, and that `apps/web` resolves *inside* the root, so tracing covers the app being built rather than some other workspace root further up the filesystem. The other two ENG-012 assertions, which are what keep `output: "standalone"` off on Vercel, are untouched.
+
+**Two negative controls, because a check that has only ever passed proves nothing:**
+
+| Broken condition | Result |
+| --- | --- |
+| `outputFileTracingRoot` pointed at `apps/web` — the exact failure ENG-012 wrote the assertion for | **113 pass, 1 fail.** Only `output file tracing still points at the workspace root in both cases` failed. The old assertion caught this too. |
+| `outputFileTracingRoot` hardcoded to `~/Documents/GitHub/echo` while building from a worktree | **113 pass, 1 fail.** The same single test. **The old assertion would have passed this** — the path ends in `echo` — even though it points at a different checkout than the one being built. This is the case the replacement catches and its predecessor did not. |
+
+**Required command results, not substituted** (run in worktree `doc-web004-browser-evidence`, which is the point):
+
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm run check` | **0** | The full chain, green **in a worktree**: tracked-source, status table, lint, typecheck, **114 unit / 114 pass / 0 fail**, production build, **8 production HTTP**, **4 self-host parity**. This command has never exited 0 in a worktree before. |
+| `python3.12 -m unittest discover -s tests` | 0 | **16 tests, OK.** Unchanged by this task and run to confirm it. System `python3` is 3.9.6, which the workflow does not support. |
+| `npm ci` | not run | The worktree's dependency tree was already installed and healthy. |
+
+**Next:** owner review. The floor is unchanged — this task adds no tests and removes none; it makes the existing 114 reachable from a worktree. **Two agents can now work concurrently on one machine**, each in its own worktree on its own branch, with separate dependency trees and no shared mutable checkout.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
