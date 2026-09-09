@@ -1,0 +1,11 @@
+# ENG-019. `union` keeps the lines from both sides of a conflicting hunk instead
+# of raising a conflict. That is the wrong behaviour for almost every file and
+# the right one for exactly these: they are append-only lists of independent
+# rows, generated from one-file-per-task sources, where the correct resolution
+# is always "keep both". A union merge can still leave rows out of order or
+# duplicated, which `npm run tasks:check` catches and `npm run tasks:build`
+# fixes — a command instead of a hand-resolved conflict.
+#
+# Do NOT extend this to prose. Union-merging a paragraph produces text that
+# reads as though someone wrote it, and nobody did.
+tasks/INDEX.md merge=union

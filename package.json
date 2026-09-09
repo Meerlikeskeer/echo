@@ -24,8 +24,10 @@
     "test:selfhost": "node --test scripts/selfhost.test.mjs",
     "check:tracked": "node scripts/check-source-tracked.mjs",
     "test:deployed": "node scripts/deployed-smoke.mjs",
-    "check": "npm run check:tracked && npm run status:check && npm run lint && npm run typecheck && npm test && npm run build && npm run test:production && npm run test:selfhost",
-    "status:table": "node scripts/status-table.mjs",
-    "status:check": "node scripts/status-table.mjs --check"
+    "check": "npm run check:tracked && npm run tasks:check && npm run lint && npm run typecheck && npm test && npm run build && npm run test:production && npm run test:selfhost",
+    "tasks:build": "node scripts/tasks.mjs",
+    "tasks:check": "node scripts/tasks.mjs --check",
+    "floor": "node scripts/verification-floor.mjs",
+    "floor:check": "node scripts/verification-floor.mjs --check"
   }
 }

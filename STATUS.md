@@ -40,48 +40,12 @@ Short definitions so nobody has to reconstruct them from context.
 
 Echo is a private-first web AI note taker, **deployed and verified over HTTPS** as of 2026-09-08. This task starts from `main` at `1559da2`, including WEB-005 and DOC-005 (PRs #22 and #23). ADR-017 accepts conservative stitching and browser-local capture completion records for WEB-006; implementation and verification are in flight.
 
-<!-- BEGIN GENERATED TASK TABLE -->
+**The task list is [`tasks/INDEX.md`](tasks/INDEX.md)** — id, title, status and branch, generated from
+the one-file-per-task records in [`tasks/`](tasks/).
 
-*Generated from `TASKS.md` by `npm run status:table`. **Do not edit this table by hand** — change the task's `**Status:**` line in `TASKS.md` instead, which is the source of truth. `npm run check` fails when the two disagree.*
-
-| Task | Status | Branch |
-| --- | --- | --- |
-| DOC-001 Shared repository foundation | Done | — |
-| ENG-001 Bounded builder/checker workflow | Done | — |
-| ENG-017 Bounded loop test and acceptance adapters | Implemented and independently reviewed; full verification blocked by environment… | `eng/ENG-017-bounded-loop-adapters` |
-| ENG-002 Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
-| ENG-007 Pull request workflow and branch protection | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
-| ENG-008 Secure-context development server and diagnosis | Partially withdrawn — the `secure-context` diagnosis is Done and merged in `a032a01`; the… | `eng/ENG-008-https-dev-server` |
-| ENG-009 Withdraw the LAN development server; pause mobile acceptance | Done | `eng/ENG-009-withdraw-lan-exposure` |
-| ENG-010 Reproducible hosted deployment and deployed-origin verification | Done and fully verified. Merged to `main`; Echo is deployed, and on 2026-09-08 npm run… | `eng/ENG-010-deploy-hosted-origin` |
-| ENG-011 The first production deployment failed: Vercel installs without devDependencies | Merged, but it was not the cause — corrected by ENG-012 | `eng/ENG-011-vercel-dev-dependencies` |
-| ENG-012 `output: "standalone"` breaks Vercel's build hook | Confirmed against Vercel — the build completes. Merged as `main` @ `53c0851` | `eng/ENG-012-vercel-build-output` |
-| ENG-013 Name Vercel Deployment Protection instead of failing with `302 !== 401` | Done; verified against the live deployment | `eng/ENG-013-deployment-protection` |
-| DOC-004 Record the first full pass of the deployed check | Done | `docs/DOC-004-deployed-check-passes` |
-| DOC-005 The living documents still said nothing was deployed | Done | `docs/DOC-005-deployed-doc-drift` |
-| ENG-014 Stop STATUS.md from causing merge conflicts | Done | `eng/ENG-014-status-per-task-files` |
-| ENG-015 Scope the container job to where its result can change | Implemented; awaiting owner review | `eng/ENG-015-container-job-scope` |
-| ENG-016 Auto-merge on green | Specified; owner must apply the workflow and settings | `eng/ENG-016-auto-merge-on-green` |
-| ENG-003 Shared status file and reading map | Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 | — |
-| WEB-001 Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
-| WEB-002 Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
-| ENG-005 Provider configuration doctor | Implemented and verified; awaiting owner review | `feat/WEB-002-recording-slice` |
-| WEB-003 Session and playable chunk model | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-002-recording-slice` |
-| WEB-004 Durable offline queue | Implemented; native browser/local verification and owner acceptance pending — NOT Done | — |
-| WEB-005 Incremental upload and transcription | Implemented and verified by test; the hook wiring that drains during capture is… | — |
-| WEB-006 Transcript stitching | Implemented and verified by test; the IndexedDB v1→v2 migration and completion recovery… | `feat/WEB-006-transcript-stitching` |
-| WEB-007 Structured artifacts | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-007-structured-artifacts` |
-| WEB-008 Quick Note mode | Todo | — |
-| WEB-009 Session history | Todo | — |
-| WEB-010 Guarded audio retention | Todo | — |
-| WEB-011 Settings and privacy hardening | Todo | — |
-| WEB-012 Private deployment and recovery validation | Todo | — |
-| WEB-013 Opt-in research | Todo | — |
-| WEB-014 Confirmed reminder/calendar export | Todo | — |
-| WEB-015 The recorder discards every error and its warning outlives the failure | Implemented and verified by test; awaiting owner review | `feat/WEB-015-recorder-error-reporting` |
-| INT-001 Branch integration and architecture documentation | Done | — |
-
-<!-- END GENERATED TASK TABLE -->
+It is not reproduced here. It used to be, and every task that changed a status had to edit this file,
+so any two open branches conflicted on it (**ENG-019**). The rule that replaced it is short: **no file
+that every task must edit.**
 
 ## What exists today
 
@@ -130,21 +94,26 @@ Cheaper here than in a search, and each one cost something to learn.
 - **Not every deployment failure is the build.** Three in a row were the platform around it. The upload-step failure `Cannot patch preview comments when immutable static file upload is enabled` was Vercel's **preview comments / Toolbar** feature; **disabling the Vercel Toolbar for the project resolved it.** Its advice to upgrade Next was inapplicable. No repository change was involved, and none should be made if it recurs.
 - **Secrets go in by hand.** A scripted `vercel env add` pipeline was tried and did not land the values correctly. For one-time setup the dashboard is the right path; `npm run test:deployed` reports whether the provider group actually reaches the application, which is the check that matters.
 - **An agent sandbox cannot reach `api.github.com`** — TLS interception breaks certificate verification, so `gh` fails. **`git push` over the same HTTPS works**, and so does the git protocol, which is how to check pull requests from a sandbox: `git ls-remote origin 'refs/pull/*/head'` maps pull request numbers to head commits, and a matching `refs/pull/<n>/merge` means open and mergeable. **An unreachable API is not an absent pull request** — `.github/workflows/open-pull-request.yml` opens them automatically on push (ENG-007), which is why the sandbox never needs to.
-- **A worktree can verify the whole floor; only the chained command cannot.** `npm run check` stops at the unit stage in a worktree because of the `next-config.test.ts` directory-name assertion, and two tasks in a row recorded the production build, the 8 production HTTP tests and the 4 self-host parity tests as *not run* because of it. They run perfectly well when invoked individually — `npm run build`, then `npm run selfhost:assemble`, then `npm run test:production` and `npm run test:selfhost`. Confirmed on 2026-09-08 at `bfebece`: 8/8 and 4/4 in a worktree. The chain-stop is not evidence that the stages fail.
+- **A test that pins an environment detail costs more than the bug it catches.** For a month `npm run check` could not pass in a worktree, because `next-config.test.ts` asserted the tracing root ends in `echo` and a worktree's root is `.claude/worktrees/<branch>`. Nothing in Echo depends on the folder's *name*; the property ENG-012 needed was that the root is the workspace root, which is what hoists dependencies. Three tasks recorded stages as *not run* because of it, every agent had to verify in the one shared checkout, and a clean install in one session then deleted the dependency tree another was using — leaving that checkout unusable with all 307 packages present and every `.bin` symlink gone. **ENG-018 replaced the assertion with the property, and the worktree ran the whole chain green.** When a test names something incidental, ask what it is really protecting and assert that instead.
 - **Work that only exists in a scratch directory does not exist.** WEB-006's first builder attempt — about 300 lines — was left uncommitted in `/private/tmp` by a session that hit a usage limit, one reboot away from gone. Recover such work by committing it *verbatim first*, before modifying it, so the starting point is in history and what a later commit changed is legible. Its three typecheck errors were then attributable, rather than mixed into someone else's diff.
 - **A frozen acceptance test can silently dictate user-facing copy.** WEB-006 asserts a partial session never renders `/Final/`, so the disclosure sentence had to avoid a capital F. The first rewording that satisfied the regex was factually wrong — it claimed a session is final once every transcript is present, when the code also requires a saved capture manifest. Passing tests did not catch it; an independent reader did. When a test constrains prose, check the prose is still *true*, not merely green.
 - **A passing test can assert something it does not prove, and only a negative control tells you which.** WEB-007's first draft carried a test claiming its length-prefixed revision encoding stops a forged revision. Removing the prefixes left the test green: every record contributes a fixed number of fields and both counts are encoded, so the naive delimiter was already collision-free *given the surrounding structure*. The test was measuring the structure, not the prefixes. The habit that catches this is cheap — **break the thing the test names and confirm that test is the one that fails.** The same run on the acceptance rule failed exactly the two tests it should have, which is what a load-bearing test looks like.
-- **`npm run check` cannot pass inside a git worktree** until ENG-012's test is fixed. `apps/web/tests/next-config.test.ts` asserts `config.outputFileTracingRoot?.endsWith("echo")`, and a worktree's root is `.claude/worktrees/<branch>`, so it fails on the directory name while `next.config.ts` is correct — it derives the root from `import.meta.url`, which is right in both places. Confirmed both ways at one commit on 2026-09-08: **72 pass, 0 fail** in `~/Documents/GitHub/echo`, **71 pass, 1 fail** in a worktree. Run the suite from a checkout named `echo` for a true result.
+- **The rule is: no file that every task must edit.** ADR-015 and ENG-014 found half of this — they split the *In flight* section into one file per task because a shared section is a conflict generator — and then left every task *record* in one 1,100-line `TASKS.md`, the status table inside `STATUS.md`, and the verification counts in a sentence. So WEB-015, WEB-007, ENG-016 and ENG-018 all collided on the same two files in one afternoon, and every collision was additive: the resolution was always *keep both*. **ENG-019 finished the job.** Records are `tasks/<TASK-ID>.md`, the index is generated and marked `merge=union` so two new rows merge themselves, and the counts are measured by `npm run floor`. When a shared file conflicts twice, stop resolving it and remove the sharing.
+- **A tracked file matching `.env*` locks sandboxed agents out of the whole repository.** Agent sandboxes deny writes to those paths, correctly, because that is where secrets live. But `.env.example` was *tracked*, so `git worktree add` failed on `error: unable to create file .env.example: Operation not permitted` before a single test could run — and the same rule blocked `git mv`, so the file could not even be renamed from inside a session. It was untracked with `git rm --cached` and re-added as `env.example`. **Nothing matching `.env*` is tracked any more**, and nothing should be: in this repository such a path is a secret, without exception.
+- **Two agents on one machine need two worktrees, not one checkout.** `AGENTS.md` already forbids sharing a mutable checkout, and the dependency tree is the mutable thing that bites: `npm ci` deletes `node_modules` before reinstalling, so one agent's install destroys what the other is running against. Since ENG-018 a worktree can run the whole check, so each agent takes its own worktree on its own branch and neither ever touches the other's tree. **An agent sandbox may also be denied the deletes and symlinks a repair needs**, which is how a half-installed tree becomes unfixable from inside a session — `npm ci`, `npm rebuild` and even `touch` all fail with `EPERM` on a directory the operating system says is writable. Check ownership before believing the error: if the directory is yours with owner-write set, it is the sandbox, and `sudo` is the wrong answer. Repair from a plain terminal.
 
 ## Verification floor
 
-**The floor is 149 unit, 9 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 → 149 unit** and **4 → 6 → 7 → 8 → 9 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+**The counts live in [`verification-floor.json`](verification-floor.json), and no one types them by hand.** Run `npm run floor` when your task changes them: it runs the suites, records what actually passed, and **refuses a count that went down**. `npm run floor:check` compares without updating.
+
+**A hand-typed count was wrong the moment two branches were open at once, which is why the machine counts now (ENG-019).** WEB-015 and WEB-007 both branched from 114 unit tests and each recorded its own total, 126 and 149. Neither could see the other, so both were correct on their own branch and both were stale on `main`, where the real number turned out to be 161. A number every task must edit is a merge conflict with extra steps, and a number no task can compute correctly is worse than no number.
 
 | Command | What it covers |
 | --- | --- |
-| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **149 unit** → production build → **9 production HTTP** → **4 self-host parity** |
+| `npm ci` then `npm run check` | `check:tracked` → `tasks:check` → lint → typecheck → unit → production build → production HTTP → self-host parity. Counts are in `verification-floor.json`, not written out here |
 | `python3 -m unittest discover -s tests` | **16 tests**, bounded controller only — it certifies the controller, never the web application |
 | `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
+| `npm run floor` | Runs the three suites, records the counts, and refuses a count that went down. Never edit `verification-floor.json` by hand |
 | `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |
 | `selfhost-container` CI job | The container image. Docker is unavailable on the development machine, so this is verified in CI only; last passed 2026-09-08 |
 
@@ -189,10 +158,10 @@ The point of this section is that **an interrupted task must still be recoverabl
 
 1. **Before starting work**, create `status/in-flight/<TASK-ID>.md`: the task, the branch and its base, what you are attempting, and what is not done yet. Do this first, not last. See that directory's `README.md`.
 2. **As you go**, keep your file current — especially after finishing a piece. If you are running low on context, **stop and update it before doing anything else.** An interrupted task with an accurate note is recoverable; finished work nobody recorded is not.
-3. **When the task is done**, in the same pull request: update the task's `**Status:**` line and handoff in `TASKS.md`, run `npm run status:table` so this file's table matches, **delete your `status/in-flight/` file**, and move anything durable into this file or the document that owns it.
+3. **When the task is done**, in the same pull request: update the `**Status:**` line and handoff in your own `tasks/<TASK-ID>.md`, run `npm run tasks:build` and `npm run floor`, **delete your `status/in-flight/` file**, and move anything durable into this file or the document that owns it.
 
 **Step 3's last clause is the one that gets skipped, and it is the one that matters.** Your in-flight file is deleted on merge. Anything worth keeping — a fact about what exists, a decision, a lesson that cost a day — must be moved somewhere permanent before then, or it is gone. The old single *In flight* section failed the opposite way: nothing was ever moved out, so it grew to 51 lines and ended up asserting both "nothing deployed yet" and "ECHO IS DEPLOYED" three paragraphs apart.
 
-**Do not edit this file's task table by hand.** It is generated from `TASKS.md` by `npm run status:table`, and `npm run check` fails when the two disagree. Update `STATUS.md` itself in the same commit as any change to an accepted ADR, the verification floor, or what does and does not exist.
+**This file no longer carries the task table or the test counts**, because every task had to edit both and any two branches then conflicted (**ENG-019**). The index is `tasks/INDEX.md`, generated by `npm run tasks:build`; the counts are `verification-floor.json`, measured by `npm run floor`. Update `STATUS.md` itself in the same commit as any change to an accepted ADR or to what does and does not exist.
 
 **Keep this file short.** If a section grows past a screen, the detail belongs in the document that owns it, and this file should link there.
