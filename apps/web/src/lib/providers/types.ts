@@ -69,6 +69,25 @@ export interface GeneratedNotes {
   readonly actionItems: readonly string[];
 }
 
+/**
+ * WEB-007 / REQ-005. The whole-session answer, as opposed to `GeneratedNotes`,
+ * which WEB-002 produces for one chunk. It lives here rather than beside the
+ * validator because it is the shape of the port's output, and `ARCHITECTURE.md`
+ * § *Provider boundaries* already defines the LLM contract as "Transcript +
+ * schema → validated artifacts".
+ *
+ * `researchTopics` are **suggestions only**. REQ-005 separates suggested
+ * research from opt-in external research (WEB-013): nothing has been looked up,
+ * and a topic must never be rendered as a finding.
+ */
+export interface SessionArtifacts {
+  readonly title: string;
+  readonly summary: string;
+  readonly keyPoints: readonly string[];
+  readonly actionItems: readonly string[];
+  readonly researchTopics: readonly string[];
+}
+
 export interface TranscribeOptions {
   /**
    * Offset of this clip within its session. Adapters add it to every provider
@@ -89,4 +108,10 @@ export interface NotesProvider {
   readonly disclosure: ProviderDisclosure;
   readonly capabilities: NotesCapabilities;
   generateNotes(transcript: Transcript, options?: { readonly signal?: AbortSignal }): Promise<GeneratedNotes>;
+  /**
+   * WEB-007. The session-level answer, from the stitched transcript. Separate
+   * from `generateNotes` rather than replacing it: per-chunk notes are produced
+   * during capture, when no session transcript exists yet.
+   */
+  generateArtifacts(transcript: Transcript, options?: { readonly signal?: AbortSignal }): Promise<SessionArtifacts>;
 }

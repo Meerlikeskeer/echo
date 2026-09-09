@@ -173,3 +173,75 @@ test("a notes failure never carries the transcript or the credential", async () 
   assert.doesNotMatch(serialized, new RegExp(SECRET));
   assert.doesNotMatch(serialized, /hello world/);
 });
+
+// WEB-007. Session artifacts, which unlike the per-chunk notes above refuse a
+// thin answer rather than repairing one. They are stored against a transcript
+// revision, so a substituted placeholder would be indistinguishable from a real
+// result — the fallback that is right for notes is wrong here.
+const ARTIFACTS_JSON = '{"title":"Weekly planning","summary":"The team agreed the date.",'
+  + '"keyPoints":["The release slips."],"actionItems":["Assign the tasks."],'
+  + '"researchTopics":["Release checklist practices"]}';
+
+test("session artifacts unwrap the vendor envelope and ask for what the validator accepts", async () => {
+  const { fetchImpl, calls } = stub(() => jsonResponse({
+    id: "chatcmpl-2",
+    choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: ARTIFACTS_JSON } }],
+    usage: { total_tokens: 30 },
+  }));
+  const artifacts = await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl }).generateArtifacts(transcript);
+
+  assert.equal(calls[0].url, "https://api.example.com/openai/v1/chat/completions");
+  const sent = JSON.parse(String(calls[0].init.body)) as { messages: { content: string }[] };
+  assert.match(sent.messages[1].content, /hello world/);
+  assert.match(sent.messages[0].content, /untrusted/);
+  assert.match(sent.messages[0].content, /researchTopics/);
+  // REQ-005 separates suggested research from opt-in external research (WEB-013).
+  assert.match(sent.messages[0].content, /Do not look anything up/);
+
+  assert.deepEqual(artifacts, {
+    title: "Weekly planning",
+    summary: "The team agreed the date.",
+    keyPoints: ["The release slips."],
+    actionItems: ["Assign the tasks."],
+    researchTopics: ["Release checklist practices"],
+  });
+  assert.doesNotMatch(JSON.stringify(artifacts), /choices|finish_reason|usage/);
+});
+
+test("session artifacts tolerate a fenced JSON reply, as the notes path does", async () => {
+  const { fetchImpl } = stub(() => jsonResponse({ choices: [{ message: { content: "```json\n" + ARTIFACTS_JSON + "\n```" } }] }));
+  assert.equal((await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl }).generateArtifacts(transcript)).title, "Weekly planning");
+});
+
+test("a thin or malformed artifact reply is refused rather than repaired", async () => {
+  const bodies: readonly unknown[] = [
+    // The pre-WEB-007 four-field notes shape, which no longer answers REQ-005.
+    { choices: [{ message: { content: '{"title":"T","summary":"S","keyPoints":[],"actionItems":[]}' } }] },
+    // Missing title, which generateNotes would have replaced with a fallback.
+    { choices: [{ message: { content: '{"summary":"S","keyPoints":[],"actionItems":[],"researchTopics":[]}' } }] },
+    // An unknown key — how a vendor response shape reaches a domain type.
+    { choices: [{ message: { content: '{"title":"T","summary":"S","keyPoints":[],"actionItems":[],"researchTopics":[],"choices":[]}' } }] },
+    { choices: [{ message: { content: "not json" } }] },
+    { choices: [{ message: { content: "[]" } }] },
+    { choices: [{ message: { content: 42 } }] },
+    { choices: [] },
+    {},
+  ];
+  for (const body of bodies) {
+    const { fetchImpl } = stub(() => jsonResponse(body));
+    const error = await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl })
+      .generateArtifacts(transcript).then(() => null, (thrown: unknown) => thrown);
+    assert.ok(error instanceof ProviderError, `expected a refusal for ${JSON.stringify(body)}`);
+    assert.equal(error.code, "invalid_response");
+  }
+});
+
+test("an artifact refusal never carries the credential or the transcript", async () => {
+  const { fetchImpl } = stub(() => jsonResponse({ choices: [{ message: { content: `{"title":"${SECRET}"}` } }] }));
+  const error = await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl })
+    .generateArtifacts(transcript).then(() => null, (thrown: unknown) => thrown);
+  assert.ok(error instanceof ProviderError);
+  const serialized = `${error.message} ${error.stack ?? ""} ${JSON.stringify({ ...error })}`;
+  assert.doesNotMatch(serialized, new RegExp(SECRET));
+  assert.doesNotMatch(serialized, /hello world/);
+});

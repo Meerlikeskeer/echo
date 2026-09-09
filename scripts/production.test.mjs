@@ -9,7 +9,7 @@ const username = "synthetic-owner";
 const password = "synthetic-production-password-123456789";
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 const PAGE_MARKER = /Record a note/;
-const PRIVATE_PATHS = ["/diagnostics/queue", "/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/_next/static/missing.js", "/?_rsc=probe"];
+const PRIVATE_PATHS = ["/diagnostics/queue", "/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/api/sessions/artifacts", "/_next/static/missing.js", "/?_rsc=probe"];
 
 // Every provider variable is blanked explicitly so a developer's real
 // apps/web/.env.local can never configure a server under test, and no test can
@@ -168,6 +168,58 @@ test("the recording endpoint guards itself and completes the slice with fixture 
     const oversized = await fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body: syntheticClip(4_000_001) });
     assert.equal(oversized.status, 413);
     assert.equal((await oversized.json()).error.code, "clip_too_large");
+  });
+});
+
+// WEB-007. The session artifact endpoint, over real HTTP against a production
+// build. The revision assertion is the one that matters: the endpoint computes
+// it from the transcript it received, so a caller cannot mislabel a revision and
+// defeat the staleness rule.
+test("the artifacts endpoint guards itself and derives the revision from the transcript it was sent", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async (base) => {
+    const stitched = {
+      sessionId: "synthetic-session", status: "partial", text: "One. Two.",
+      segments: [{ text: "One.", startMs: 0, endMs: 1000 }, { text: "Two.", startMs: 1000, endMs: 2000 }],
+      gaps: [],
+    };
+    const post = (body, headers = { authorization }) => fetch(`${base}/api/sessions/artifacts`, {
+      method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+
+    // The endpoint calls the owner guard at its own boundary, so it must refuse
+    // even a request that has bypassed the proxy.
+    const unauthorized = await post(stitched, { "x-middleware-subrequest": "proxy:proxy:proxy:proxy:proxy" });
+    assert.equal(unauthorized.status, 401);
+    assert.doesNotMatch(await unauthorized.text(), /fixture session/i);
+
+    const response = await post(stitched);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("cache-control"), /no-store/);
+    const result = await response.json();
+
+    // Asserting the adapter proves no request could have reached a real vendor.
+    assert.deepEqual(result.disclosures.map((entry) => entry.adapter), ["fixture"]);
+    assert.equal(result.transcriptStatus, "partial");
+    assert.match(result.transcriptRevision, /^[a-f0-9]{64}$/);
+    // The session answer, not the per-chunk notes answer.
+    assert.equal(result.artifacts.title, "Fixture session");
+    assert.ok(Array.isArray(result.artifacts.researchTopics));
+    assert.doesNotMatch(JSON.stringify(result), new RegExp(password));
+
+    // Same transcript, same revision. A different transcript, a different one —
+    // and a caller cannot choose either, because it never sends a revision.
+    assert.equal((await post(stitched).then((r) => r.json())).transcriptRevision, result.transcriptRevision);
+    const changed = { ...stitched, status: "final" };
+    assert.notEqual((await post(changed).then((r) => r.json())).transcriptRevision, result.transcriptRevision);
+
+    // Malformed bodies are refused before a credential is used.
+    for (const body of [{}, { ...stitched, sessionId: "" }, { ...stitched, status: "done" }, { ...stitched, segments: "x" }, { ...stitched, gaps: [{ reason: "invented", sequence: 1 }] }]) {
+      assert.equal((await post(body)).status, 400, `expected 400 for ${JSON.stringify(body)}`);
+    }
+    // Nothing to summarize is not a provider failure and must not cost a call.
+    const empty = await post({ ...stitched, text: "   " });
+    assert.equal(empty.status, 422);
+    assert.equal((await empty.json()).error.code, "no_speech");
   });
 });
 
