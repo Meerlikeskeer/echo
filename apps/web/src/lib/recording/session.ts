@@ -1,3 +1,5 @@
+import { isQuickNoteCapture, type QuickNoteCapture } from "./quick-note";
+
 /** Browser-memory metadata only. No upload success implies a durable copy. */
 export interface Session {
   readonly id: string;
@@ -7,6 +9,7 @@ export interface Session {
 }
 
 export interface AudioChunk {
+  readonly quickNote?: QuickNoteCapture;
   readonly sessionId: string;
   readonly id: string;
   readonly sequence: number;
@@ -19,7 +22,7 @@ export interface AudioChunk {
 }
 
 export interface PlayableChunk { readonly metadata: AudioChunk; readonly audio: Blob }
-export interface CaptureOptions { readonly chunkMs: number; readonly overlapMs: number }
+export interface CaptureOptions { readonly chunkMs: number; readonly overlapMs: number; readonly quickNote?: boolean }
 
 export function validateCaptureOptions(options: CaptureOptions): void {
   if (!Number.isSafeInteger(options.chunkMs) || options.chunkMs < 1000 || options.chunkMs > 60000 ||
@@ -40,6 +43,7 @@ export function isAudioChunk(value: unknown): value is AudioChunk {
   const id = (v: unknown) => typeof v === "string" && /^[a-zA-Z0-9-]{1,64}$/.test(v);
   const integer = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
   return id(c.sessionId) && id(c.id) && integer(c.sequence) && integer(c.startMs) && integer(c.endMs) && c.endMs > c.startMs &&
+    (c.quickNote === undefined || (isQuickNoteCapture(c.quickNote) && c.sequence === 0 && c.endMs <= 60000)) &&
     c.endMs - c.startMs <= 120000 && integer(c.overlapMs) && c.overlapMs <= c.endMs - c.startMs &&
     (c.sequence !== 0 || (c.startMs === 0 && c.overlapMs === 0)) &&
     typeof c.mimeType === "string" && c.mimeType.length <= 100 && integer(c.size) && c.size > 0 &&

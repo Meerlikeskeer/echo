@@ -18,6 +18,36 @@ test("queue verifies bytes and normalizes Safari MIME spacing", async () => {
   await verifyChunk(await entry());
   assert.equal(normalizeMime("Audio/WebM; codecs=opus"), "audio/webm;codecs=opus");
 });
+
+test("Quick Note offline queue preserves capture context and result arrival across reload", async () => {
+  const row = await entry();
+  const quick = { ...row, metadata: { ...row.metadata, quickNote: { stoppedAt: 1000, onlineAtStop: false } } };
+  const rows = [quick];
+  const output = { ...result, quickNote: { items: [{ kind: "task" as const, text: "Review", dateText: null }] } };
+  await drainQueue(memory(rows), async () => { throw new Error("offline must not send"); }, { online: () => false, now: () => 5000 });
+  assert.equal(rows[0].state, "pending");
+  await drainQueue(memory(rows), async () => output, { online: () => true, now: () => 8000 });
+  assert.equal((rows[0] as QueueEntry).resultReceivedAt, 8000);
+  assert.deepEqual(rows[0].metadata.quickNote, quick.metadata.quickNote);
+  const recovered = recoverEntries(structuredClone(rows));
+  await drainQueue(memory(recovered), async () => { throw new Error("must not repeat classification"); }, { online: () => true, now: () => 9000 });
+  assert.equal(recovered[0].resultReceivedAt, 8000);
+  assert.deepEqual(recovered[0].result, output);
+  assert.equal(processingUpdate(row, recovered[0]).resultReceivedAt, 8000);
+  assert.equal(sameChunk(row, quick), false);
+});
+
+test("Quick Note upload rejects missing or malformed classification before processing success", async () => {
+  const row = await entry();
+  const quick = { ...row, metadata: { ...row.metadata, quickNote: { stoppedAt: 1000, onlineAtStop: true } } };
+  const realFetch = globalThis.fetch;
+  try {
+    for (const response of [result, { ...result, quickNote: { items: [] } }]) {
+      globalThis.fetch = async () => Response.json(response);
+      await assert.rejects(sendChunk(quick), error => error instanceof UploadFailure && !error.retryable);
+    }
+  } finally { globalThis.fetch = realFetch; }
+});
 test("queue rejects corrupted bytes, size and MIME before upload", async () => {
   const row = await entry();
   for (const changed of [{ ...row, audio: new Blob(["changed"]) }, { ...row, metadata: { ...row.metadata, size: 1 } }, { ...row, metadata: { ...row.metadata, mimeType: "audio/mp4" } }]) await assert.rejects(verifyChunk(changed));

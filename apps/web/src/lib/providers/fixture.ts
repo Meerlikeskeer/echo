@@ -82,6 +82,10 @@ export function createFixtureNotesProvider(options: FixtureOptions = {}): NotesP
         actionItems: ["Review the generated notes."],
       };
     },
+    async classifyQuickNote() {
+      failIfRequested("notes", options);
+      return { items: [{ kind: "task" as const, text: "Review the generated notes.", dateText: null }] };
+    },
     // WEB-007. Deterministic, and deliberately distinguishable from the
     // per-chunk notes above: a test asserting the session answer must not pass
     // when the chunk answer is rendered by mistake.

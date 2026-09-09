@@ -1,4 +1,5 @@
 import { ProviderError } from "../providers/errors";
+import { validateQuickNote, type QuickNote } from "./quick-note";
 import type { AudioClip, GeneratedNotes, NotesProvider, ProviderDisclosure, Transcript, TranscriptionProvider } from "../providers/types";
 
 export interface RecordingProviders {
@@ -7,6 +8,7 @@ export interface RecordingProviders {
 }
 
 export interface RecordingResult {
+  readonly quickNote?: QuickNote;
   readonly transcript: Transcript;
   readonly notes: GeneratedNotes;
   /** Drives the REQ-009 external-processor notice shown with the result. */
@@ -29,7 +31,7 @@ export function validateClip(clip: AudioClip, provider: TranscriptionProvider): 
 export async function processRecording(
   clip: AudioClip,
   providers: RecordingProviders,
-  options?: { readonly sessionOffsetMs?: number; readonly signal?: AbortSignal },
+  options?: { readonly sessionOffsetMs?: number; readonly signal?: AbortSignal; readonly quickNote?: boolean },
 ): Promise<RecordingResult> {
   validateClip(clip, providers.transcription);
 
@@ -39,6 +41,15 @@ export async function processRecording(
   });
   if (!transcript.text.trim()) throw new ProviderError("transcription", "no_speech");
 
+  if (options?.quickNote) {
+    const quickNote = validateQuickNote(await providers.notes.classifyQuickNote(transcript, { signal: options.signal }));
+    if (!quickNote) throw new ProviderError("notes", "invalid_response");
+    return { transcript, quickNote, notes: {
+      title: "Quick Note", summary: quickNote.items.map(item => item.text).join(" "),
+      keyPoints: quickNote.items.filter(item => item.kind === "note" || item.kind === "idea").map(item => item.text),
+      actionItems: quickNote.items.filter(item => item.kind === "task" || item.kind === "reminder").map(item => item.text),
+    }, disclosures: [providers.transcription.disclosure, providers.notes.disclosure] };
+  }
   const notes = await providers.notes.generateNotes(transcript, { signal: options?.signal });
   return { transcript, notes, disclosures: [providers.transcription.disclosure, providers.notes.disclosure] };
 }

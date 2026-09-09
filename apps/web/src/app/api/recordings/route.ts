@@ -86,8 +86,8 @@ export async function POST(request: Request): Promise<Response> {
     // Built only from metadata already checked byte-for-byte against the upload
     // above, and only after the owner gate — an unauthenticated caller can
     // neither read this nor put anything in it.
-    const { result, outcome } = await ledger.run({ sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum }, async () => ({
-      ...await processRecording(clip, providers, { sessionOffsetMs: identity.startMs }),
+    const { result, outcome } = await ledger.run({ sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum, ...(identity.quickNote ? { mode: "quick-note" as const } : {}) }, async () => ({
+      ...await processRecording(clip, providers, { sessionOffsetMs: identity.startMs, quickNote: !!identity.quickNote }),
       chunk: identity,
     }));
     // A join and a replay both mean the same thing to the caller: this answer
