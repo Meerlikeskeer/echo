@@ -78,6 +78,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | WEB-012 Private deployment and recovery validation | Todo | — |
 | WEB-013 Opt-in research | Todo | — |
 | WEB-014 Confirmed reminder/calendar export | Todo | — |
+| WEB-015 The recorder discards every error and its warning outlives the failure | Implemented and verified by test; awaiting owner review | `feat/WEB-015-recorder-error-reporting` |
 | INT-001 Branch integration and architecture documentation | Done | — |
 
 <!-- END GENERATED TASK TABLE -->
@@ -131,16 +132,17 @@ Cheaper here than in a search, and each one cost something to learn.
 - **A worktree can verify the whole floor; only the chained command cannot.** `npm run check` stops at the unit stage in a worktree because of the `next-config.test.ts` directory-name assertion, and two tasks in a row recorded the production build, the 8 production HTTP tests and the 4 self-host parity tests as *not run* because of it. They run perfectly well when invoked individually — `npm run build`, then `npm run selfhost:assemble`, then `npm run test:production` and `npm run test:selfhost`. Confirmed on 2026-09-08 at `bfebece`: 8/8 and 4/4 in a worktree. The chain-stop is not evidence that the stages fail.
 - **Work that only exists in a scratch directory does not exist.** WEB-006's first builder attempt — about 300 lines — was left uncommitted in `/private/tmp` by a session that hit a usage limit, one reboot away from gone. Recover such work by committing it *verbatim first*, before modifying it, so the starting point is in history and what a later commit changed is legible. Its three typecheck errors were then attributable, rather than mixed into someone else's diff.
 - **A frozen acceptance test can silently dictate user-facing copy.** WEB-006 asserts a partial session never renders `/Final/`, so the disclosure sentence had to avoid a capital F. The first rewording that satisfied the regex was factually wrong — it claimed a session is final once every transcript is present, when the code also requires a saved capture manifest. Passing tests did not catch it; an independent reader did. When a test constrains prose, check the prose is still *true*, not merely green.
+- **A fix for a class of defect will contain that defect unless you look for it there.** WEB-015 exists because one sentence claimed "Recording stopped" in three situations and was false in two. The fix routed the situation into `storageFailure()` — and missed both places it still mattered. `StorageBlockedError` carried the same false clause inside its own message and was returned before the situation was read, in the one path the owner meets most often. And the new "withdraw a stale warning" rule erased a **true** warning, because a session with no saved completion record is permanently partial and no later success changes that; the five-second poll wiped it in five seconds. **When you fix a class of bug, re-run the test that found it against your own fix**, including the paths that return early.
 - **`npm run check` cannot pass inside a git worktree** until ENG-012's test is fixed. `apps/web/tests/next-config.test.ts` asserts `config.outputFileTracingRoot?.endsWith("echo")`, and a worktree's root is `.claude/worktrees/<branch>`, so it fails on the directory name while `next.config.ts` is correct — it derives the root from `import.meta.url`, which is right in both places. Confirmed both ways at one commit on 2026-09-08: **72 pass, 0 fail** in `~/Documents/GitHub/echo`, **71 pass, 1 fail** in a worktree. Run the suite from a checkout named `echo` for a true result.
 
 ## Verification floor
 
-**The floor is 114 unit, 8 production HTTP, 4 self-host parity, 45 controller/adapter tests (16 + 29).** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+**The floor is 126 unit, 8 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 → 126 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
 
 | Command | What it covers |
 | --- | --- |
-| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **114 unit** → production build → **8 production HTTP** → **4 self-host parity** |
-| `python3 -m unittest discover -s tests` | **16 controller + 29 adapter tests** — controller and reporting-boundary coverage, never certification of the web application |
+| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **126 unit** → production build → **8 production HTTP** → **4 self-host parity** |
+| `python3 -m unittest discover -s tests` | **16 tests**, bounded controller only — it certifies the controller, never the web application |
 | `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
 | `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |
 | `selfhost-container` CI job | The container image. Docker is unavailable on the development machine, so this is verified in CI only; last passed 2026-09-08 |
