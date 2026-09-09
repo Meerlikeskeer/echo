@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { capacity, preserveAudio, chunkKey, drainQueue, IndexedDBQueue, sendChunk, storageFailure, type QueueEntry } from "../lib/recording/queue";
-import type { PlayableChunk } from "../lib/recording/session";
+import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
+import type { PlayableChunk, Session } from "../lib/recording/session";
 
 export function useAudioQueue(canProcess = true) {
   const store = useRef(new IndexedDBQueue());
   const processingAllowed = useRef(canProcess);
   useEffect(() => { processingAllowed.current = canProcess; }, [canProcess]);
+  const [completions, setCompletions] = useState<Completion[]>([]);
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [unsaved, setUnsaved] = useState<PlayableChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -19,8 +21,15 @@ export function useAudioQueue(canProcess = true) {
   const mounted = useRef(false);
   const refresh = useCallback(async () => {
     const rows = await store.current.list();
+    // Completion evidence is a second, newer read, and WEB-004's promise — saved
+    // clips stay listable and downloadable — must not depend on it. Without it
+    // every session simply stays partial, which is the conservative reading;
+    // failing here instead would leave `ready` false, so Record stays disabled
+    // and already-saved audio never renders. Same philosophy as listCompletions
+    // retaining malformed evidence for the stitcher to flag.
+    const manifests = await store.current.listCompletions().catch((): Completion[] => []);
     const info = await capacity(rows);
-    if (mounted.current) { setEntries((previous) => preserveAudio(previous, rows)); setSpace(info); setReady(true); }
+    if (mounted.current) { setEntries((previous) => preserveAudio(previous, rows)); setSpace(info); setCompletions(manifests); setReady(true); }
     return info;
   }, []);
   // ADR-016: draining no longer waits for capture to stop. The Web Lock still
@@ -82,6 +91,15 @@ export function useAudioQueue(canProcess = true) {
     if (info.nearFull) throw new DOMException("Insufficient recording reserve", "QuotaExceededError");
     setError(null);
   }, [refresh]);
+  const complete = useCallback(async (captured: { session: Session; chunks: readonly PlayableChunk[] }) => {
+    try {
+      await persistSessionCompletion(captured, manifest => store.current.saveCompletion(manifest));
+      await refresh();
+    } catch (cause) {
+      if (mounted.current) setError("Capture completion could not be saved. The session remains partial; saved audio is retained.");
+      throw cause;
+    }
+  }, [refresh]);
   const finished = useCallback(() => { void sync(); }, [sync]);
-  return { entries, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
+  return { entries, completions, complete, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
 }

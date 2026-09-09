@@ -277,6 +277,20 @@ Fixing that properly needs a ledger that survives the process. A durable ledger 
 
 **Consequences.** Provider spend and result stability both improve in the ordinary case, and neither is guaranteed in the adversarial one. `ARCHITECTURE.md`'s WEB-004 boundary line *"uploads … run after capture"* is superseded by this ADR and updated in the same change. The database decision keeps its **Open** status and now has a named consequence attached to it: the first thing a durable store buys Echo is exactly-once chunk processing. Reversing decision 1 or 5 — draining only after capture again, or removing the ledger — needs an ADR.
 
+## ADR-017 — Conservative transcript stitching and capture completion evidence
+
+**Status:** Accepted for implementation · **Date:** 2026-09-08 · **Task:** WEB-006 · **Refines:** ADR-012
+
+**Context:** Incremental results can arrive out of order. A contiguous prefix of saved chunks does not establish that capture finished: a crash can lose the last container. Provider timestamps already use session milliseconds, and broad segment timestamps do not establish when individual words were spoken.
+
+**Decision:** Derive a session transcript in a pure domain module from original chunk metadata and transcripts. Order by sequence and session timestamps. Remove duplicated overlap only when matching source segments lie wholly in the measured overlap and their timing agrees; preserve ambiguous or unmatched speech, including text absent from provider segments. Never fabricate word times or remove repeated speech outside overlap. Keep original transcripts and references to all source segments, including both sources of collapsed duplicate text.
+
+Add a completion record to the existing browser-local IndexedDB queue, listing the expected chunk metadata after a successfully stopped capture. Upgrade the database without replacing existing audio or processing rows. Validate the manifest and saved chunks before committing it, and expose it only after transaction completion. Failed capture, a failed completion write, or legacy recovered chunks without a manifest remain partial. A manifest records successful capture, not successful transcription: finalization additionally requires every expected chunk and valid transcript, with no gaps or conflicts.
+
+Render one derived session transcript with partial/final status and readable gaps. Recompute it as results arrive or recover; do not store a second mutable transcript cache. Existing generated notes remain explicitly per-chunk; session-wide artifacts belong to WEB-007. No database service, provider, dependency, background worker, retention change or remote durability promise is introduced.
+
+**Tradeoff:** Conservative alignment can leave repeated words visible when timestamps are too coarse to prove duplication. Preserving speech is preferable to silently deleting it. Recovered pre-manifest sessions cannot be retrospectively called complete. Native IndexedDB migration and capture lifecycle verification remain separate evidence from pure domain and rendering tests.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
