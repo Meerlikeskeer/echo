@@ -17,7 +17,15 @@ const RETENTION_TEXT: Readonly<Record<ProviderDisclosure["retention"], string>> 
 };
 
 export function DisclosureNotice({ disclosures }: { disclosures: readonly ProviderDisclosure[] }) {
-  const external = disclosures.filter((entry) => entry.processor === "external");
+  const valid = Array.isArray(disclosures) ? disclosures.filter((entry) => entry &&
+    (entry.port === "transcription" || entry.port === "notes") &&
+    (entry.processor === "external" || entry.processor === "local") &&
+    typeof entry.model === "string" && (entry.endpointHost === null || typeof entry.endpointHost === "string") &&
+    (entry.retention === "no-transfer" || entry.retention === "vendor-default" || entry.retention === "unknown")) : [];
+  if (!Array.isArray(disclosures) || valid.length !== disclosures.length) {
+    return <p role="alert" className="mt-4 text-sm text-amber-800">Saved processor disclosure is invalid. External processing details cannot be confirmed.</p>;
+  }
+  const external = valid.filter((entry) => entry.processor === "external");
   return (
     <section aria-labelledby="disclosure-title" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
       <h2 id="disclosure-title" className="font-medium text-slate-900">
@@ -48,7 +56,15 @@ function List({ title, items }: { title: string; items: readonly string[] }) {
 }
 
 export function RecordingOutcome({ result }: { result: RecordingResult }) {
-  const { transcript, notes } = result;
+  const transcript = result?.transcript, notes = result?.notes;
+  const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string");
+  if (!transcript || typeof transcript.text !== "string" || !Array.isArray(transcript.segments) ||
+      !transcript.segments.every(segment => segment && typeof segment.text === "string" &&
+        Number.isFinite(segment.startMs) && Number.isFinite(segment.endMs) && segment.startMs >= 0 && segment.endMs >= segment.startMs) ||
+      !notes || typeof notes.title !== "string" || typeof notes.summary !== "string" ||
+      !strings(notes.keyPoints) || !strings(notes.actionItems)) {
+    return <div className="mt-6"><p role="alert">Some saved per-chunk result data is invalid. Audio is retained; available session text is shown above.</p><DisclosureNotice disclosures={result?.disclosures} /></div>;
+  }
   return (
     <div className="mt-10 space-y-8">
       <section aria-labelledby="notes-title" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">

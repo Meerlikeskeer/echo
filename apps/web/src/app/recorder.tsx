@@ -7,6 +7,7 @@ import { captureSession } from "../lib/recording/capture";
 import type { PlayableChunk } from "../lib/recording/session";
 import { describeSecureContextProblem, readEnvironment } from "../lib/recording/secure-context";
 
+import { SessionTranscripts } from "./session-transcript";
 import { useAudioQueue } from "./use-audio-queue";
 import { chunkKey, incompleteSessions, storageFailure, summarizeQueue } from "../lib/recording/queue";
 
@@ -122,12 +123,17 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     setRecorder(active);
     setPhase("recording");
     void active.finished.then(async (captured) => {
+      let completionFailed = false;
+      try { await queue.complete(captured); } catch { completionFailed = true; }
+      queue.finished();
       if (attempt !== generation.current) return;
       setPhase("done");
+      if (completionFailed) {
+        setFailure({ title: "Session remains partial", detail: "Capture completion could not be saved. Saved audio is retained; completion cannot be confirmed.", retryable: false });
+      }
       if (captured.session.captureStatus === "failed") {
         setFailure({ title: "Capture incomplete", detail: "Capture or local saving failed. Saved and unsaved clips are shown below. Download unsaved audio before leaving.", retryable: false });
       }
-      queue.finished();
     });
   }
 
@@ -152,6 +158,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           {status.problems.map((problem) => <li key={problem}>{problem}</li>)}
         </ul>
         {queue.error ? <p role="alert">{queue.error}</p> : null}
+        <SessionTranscripts entries={queue.entries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={queue.completions} />
         {chunks.length ? <div className="mt-5 space-y-4"><p>Saved audio remains available while processing is unconfigured. No clips are deleted.</p>
           {chunks.map((chunk) => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some((entry) => chunkKey(entry) === chunkKey(chunk))} disabled={false} onSave={() => { void queue.persist(chunk).catch(() => {}); }} />)}
         </div> : null}
@@ -203,14 +210,14 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             <option value={1000}>1 second</option><option value={2000}>2 seconds</option>
           </select>
         </label>
-        <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Overlapping words are not merged yet, so they appear in both chunks.</p>
+        <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible.</p>
       </section>
 
       <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
         <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>
         {/* Chunks upload while recording continues (ADR-016), so this has to be
             readable mid-session: which chunks are done, which are moving, and
-            which have stopped. Per chunk only — WEB-006 stitches them. */}
+            which have stopped. Per-chunk progress feeds the session transcript below. */}
         <p>Chunk processing: {progress.transcribed} transcribed · {progress.uploading} uploading · {progress.waiting} waiting · {progress.retrying} retrying · {progress.blocked} blocked</p>
         <p>All clips are local-only: no verified remote audio copy exists. Processing does not remove audio.</p>
         <p>{queue.space?.persistent ? "Browser persistence granted." : "Browser storage may be evicted."} Keep this tab open while recording. Backgrounding or closing can lose the unfinished chunk and pauses retries.</p>
@@ -226,7 +233,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       </section>
 
       {chunks.length ? <section className="mt-6 space-y-4" aria-label="Session chunks">
-        <p className="text-sm text-slate-600">Saved clips recover on this same origin and browser when the page is available again. Export unsaved clips before leaving. Overlapping speech is not stitched.</p>
+        <p className="text-sm text-slate-600">Saved clips recover on this same origin and browser when the page is available again. Export unsaved clips before leaving. Original audio and per-chunk results are retained.</p>
         {chunks.map((chunk) => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some((entry) => chunkKey(entry) === chunkKey(chunk))} disabled={busy || phase === "recording"} onSave={() => { void queue.persist(chunk).then(queue.finished).catch(() => {}); }} />)}
       </section> : null}
 
@@ -238,8 +245,9 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         </div>
       ) : null}
 
-      {outcomes.map((entry) => <div key={chunkKey(entry)}><p className="mt-6 text-sm">Session {entry.metadata.sessionId.slice(0, 8)} · chunk {entry.metadata.sequence + 1}</p><RecordingOutcome result={entry.result!} /></div>)}
-      {!outcomes.length ? <div className="mt-6"><DisclosureNotice disclosures={status.disclosures} /></div> : null}
+      <SessionTranscripts entries={queue.entries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={queue.completions} />
+      {outcomes.map((entry) => <div key={chunkKey(entry)}><p className="mt-6 text-sm">Session {entry.metadata.sessionId.slice(0, 8)} · chunk {entry.metadata.sequence + 1} · Per-chunk notes and original transcript</p><RecordingOutcome result={entry.result!} /></div>)}
+      <div className="mt-6"><DisclosureNotice disclosures={status.disclosures} /></div>
     </div>
   );
 }
