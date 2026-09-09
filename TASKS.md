@@ -16,6 +16,24 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 **Integration note:** merged into `main`. The loop remains disabled: `agent-loop.json` still has `"ready": false`, and `scripts/run-app-tests.py` / `scripts/run-app-acceptance.py` do not exist. Controller tests were rerun after integration: 16 tests, 0 failures. Preflight correctly refuses to run (exit 2, "ready is false").
 
+## ENG-017 — Bounded loop test and acceptance adapters
+
+**Status:** Implemented and independently reviewed; full verification blocked by environment permissions · **Branch:** `eng/ENG-017-bounded-loop-adapters`
+
+**Acceptance:** Add `scripts/run-app-tests.py` and `scripts/run-app-acceptance.py`, deriving every selected test's stable ID and pass/fail outcome from real runner TAP. Fail closed for empty, malformed, partial, skipped, crashed and zero-test runs; preserve nonzero runner exits. Freeze Python fixture acceptance tests and obtain independent checker review before builder implementation. Increase Python coverage above the existing 16 controller tests. Keep `agent-loop.json` at `ready: false`. Use the manual orchestrator/builder/checker protocol, at most five builder attempts, and immediate workflow stops.
+
+**Handoff (2026-09-09):** Based on `main` at `f68ccca`; [PR #29](https://github.com/Meerlikeskeer/echo/pull/29). The two adapters share a strict parser under the protected `scripts/run-app-*.py` glob. They select the complete fixed suites, validate numbered TAP scopes and plans, retain failed/skipped/TODO outcomes, invalidate stale reports, and publish complete JSON atomically. Explicit web TypeScript configuration preserves the workspace JSX behavior while running from the repository root. No CI, app source, controller, or other task entries changed.
+
+**Protocol and evidence:** After the initial baseline stop, the owner explicitly requested continuation. Environment repair restored dependencies from a fresh temporary install (repair evidence only). The independent checker reviewed 29 fixture tests before implementation; frozen commit `db09ea0`. Separate builder and checker sessions ran the manual protocol, with two builder attempts. First implementation `f105f6d` passed all 29 fixtures, but real-run review caught missing JSX configuration (102 of 114 unit outcomes passed); repair `f77fe39` independently passed all 29 fixtures and the real unit adapter exited 0 with exactly the baseline's 114 passing IDs/outcomes. The production adapter again preserved all 8 failures. No further implementation defects found. No executable-controller guarantees are claimed; `ready: false` is unchanged.
+
+**Required verification observed:** Root `npm ci`: exit 255, EPERM deleting dependency directories, including an escalated retry. Root `npm run check`: exit 1 after tracked-source, generated table, lint, types and all 114 unit tests passed; build fails on denied cleanup of `.next/build/chunks`. Python 3.12 full discovery: exit 1, 45 tests selected, all 29 new adapter tests passed and all 16 existing controller tests errored during denied temporary-directory cleanup. Separate production HTTP: exit 1, 8 tests failed because no production build exists; separate self-host parity: exit 1, 4 tests failed because no standalone bundle exists. Real production adapter exit 1 faithfully published all 8 failed outcomes. The production and self-host stages inside the required check chain did not run. Full logs and checker reports remain local under `/private/tmp/echo-eng017-evidence/`, as AGENT_WORKFLOW.md requires.
+
+**Fresh resume baseline (2026-09-09, this agent session):** `npm ci` exited 255 twice, including approved escalated execution, on EPERM removing `apps/web/node_modules/.bin`. `npm run check` exited 127 after tracked-source and generated-table guards passed; ESLint could not launch. `PATH="$HOME/.local/bin:$PATH" python3.12 -m unittest discover -s tests` exited 1: 45 tests in 5.753 seconds, 29 adapter tests passed and 16 controller cleanup errors. Python is 3.12.13. This reproduces an environment-access failure, not a repository defect, despite the owner's separately reported clean-extraction pass. Unit/build/production/parity stages, both real adapters, and deliberate genuine failure control were not run in this resume. Stopped at baseline under workflow rule 3. Current owner-required floor: 126 unit, 8 production HTTP, 4 parity, 45 Python (16 controller + 29 adapter); integrate WEB-015 after its merge without lowering either count. Enabling the loop remains an explicit owner decision and ENG-017 is not Done.
+
+**Exclusive-checkout resume (2026-09-09):** Plain `npm ci` and approved escalated `npm ci` each exited 255 on the same dependency-directory EPERM. The owner's requested independent delete probe created a temporary Git repository and tag (each Git command exit 0), deleted the tag successfully, then failed to remove the whole repository with PermissionError(1, Operation not permitted), probe exit 1. This proves sandbox directory-removal denial; no controller defect is inferred. `npm run check` exited 127 after tracking/table checks passed (32 tasks), with eslint unavailable. `python3.12 -m unittest discover -s tests` exited 1: 45 tests in 5.752 seconds, 29 adapter passes and 16 controller cleanup errors. Unit/build/HTTP/parity stages and both real adapter demonstrations including deliberate failure: not run. No implementation or frozen-test changes. PR #29 head and merge refs were confirmed over Git (exit 0). The latest owner clarification supersedes the previous floor instruction: this branch's floor is 114 unit / 8 HTTP / 4 parity / 45 Python, with WEB-015's 126 and WEB-007's 149 unit / 9 HTTP reserved for future integration. Correcting the premature 126 in STATUS.md removes no tests. No rebase now. ENG-017 remains not Done and enabling remains owner-only.
+
+**Next step / not verified:** Rerun root `npm ci`, `npm run check` and Python 3.10+ full discovery in an environment permitting directory cleanup. Successful production adapter integration still requires a successful build and 8 passing HTTP outcomes. Do not call the task Done on fixture evidence alone. Enabling the loop additionally requires independently reviewed goal-specific acceptance tests for the actual feature goal, reviewed check/protection configuration, and an explicit owner decision; enabling is outside ENG-017 scope. Preserve the in-flight recovery note until verification completes.
+
 ## ENG-002 — Self-host parity verification
 
 **Status:** Implemented and verified, except the container build itself · **Branch:** `eng/ENG-002-self-host-parity` · **Dependencies:** WEB-001 (satisfied)
@@ -485,6 +503,162 @@ Error: ENOENT: no such file or directory, open
 
 **Next:** owner reviews. The workflows themselves can only be exercised by GitHub, so this branch's own first push is their first real run — confirm that `verify` ran and `Self-hosted container` did **not**, since its pull request opens as a draft.
 
+## ENG-016 — Auto-merge on green
+
+**Status:** Specified; owner must apply the workflow and settings · **Branch:** `eng/ENG-016-auto-merge-on-green` · **Dependencies:** ENG-007, ENG-015
+
+**Acceptance:** A branch whose required checks all pass merges into `main` without anyone pressing a button, and a branch whose checks fail never merges. What is checked does not change.
+
+### Handoff (2026-09-08)
+
+- **Branch/base:** `eng/ENG-016-auto-merge-on-green`, from `main` @ `f68ccca`.
+- **Why.** The owner is the merge button. Review latency, not check latency, is what holds finished work on a branch, and `main` has already fallen fourteen commits behind that way once. Auto-merge does not skip a check; it presses the button the moment every required check is green.
+- **Agents cannot apply this.** `.github/workflows/` is gated behind a scope agents here do not hold (`AGENTS.md` § *Version control discipline*), so the exact YAML is written out below for the owner, as that rule prescribes.
+
+#### The prerequisite that is easy to miss
+
+**Auto-merge is not an independent switch. It requires branch protection on `main` with at least one required status check.** GitHub refuses to enable auto-merge on a pull request that has nothing to wait for, because such a pull request is already mergeable. If *Allow auto-merge* is turned on and nothing happens, this is the reason.
+
+#### Settings, in order
+
+1. **Settings → General → Pull Requests:** enable **Allow auto-merge**. Enable **Allow squash merging**. Optionally enable **Automatically delete head branches**.
+2. **Settings → Rules → Rulesets** (or **Branches → Branch protection**) on `main`: require a pull request before merging, and under **Require status checks to pass**, add **`verify`**. Leave required approvals at 0 for the zero-touch path; set it to 1 to keep a human gate on everything.
+3. **Settings → Actions → General → Workflow permissions:** **Read and write permissions**, and **Allow GitHub Actions to create and approve pull requests** stays checked — `open-pull-request.yml` already depends on it.
+
+**Require `verify` and not `selfhost-container`.** `verify` triggers on `push`, so it fires on every branch regardless of who opened the pull request. `selfhost-container` triggers on `pull_request`, which is unreliable here (see the finding below), and a required check that never reports leaves every pull request blocked as pending forever.
+
+#### Scope: which branches merge themselves
+
+`eng/**` and `docs/**` merge themselves on green. They change tooling and prose. A `feat/**` branch changes what the owner sees in the app, and several of them are gated on browser acceptance that no check can perform, so it stays a deliberate act — one click on **Enable auto-merge** in the pull request, after which GitHub does the rest.
+
+#### Replacement `.github/workflows/open-pull-request.yml`
+
+Only `permissions` and the final step change.
+
+```yaml
+name: Open pull request
+
+# ENG-007. Agents cannot open pull requests: their sandboxes cannot reach
+# api.github.com, and a token that could would also let an agent approve its own
+# work. GitHub opens it instead, with a token scoped to this repository.
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'eng/**'
+      - 'docs/**'
+      - 'int/**'
+
+permissions:
+  # ENG-016. `contents` rises from read to write because enabling auto-merge
+  # ends in a merge commit on `main`. `pull-requests: write` alone can open a
+  # pull request but cannot land one.
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: open-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  open-pull-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open a pull request if one is not already open
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "A pull request is already open for $BRANCH; it picks up this push automatically."
+            exit 0
+          fi
+          # The agents' commit messages already carry the task ID, the exact
+          # commands run, and what stayed unverified. That is the review
+          # material, so it becomes the pull request body verbatim.
+          {
+            echo "Opened automatically on push. The body is the latest commit message."
+            echo
+            echo "---"
+            echo
+            git log -1 --pretty=%B
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$(git log -1 --pretty=%s)" \
+            --body-file "$RUNNER_TEMP/pr-body.md"
+
+      # ENG-016. Auto-merge skips no check. It presses the merge button the
+      # moment every required check is green, and never presses it otherwise.
+      # Scoped to eng/ and docs/ because those change tooling and prose; a
+      # feat/ branch changes what the owner sees and stays a deliberate click.
+      - name: Let eng/ and docs/ branches merge themselves once green
+        if: startsWith(github.ref_name, 'eng/') || startsWith(github.ref_name, 'docs/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          state=$(gh pr view "$BRANCH" --json isDraft,autoMergeRequest \
+            --jq '(.isDraft|tostring) + " " + ((.autoMergeRequest != null)|tostring)')
+          draft=${state% *}
+          armed=${state#* }
+
+          if [ "$draft" = "true" ]; then
+            echo "$BRANCH is a draft. Auto-merge is deliberately not enabled on drafts."
+            exit 0
+          fi
+          if [ "$armed" = "true" ]; then
+            echo "Auto-merge is already enabled for $BRANCH."
+            exit 0
+          fi
+
+          if ! gh pr merge "$BRANCH" --auto --squash; then
+            echo "::error::Could not enable auto-merge for $BRANCH."
+            echo "Check Settings > General > Pull Requests > 'Allow auto-merge',"
+            echo "and that main's ruleset requires at least one status check."
+            echo "GitHub refuses auto-merge on a pull request with nothing to wait for."
+            exit 1
+          fi
+```
+
+The last step **fails loudly** rather than continuing quietly, which is the fail-closed rule applied to CI: a misconfigured setting should be visible on the first push, not discovered later as work that silently never merged.
+
+#### A finding that belongs to ENG-015, and an optional patch
+
+**A pull request opened with `secrets.GITHUB_TOKEN` does not raise `pull_request` events.** GitHub suppresses them to prevent workflow recursion, and `open-pull-request.yml` opens every pull request with exactly that token. ENG-015 moved `selfhost-container` onto a `pull_request` trigger, so that job likely never fires on an auto-opened pull request — whether or not it is a draft. ENG-015's handoff attributes the absence to draft status, which may not be the whole cause. This is the same constraint that made `pull-request.yml` trigger on `push` in the first place.
+
+**Confirm before patching:** open the Actions tab and check whether `Self-hosted container` ever ran for pull request 26 from a `pull_request` event. If it did not, replace that workflow's `on:` block, which restores push coverage while keeping ENG-015's saving, because the image can only change when one of these paths does:
+
+```yaml
+on:
+  push:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.nvmrc'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'apps/web/next.config.ts'
+      - 'scripts/**'
+      - '.github/workflows/selfhost-container.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+```
+
+Keep the existing `if:` guard on the job. A path-filtered workflow that does not run reports nothing, which is a second reason not to make `selfhost-container` a required check.
+
+#### A consequence to watch on the first auto-merge
+
+A push made with `GITHUB_TOKEN` does not trigger workflows, so the merge commit auto-merge creates on `main` may not run `verify` again. The merged tree was verified on the branch, so this is a lost confirmation rather than a lost gate. If it matters, add **Require branches to be up to date before merging** to the ruleset, which forces the branch to be rebased onto current `main` before the tested state can merge.
+
+**Next:** owner applies the settings and the workflow, then pushes any `eng/` or `docs/` branch and confirms it merges itself once `verify` goes green. Nothing here has executed; a workflow can only be exercised by GitHub.
+
 ## ENG-018 — `npm run check` could not pass in a worktree, because a test asserted a folder name
 
 **Status:** Implemented and verified; awaiting owner review · **Branch:** `eng/ENG-018-worktree-verification` · **Dependencies:** ENG-012
@@ -509,11 +683,11 @@ Error: ENOENT: no such file or directory, open
 
 | Command | Exit | Observed result |
 | --- | --- | --- |
-| `npm run check` | **0** | The full chain, green **in a worktree**: tracked-source, status table, lint, typecheck, **114 unit / 114 pass / 0 fail**, production build, **8 production HTTP**, **4 self-host parity**. This command has never exited 0 in a worktree before. |
+| `npm run check` | **0** | The full chain, green **in a worktree**: tracked-source, status table, lint, typecheck, **161 unit / 161 pass / 0 fail**, production build, **9 production HTTP**, **4 self-host parity**. This command has never exited 0 in a worktree before. Measured after merging `main` @ `b0451d2`; before that merge the same chain was green at 114 unit and 8 production HTTP. |
 | `python3.12 -m unittest discover -s tests` | 0 | **16 tests, OK.** Unchanged by this task and run to confirm it. System `python3` is 3.9.6, which the workflow does not support. |
 | `npm ci` | not run | The worktree's dependency tree was already installed and healthy. |
 
-**Next:** owner review. The floor is unchanged — this task adds no tests and removes none; it makes the existing 114 reachable from a worktree. **Two agents can now work concurrently on one machine**, each in its own worktree on its own branch, with separate dependency trees and no shared mutable checkout.
+**Next:** owner review. The floor is unchanged by this task — it adds no tests and removes none; it makes the existing suite reachable from a worktree. Merging `main` did correct the recorded floor from 149 to **161**: WEB-015 and WEB-007 each branched from 114 and recorded 126 and 149, neither able to see the other, so both were stale the moment they merged. **Two agents can now work concurrently on one machine**, each in its own worktree on its own branch, with separate dependency trees and no shared mutable checkout.
 
 ## ENG-003 — Shared status file and reading map
 
@@ -690,13 +864,20 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 **Human still must verify:**
 
-1. On a development server, open `/diagnostics/queue` in Chrome and Safari. Run native storage tests; require all PASS lines. Reload, then select Recover pending clips; require 3 pending chunks with verified checksums. Run Test capture persistence; require a commit before session stop and all completed Blobs recovered. Use synthetic data only.
+1. **Superseded — run this through `status/acceptance/browser-acceptance.md` instead.** On 2026-09-09 `/diagnostics/queue` was driven by hand in Chrome and Safari and produced seven PASS lines with no FAIL, the first native browser evidence this task has ever had. It does **not** close the check: the development server was still serving pre-WEB-006 code, 41 commits behind `main`, so the run certifies the adapter as merged in pull request #9 and says nothing about the code now on `main`. The acceptance script supersedes these four steps and adds the v1 to v2 migration and blocked-upgrade checks that did not exist when this was run. Details, the defects found while diagnosing, and the environment traps are in `status/in-flight/WEB-004.md`.
 2. In the real recorder, record, disconnect, stop and reload/reopen the same origin when reachable. Pending audio must recover; reconnect must process once locally, retain raw Blobs/results and not reset playback every five seconds. Repeat with two tabs and an interrupted response; remote provider work may repeat because no durable server job ledger exists.
 3. Exercise actual browser quota exhaustion/private mode and a mid-recording write failure. Confirm capture stops, previous commits remain, unsaved audio can be downloaded, and no raw copy is automatically deleted. Diagnostic budget/abort tests are only deterministic coverage of that path.
 4. **Deferred, not outstanding (ADR-013).** Physical mobile: microphone Allow/Deny, interruption/background/lock-screen, force-close and reopen, low storage and persistent-storage refusal. Echo no longer binds a non-loopback interface, so no phone can reach it; this moves to its own task against a deployed HTTPS origin and **WEB-004 is not incomplete for lacking it.** The stated limits still hold whenever it is run: only complete committed containers survive, the active container can be lost, timers and uploads stop when suspended or closed, and the application shell is not cached for an offline hard navigation — data recovers when the same origin is available. The former "HTTPS LAN phone certificate trust" owner check is void; ADR-013 removed the LAN server it referred to.
 5. **Done, 2026-09-09.** All required commands were rerun from the original repository root after merging `main` @ `f234040`: `npm ci` exit 0, `npm run check` exit 0 (69 unit, 7 production HTTP, 4 self-host parity, all pass, production build succeeded), `python3 -m unittest discover -s tests` exit 0 (16 tests, OK). The earlier failures were a broken agent sandbox, not a repository defect; see the local-environment note above. WEB-004 remains pending acceptance on native-browser evidence alone.
 
-**Next:** owner reviews PR #9 and completes the native/manual checks above. No CI change is needed; no workflows were edited. No server copy, retention deletion, background upload or exactly-once provider execution is claimed.
+### Native browser acceptance attempt (2026-09-08)
+
+- **Branch/base:** `test/WEB-004-browser-acceptance`, from remote `main` @ `6cee6fd`; separate worktree `/private/tmp/echo-web004-browser` to avoid the parallel ENG-010 checkout. This documentation handoff is the only change. PR #9 is already merged; application code was not reopened or modified.
+- **Browser evidence:** Safari **26.4 (21624.1.16.11.4)** observed in About Safari. Navigation to `http://127.0.0.1:3000/diagnostics/queue` showed “Safari Can’t Connect to the Server”. Chrome bundle selection was ambiguous, a mounted-app selection failed, and the running translocated app could be selected; navigation actions were then refused twice because the user changed the app state. Chrome version not obtained. No native PASS lines, recovery count, checksum result, or capture result observed. The earlier `elementHasNoFrame` / `noWindowsAvailable` errors did not recur. Automation/navigation problems are **not application test failures**.
+- **Server:** `npm run dev` initially announced Ready, then emitted repeated `EMFILE` watcher errors and development-directory restarts. Stopped by the agent (exit 0); no stable diagnostic response established. The first check ran concurrently with dev; subsequent checks ran after stopping dev and reproduced the same type error. No source defect proven. Environment files were excluded from the worktree under the session’s denied-read policy. Owner configuration and browser authentication with fixture providers were requested without requesting credentials in chat. No credentials or real audio were read, printed, or recorded.
+- **Required commands, worktree repository root:** `npm ci` **exit 0**, 373 packages, zero vulnerabilities, EPERM cleanup warnings. `npm run check` **exit 1**: source tracking and lint passed; generated `.next/types/validator.ts` failed TS2344 (`Route` does not satisfy `never`); unit tests/build/production HTTP/self-host parity **not run**. Standalone and escalated retries also exit 1. `python3 -m unittest discover -s tests` **exit 1**, RecursionError during cleanup/error reporting, **no final count**; escalated retry also exit 1. Runtime: Node 22.23.2, npm 10.9.8, Python 3.9.6. No fallback runner was substituted. Floors remain 69 unit / 7 HTTP / 4 parity / 16 controller, with no new passing count claimed.
+- **Still unverified:** all native storage PASS lines; three pending chunks with verified checksums after reload; commit before stop and recovery of all completed Blobs; real recorder disconnect/stop/reload/reconnect, one local processing result, retained raw audio/results, uninterrupted playback across five-second refreshes, and two-tab behavior. Existing manual quota/private-mode checks remain outstanding; mobile stays deferred under ADR-013.
+- **Next:** restore stable local dev and browser automation, configure/authenticate without exposing credentials, then rerun the requested acceptance and required commands. Integrated `main` @ `f5f3521` (ENG-010, PR #11) and preserved its deployment facts alongside this attempt in STATUS.md. This attempt is partial evidence and **does not close WEB-004**.
 
 ## WEB-005 — Incremental upload and transcription
 
@@ -790,9 +971,39 @@ It returned `goal_met: false` on **evidence**, and its findings were repaired ra
 
 ## WEB-007 — Structured artifacts
 
-**Status:** Todo · **Dependencies:** WEB-006
+**Status:** Implemented and verified by test; browser acceptance outstanding · **Branch:** `feat/WEB-007-structured-artifacts` · **Dependencies:** WEB-006
 
 **Acceptance:** Generate validated title, summary, notes, action items and research topics tied to transcript revision; reject malformed output and prevent stale generation overwrites.
+
+### Handoff (2026-09-09)
+
+- **Branch/base:** `feat/WEB-007-structured-artifacts`, from `main` @ `f68ccca`.
+- **No stack decision, and no new port.** `ARCHITECTURE.md` § *Provider boundaries* already states the LLM contract as "Transcript + schema → validated artifacts", so this extends the existing `notes` port with `generateArtifacts`. `generateNotes` is untouched and still produces per-chunk notes during capture, when no session transcript exists yet.
+
+**The rule the whole task turns on.** Artifacts are accepted only when their revision **equals** the transcript's revision at the moment the answer lands. The obvious alternative — order two revisions and keep the newer — cannot work, because a revision is a content hash and hashes do not order. Requiring an exact match makes a stale overwrite impossible *by construction* rather than by a comparison someone can get wrong: a generation that started from an older transcript does not match the transcript on screen and is discarded without ever being compared. A second, separate rule handles the one case equality cannot see — two generations racing for the *same* revision, where a retry overtakes the attempt it replaced — using a monotonic `generation` assigned when a generation starts. It is deliberately not consulted across revisions, so artifacts matching the current transcript always win.
+
+- **Implemented.** `lib/recording/artifacts.ts` holds the domain type, a strict validator, the revision function, the endpoint's input guard and the acceptance rule. `POST /api/sessions/artifacts` generates server-side, because provider credentials never reach the browser (REQ-009). `useSessionArtifacts` and `SessionArtifacts` request on demand and render the result inside the existing session transcript section.
+- **The endpoint computes the revision; it never accepts one.** Echo has one owner, so this is not about an untrusted caller. It is that a mislabelled revision defeats the staleness rule silently: artifacts bound to a revision their transcript never had would match the wrong transcript and overwrite newer ones, which is the exact defect this task exists to prevent. The caller therefore sends the transcript and no revision at all.
+- **Malformed output is refused, not repaired.** The validator rejects missing fields, wrong types, empty and oversize values, duplicates, and **unknown fields** — `ARCHITECTURE.md` forbids a vendor response shape reaching a domain type, and a tolerated extra key is exactly how one arrives. Rejections name a field and a reason code and never the offending value, because a provider response is untrusted text and `ProviderError` already refuses free-form messages. The `openai-compatible` adapter reuses that same validator rather than a second lenient parser, and unlike `generateNotes` it refuses a thin answer instead of substituting "Untitled recording": a placeholder bound to a revision is indistinguishable from a real result.
+- **Research topics are suggestions and nothing else.** REQ-005 separates suggested research from opt-in external research, which is WEB-013. Nothing looks anything up, the prompt says so, and the rendered section says so, because a topic list beside a summary reads as findings unless it is labelled.
+- **Generation is on demand.** A transcript changes on every chunk during capture; regenerating automatically would spend a provider call per chunk for a summary nobody asked for. Artifacts that no longer match the transcript stay on screen with a label rather than disappearing — outdated notes with a reason beat no notes and no reason.
+
+**A test in the first draft asserted something it did not prove, and was corrected.** It claimed length-prefixed revision encoding prevents a forged revision. A negative control disproved it: the test passes with the prefixes removed, because every record contributes a fixed number of fields and both counts are encoded, so the naive delimiter is already collision-free *given the surrounding structure*. The prefixes were kept — they are unambiguous without depending on anything around them, which is what survives the next variable-arity field — but the comment and the test now say only what is demonstrated. A second negative control confirmed the acceptance rule is load-bearing: disabling the equality check fails exactly the two stale-transcript tests.
+
+**Required command results, not substituted** (worktree `doc-web004-browser-evidence`):
+
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm run lint` | 0 | Clean, `--max-warnings=0`. |
+| `npm run typecheck` | 0 | Route types generated, `tsc --noEmit` clean. |
+| `npm test` | 1 | **149 unit, 148 pass, 1 fail.** The single failure is `next-config.test.ts`, which asserts the checkout directory is named `echo` and cannot pass in a worktree (ENG-012). Baseline on `main` was 114/113/1 with the same single failure. |
+| `npm run build` | 0 | Production build succeeded; `/api/sessions/artifacts` appears in the route table. |
+| `npm run test:production` | 0 | **9 pass, 0 fail**, up from the floor of 8. The new one exercises the endpoint over real HTTP against a production build. |
+| `npm run selfhost:assemble` then `npm run test:selfhost` | 0 / 0 | **4 parity tests pass.** |
+| `npm run check` | not run as a chain | Stops at the unit stage on the same worktree-only failure. Every stage after it was run individually, above. |
+| `python3 -m unittest discover -s tests` | not run | Controller only; this task touches no controller code. |
+
+**Next:** run the full `npm run check` from a checkout named `echo` for a true result, then owner review. **No browser acceptance is claimed.** Nothing here has run in a real browser: the on-demand request, the stale label appearing when a chunk lands mid-generation, and `crypto.subtle` computing a revision on the deployed origin all need the same Chrome and Safari session as the WEB-003 through WEB-006 items, and belong in [`status/acceptance/browser-acceptance.md`](status/acceptance/browser-acceptance.md).
 
 ## WEB-008 — Quick Note mode
 
@@ -835,6 +1046,35 @@ It returned `goal_met: false` on **evidence**, and its findings were repaired ra
 **Status:** Todo · **Dependencies:** WEB-008, WEB-011
 
 **Acceptance:** Add replaceable adapter with preview, date/timezone resolution, explicit confirmation, minimal permissions and idempotent export; test retries without duplicate events.
+
+## WEB-015 — The recorder discards every error and its warning outlives the failure
+
+**Status:** Implemented and verified by test; awaiting owner review · **Branch:** `feat/WEB-015-recorder-error-reporting` · **Dependencies:** WEB-004, WEB-005, WEB-006
+
+**Acceptance:** Every local-storage failure in the recorder reaches somewhere the owner can read it; a storage warning states a consequence that is true where it is shown; and a warning is withdrawn when, and only when, the condition it describes is over.
+
+Opened from three defects found while diagnosing WEB-004's browser acceptance. None belongs to WEB-004, all three were on `main`, and none was covered by a test.
+
+### Handoff (2026-09-09)
+
+- **Branch/base:** `feat/WEB-015-recorder-error-reporting`, from `main` @ `f68ccca`.
+- **The three defects.** (1) Not one `console` statement existed in `recorder.tsx`, `use-audio-queue.ts` or `queue.ts` — every failure was caught, mapped to a sentence and discarded, which is why the other two were invisible and why diagnosing one of them cost an afternoon of hand-written IndexedDB console snippets. (2) `queue.error` was sticky: the only clear was inside `prepare()`, which runs only when Record is pressed, so a chunk that failed once and saved on retry left the warning up beside a queue showing zero unsaved clips. (3) `storageFailure()` collapsed every unrecognised error into one sentence claiming recording had stopped and directing the owner to rescue unsaved clips — false when `prepare()` refused before the microphone opened, and false on the five-second poll. That advice sent a session to clear site data, which destroys saved audio and is exactly what the retention rules forbid as a remedy.
+- **Implemented:** `apps/web/src/lib/recording/log.ts` reports the scope and the error's own name and message to the console and nothing else — never a Blob, chunk, transcript or metadata record, and a thrown non-Error is named by its type rather than stringified, because an object thrown from application code could be a chunk. The console is the destination because the audience is the owner with the page open and ADR-016 is explicit that no durable server-side store exists; sending failures anywhere else would be a new external processor and a new disclosure. `storageFailure(error, situation)` takes the situation the caller knows and the error does not — `capture`, `starting` or `maintenance` — and only `capture` says recording stopped, because `capture.ts` calls `stop()` when the persist callback throws. `resolveFailure()` withdraws a warning on any storage success while nothing is unsaved.
+- **Two defects in the first pass, found on review and fixed in `94b0b7d`.** Both are the same defect the task exists to fix, reappearing inside the fix. First, `StorageBlockedError` skipped the situation entirely: its own message ended "Recording stopped; previously saved clips are retained" and `storageFailure()` returned it verbatim before the situation was consulted. That error is thrown from the IndexedDB open, which the load-time poll performs before anything has been recorded, so the false sentence survived in the one place the owner is most likely to meet it. The class now carries only the remedy, which is what is genuinely situation-independent, and the caller states the consequence. Second, `resolveFailure()` erased a **true** warning: it cleared any message whenever nothing was unsaved, and the capture-completion failure sets a message no later success withdraws, because without that record the session is permanently partial. The five-second poll wiped it within five seconds. A warning is now transient or durable and only a transient one is withdrawn; `prepare()` still clears both, deliberately, because a new recording is a different session.
+- **Not in scope.** Stitching, the v1→v2 migration and the upload paths are untouched. No persistence behaviour changed and nothing is deleted: this changes what is reported and when a warning is withdrawn. The hook still returns `error: string | null`, so no component that renders it changed.
+
+**Required command results, not substituted** (worktree `doc-web004-browser-evidence`, at `94b0b7d`):
+
+| Command | Exit | Observed result |
+| --- | --- | --- |
+| `npm run lint` | 0 | Clean, `--max-warnings=0`. |
+| `npm run typecheck` | 0 | Route types generated, `tsc --noEmit` clean. |
+| `npm test` | 1 | **126 unit, 125 pass, 1 fail.** The single failure is `next-config.test.ts` — "output file tracing still points at the repository root in both cases" — which asserts the checkout directory is named `echo` and therefore cannot pass in a worktree (ENG-012). Baseline before this task's changes was 124/123/1 with the same single failure. |
+| `npm run check` | not run as a chain | Stops at the unit stage on the same worktree-only failure. |
+| `npm run build`, `npm run test:production`, `npm run test:selfhost` | not run | |
+| `python3 -m unittest discover -s tests` | not run | Controller only; this task touches no controller code. |
+
+**Next:** run the full `npm run check` from a checkout named `echo` for a true result, then owner review. **No browser acceptance is claimed** — the console output and the withdrawal timing are exactly the kind of thing that needs a real browser, and they belong in `status/acceptance/browser-acceptance.md` alongside the WEB-004, WEB-005 and WEB-006 items.
 
 ## INT-001 — Branch integration and architecture documentation
 

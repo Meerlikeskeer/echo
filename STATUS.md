@@ -32,7 +32,7 @@ Short definitions so nobody has to reconstruct them from context.
 | **Provider / vendor** | The outside company doing the work. Currently Groq, marked temporary. |
 | **The access gate** | The username-and-password check that sits in front of every page and endpoint. |
 | **Fail closed** | When something is misconfigured, missing or unknown, refuse — never guess and continue. |
-| **Route Handler** | A server-side URL that accepts requests. Echo has one: `POST /api/recordings`. |
+| **Route Handler** | A server-side URL that accepts requests. Echo has two: `POST /api/recordings` for one chunk, and `POST /api/sessions/artifacts` for a whole session. |
 | **Bounded loop** | The optional automation in `AGENT_WORKFLOW.md`: a *builder* agent writes code, a separate *checker* agent verifies it, an *orchestrator* runs them in turns with hard stop rules. **Currently off.** |
 | `npm run check` | The single command that runs everything: style, types, tests, a real production build, and live HTTP tests. |
 
@@ -48,6 +48,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | --- | --- | --- |
 | DOC-001 Shared repository foundation | Done | — |
 | ENG-001 Bounded builder/checker workflow | Done | — |
+| ENG-017 Bounded loop test and acceptance adapters | Implemented and independently reviewed; full verification blocked by environment… | `eng/ENG-017-bounded-loop-adapters` |
 | ENG-002 Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
 | ENG-007 Pull request workflow and branch protection | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
 | ENG-008 Secure-context development server and diagnosis | Partially withdrawn — the `secure-context` diagnosis is Done and merged in `a032a01`; the… | `eng/ENG-008-https-dev-server` |
@@ -60,6 +61,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | DOC-005 The living documents still said nothing was deployed | Done | `docs/DOC-005-deployed-doc-drift` |
 | ENG-014 Stop STATUS.md from causing merge conflicts | Done | `eng/ENG-014-status-per-task-files` |
 | ENG-015 Scope the container job to where its result can change | Implemented; awaiting owner review | `eng/ENG-015-container-job-scope` |
+| ENG-016 Auto-merge on green | Specified; owner must apply the workflow and settings | `eng/ENG-016-auto-merge-on-green` |
 | ENG-018 `npm run check` could not pass in a worktree, because a test asserted a folder… | Implemented and verified; awaiting owner review | `eng/ENG-018-worktree-verification` |
 | ENG-003 Shared status file and reading map | Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 | — |
 | WEB-001 Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
@@ -69,7 +71,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | WEB-004 Durable offline queue | Implemented; native browser/local verification and owner acceptance pending — NOT Done | — |
 | WEB-005 Incremental upload and transcription | Implemented and verified by test; the hook wiring that drains during capture is… | — |
 | WEB-006 Transcript stitching | Implemented and verified by test; the IndexedDB v1→v2 migration and completion recovery… | `feat/WEB-006-transcript-stitching` |
-| WEB-007 Structured artifacts | Todo | — |
+| WEB-007 Structured artifacts | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-007-structured-artifacts` |
 | WEB-008 Quick Note mode | Todo | — |
 | WEB-009 Session history | Todo | — |
 | WEB-010 Guarded audio retention | Todo | — |
@@ -77,6 +79,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | WEB-012 Private deployment and recovery validation | Todo | — |
 | WEB-013 Opt-in research | Todo | — |
 | WEB-014 Confirmed reminder/calendar export | Todo | — |
+| WEB-015 The recorder discards every error and its warning outlives the failure | Implemented and verified by test; awaiting owner review | `feat/WEB-015-recorder-error-reporting` |
 | INT-001 Branch integration and architecture documentation | Done | — |
 
 <!-- END GENERATED TASK TABLE -->
@@ -84,17 +87,18 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 ## What exists today
 
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
-- The recorder page, development-only owner-gated `/diagnostics/capture`, and one Route Handler, `POST /api/recordings`.
+- The recorder page, development-only owner-gated `/diagnostics/capture`, and two Route Handlers: `POST /api/recordings` and `POST /api/sessions/artifacts`.
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
 - Incremental upload during capture (WEB-005): a chunk is sent as soon as it is durably committed rather than at session end, a failing chunk no longer blocks the ones behind it, retry is bounded before an entry blocks with a readable reason, and `uploading` is a **persisted** state so a page that died mid-upload is recoverable as *in flight, outcome unknown*. `POST /api/recordings` keeps a job ledger keyed by chunk identity, so a retry after a lost response replays the stored result instead of paying for a second provider call. **The ledger is in-process and best-effort, not exactly-once** — a cold start, a redeploy, a second instance or a TTL expiry all lose it (ADR-016). The drain-during-capture wiring itself is code-verified but has no automated test and awaits browser acceptance.
 - A session transcript (WEB-006): overlapping chunk transcripts combined into one ordered transcript with per-segment provenance, explicit gaps, and a partial/final status. Deduplication is deliberately conservative — only whole segments lying wholly inside the *measured* adjacent-chunk overlap with agreeing timing, never invented word times, never repeated speech outside the overlap. **A session is final only when this browser saved its own record that capture stopped successfully AND no chunk or transcript is missing.** A contiguous prefix of saved chunks never implies completion, so a session recorded before this change stays partial forever, correctly. Capture-completion manifests live in a new `sessions` store behind an IndexedDB **v1 to v2 migration**. **That migration and the recovery of completion evidence across a reload have no executed evidence anywhere** — no test touches `IndexedDBQueue`, `saveCompletion` or `listCompletions`, and every one of the 23 frozen tests would still pass if the recorder never wrote a manifest at all.
+- Session artifacts (WEB-007): title, summary, key points, action items and **suggested research topics** for a whole session, from the stitched transcript, generated on request through `POST /api/sessions/artifacts` because provider credentials never reach the browser. **Artifacts are accepted only when their revision equals the transcript's revision at the moment the answer lands.** A revision is a content hash and hashes do not order, so there is no "newer" to choose between two — requiring an exact match makes a stale overwrite impossible by construction rather than by a comparison. A separate monotonic generation number handles the only case equality cannot see: two attempts racing for the same revision. The endpoint computes the revision itself and never accepts one, because a mislabelled revision would defeat the rule silently. Malformed provider output is refused rather than repaired, including on **unknown fields**, which is how a vendor response shape reaches a domain type. **Research topics are suggestions: nothing is looked up and no finding is stated** (REQ-005 separates this from WEB-013's opt-in research). Verified by test only; nothing has run in a browser.
 - Provider ports with two adapters each: `openai-compatible` and `fixture`.
 - A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
 - Browser-local durable storage (WEB-004): each completed audio container and its metadata are saved in IndexedDB, recovered and checksummed after a reload, and retried while the page is active, with a 64 MiB audio budget and a 4 MiB warning reserve. Results never delete raw audio and no HTTP response is counted as a verified remote copy. Development-only, owner-gated `/diagnostics/queue` exercises the adapter natively. **No browser has yet run that acceptance.**
 - A deployment defined in version control (ENG-010): `vercel.json`, and `npm run test:deployed` → `scripts/deployed-smoke.mjs`, which verifies a live origin over its real certificate — the gate, wrong-credential refusal, every linked compiled asset refused without credentials, `/diagnostics/*` absent, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Host-agnostic by design (ADR-010): it checks an origin, not a platform.
-- The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
+- The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. ENG-017 adds fixed-suite TAP-to-JSON unit and production HTTP adapters with independently frozen failure controls; verification and remaining environment blockers are recorded in its task handoff. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
 
 ### The deployed origin, and what it settled
 
@@ -130,15 +134,18 @@ Cheaper here than in a search, and each one cost something to learn.
 - **A test that pins an environment detail costs more than the bug it catches.** For a month `npm run check` could not pass in a worktree, because `next-config.test.ts` asserted the tracing root ends in `echo` and a worktree's root is `.claude/worktrees/<branch>`. Nothing in Echo depends on the folder's *name*; the property ENG-012 needed was that the root is the workspace root, which is what hoists dependencies. Three tasks recorded stages as *not run* because of it, every agent had to verify in the one shared checkout, and a clean install in one session then deleted the dependency tree another was using — leaving that checkout unusable with all 307 packages present and every `.bin` symlink gone. **ENG-018 replaced the assertion with the property, and the worktree ran the whole chain green.** When a test names something incidental, ask what it is really protecting and assert that instead.
 - **Work that only exists in a scratch directory does not exist.** WEB-006's first builder attempt — about 300 lines — was left uncommitted in `/private/tmp` by a session that hit a usage limit, one reboot away from gone. Recover such work by committing it *verbatim first*, before modifying it, so the starting point is in history and what a later commit changed is legible. Its three typecheck errors were then attributable, rather than mixed into someone else's diff.
 - **A frozen acceptance test can silently dictate user-facing copy.** WEB-006 asserts a partial session never renders `/Final/`, so the disclosure sentence had to avoid a capital F. The first rewording that satisfied the regex was factually wrong — it claimed a session is final once every transcript is present, when the code also requires a saved capture manifest. Passing tests did not catch it; an independent reader did. When a test constrains prose, check the prose is still *true*, not merely green.
+- **A passing test can assert something it does not prove, and only a negative control tells you which.** WEB-007's first draft carried a test claiming its length-prefixed revision encoding stops a forged revision. Removing the prefixes left the test green: every record contributes a fixed number of fields and both counts are encoded, so the naive delimiter was already collision-free *given the surrounding structure*. The test was measuring the structure, not the prefixes. The habit that catches this is cheap — **break the thing the test names and confirm that test is the one that fails.** The same run on the acceptance rule failed exactly the two tests it should have, which is what a load-bearing test looks like.
 - **Two agents on one machine need two worktrees, not one checkout.** `AGENTS.md` already forbids sharing a mutable checkout, and the dependency tree is the mutable thing that bites: `npm ci` deletes `node_modules` before reinstalling, so one agent's install destroys what the other is running against. Since ENG-018 a worktree can run the whole check, so each agent takes its own worktree on its own branch and neither ever touches the other's tree. **An agent sandbox may also be denied the deletes and symlinks a repair needs**, which is how a half-installed tree becomes unfixable from inside a session — `npm ci`, `npm rebuild` and even `touch` all fail with `EPERM` on a directory the operating system says is writable. Check ownership before believing the error: if the directory is yours with owner-write set, it is the sandbox, and `sudo` is the wrong answer. Repair from a plain terminal.
 
 ## Verification floor
 
-**The floor is 114 unit, 8 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+**The floor is 161 unit, 9 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 → 161 unit** and **4 → 6 → 7 → 8 → 9 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+
+**This number was wrong the moment two branches were open at once, which is why it should not be maintained by hand.** WEB-015 and WEB-007 both branched from 114 unit tests and each recorded its own total, 126 and 149. Neither could know about the other, so both were correct on their own branch and both were stale on `main`, where the real count is 161. A number every task must edit is a merge conflict with extra steps, and a number no task can compute correctly is worse than no number.
 
 | Command | What it covers |
 | --- | --- |
-| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **114 unit** → production build → **8 production HTTP** → **4 self-host parity** |
+| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **149 unit** → production build → **9 production HTTP** → **4 self-host parity** |
 | `python3 -m unittest discover -s tests` | **16 tests**, bounded controller only — it certifies the controller, never the web application |
 | `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
 | `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |
@@ -160,7 +167,7 @@ Cheaper here than in a search, and each one cost something to learn.
 
 **Live service check — 2026-09-06.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in **1.4 s**, correct transcript, sensible notes and action items, timestamps normalized. REQ-006 targets 5–10 s from stop to result; 1.4 s for a 7-second clip is inside it, but that is one measurement of one short clip on one connection, not a measured latency claim.
 
-**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding; WEB-004's IndexedDB acceptance in a native browser; WEB-005's drain-during-capture wiring; and WEB-006's v1-to-v2 migration and completion recovery. **All of these are now one script — [`status/acceptance/browser-acceptance.md`](status/acceptance/browser-acceptance.md)** — because they need the same session in a real Chrome and Safari, and were previously tracked as three separate sets of manual checks across three task handoffs. The hosted-origin items **are** now verified — the transport, Vercel's build of `vercel.json`, and whether a CDN edge answers for `/_next/static` in practice (it does not).
+**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding; WEB-004's IndexedDB acceptance in a native browser; WEB-005's drain-during-capture wiring; WEB-006's v1-to-v2 migration and completion recovery; and WEB-007's artifact generation, whose staleness rule can only be exercised by generating while chunks are still arriving. **All of these are now one script — [`status/acceptance/browser-acceptance.md`](status/acceptance/browser-acceptance.md)** — because they need the same session in a real Chrome and Safari, and were previously tracked as separate sets of manual checks across as many task handoffs. The hosted-origin items **are** now verified — the transport, Vercel's build of `vercel.json`, and whether a CDN edge answers for `/_next/static` in practice (it does not).
 
 ## Reading map
 

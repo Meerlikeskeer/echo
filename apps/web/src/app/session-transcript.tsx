@@ -6,6 +6,7 @@
 import { useId } from "react";
 import { stitchSession, type StitchedTranscript, type TranscriptEntry } from "../lib/recording/stitching";
 import type { Completion } from "../lib/recording/session-completion";
+import { SessionArtifacts } from "./session-artifacts";
 
 const clock = (ms: number) => {
   const seconds = Math.floor(ms / 1000);
@@ -47,6 +48,10 @@ export function SessionTranscript({ transcript }: { transcript: StitchedTranscri
     {/* The badge above carries the status; this note explains what that word
         means without reading as a second status of its own. */}
     <p className="mt-4 text-xs text-slate-500">Only verified overlapping segments are merged. Uncertain repetition is kept to preserve speech. A session is final only when this browser saved its own record that capture finished and nothing above is missing; anything else stays partial. Neither status claims a verified remote copy of the audio.</p>
+    {/* WEB-007. Inside the transcript section on purpose: the artifacts are
+        generated from exactly the transcript rendered above, and the revision
+        rule means they are only ever valid against it. */}
+    <SessionArtifacts transcript={transcript} />
   </section>;
 }
 
