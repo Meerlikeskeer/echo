@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  ARTIFACT_LIMITS, acceptArtifacts, transcriptForArtifacts, transcriptRevision, validateArtifacts,
+  ARTIFACT_LIMITS, STITCHED_LIMITS, acceptArtifacts, isRevisionInput, transcriptForArtifacts, transcriptRevision, validateArtifacts,
   type ArtifactRecord, type SessionArtifacts,
 } from "../src/lib/recording/artifacts";
 import type { StitchedTranscript } from "../src/lib/recording/stitching";
@@ -183,6 +183,37 @@ test("transcripts that differ only in where text is split still get different re
   for (const [one, two] of pairs) {
     assert.notEqual(await transcriptRevision(one), await transcriptRevision(two));
   }
+});
+
+// The endpoint's input guard. It runs before a credential is used, so what it
+// lets through is what gets sent to a provider.
+test("a stitched transcript from WEB-006 is accepted as revision input", () => {
+  assert.ok(isRevisionInput(stitched()));
+  assert.ok(isRevisionInput(stitched({ status: "final", gaps: [{ reason: "missing-chunk", sequence: 3 }] })));
+  assert.ok(isRevisionInput(stitched({ gaps: [{ reason: "capture-unconfirmed", sequence: null }] })));
+});
+
+test("a malformed or unbounded revision input is refused", () => {
+  const bad: readonly unknown[] = [
+    null, undefined, 42, "text", [], [stitched()],
+    { ...stitched(), sessionId: "" },
+    { ...stitched(), sessionId: "not valid!" },
+    { ...stitched(), sessionId: "a".repeat(65) },
+    { ...stitched(), status: "done" },
+    { ...stitched(), text: 12 },
+    { ...stitched(), text: "a".repeat(STITCHED_LIMITS.text + 1) },
+    { ...stitched(), segments: "x" },
+    { ...stitched(), segments: [{ text: "a", startMs: 1000, endMs: 0, sourceIndexes: [] }] },
+    { ...stitched(), segments: [{ text: "a", startMs: Number.NaN, endMs: 1, sourceIndexes: [] }] },
+    { ...stitched(), segments: [{ text: "a".repeat(STITCHED_LIMITS.segmentText + 1), startMs: 0, endMs: 1, sourceIndexes: [] }] },
+    { ...stitched(), segments: Array.from({ length: STITCHED_LIMITS.segments + 1 }, () => ({ text: "a", startMs: 0, endMs: 1, sourceIndexes: [] })) },
+    { ...stitched(), gaps: "x" },
+    // A reason the stitcher never emits: accepting one would put an invented
+    // value into the revision and make two transcripts look different.
+    { ...stitched(), gaps: [{ reason: "invented", sequence: 1 }] },
+    { ...stitched(), gaps: [{ reason: "missing-chunk", sequence: 1.5 }] },
+  ];
+  for (const value of bad) assert.equal(isRevisionInput(value), false, `expected refusal for ${JSON.stringify(value)?.slice(0, 60)}`);
 });
 
 test("the generator is given the stitched segments and their timings", () => {

@@ -13,7 +13,6 @@
  */
 
 import type { SessionArtifacts, Transcript } from "../providers/types";
-import type { StitchedTranscript } from "./stitching";
 
 export type { SessionArtifacts };
 
@@ -115,11 +114,69 @@ export function validateArtifacts(value: unknown): ArtifactValidation {
 }
 
 /**
+ * Everything a revision is computed from, and nothing else.
+ *
+ * Deliberately narrower than `StitchedTranscript`: the guard below cannot check
+ * `sources` or a segment's `sourceIndexes`, so a guard returning
+ * `value is StitchedTranscript` would assert fields it never looked at. A
+ * `StitchedTranscript` is assignable to this, so WEB-006's output still flows
+ * straight in.
+ */
+export interface RevisionInput {
+  readonly sessionId: string;
+  readonly text: string;
+  readonly status: "partial" | "final";
+  readonly segments: readonly { readonly text: string; readonly startMs: number; readonly endMs: number }[];
+  readonly gaps: readonly { readonly reason: string; readonly sequence: number | null }[];
+}
+
+/** Bounds on a request body, so a malformed or hostile one is refused before a
+ *  credential is used. The transcript cap matches the notes port's own. */
+export const STITCHED_LIMITS = { text: 24_000, segments: 2_000, gaps: 500, segmentText: 8_000 } as const;
+
+const GAP_REASONS: readonly string[] = ["capture-unconfirmed", "missing-chunk", "missing-transcript", "invalid-input"];
+
+/**
+ * WEB-007. The artifact endpoint's input check. It validates a WEB-006 type but
+ * lives here because it is this boundary's guard, and `stitching.ts` is the
+ * module WEB-006 froze acceptance against.
+ *
+ * The endpoint recomputes the revision from exactly this value rather than
+ * trusting a revision the caller supplies. That is not about an untrusted user —
+ * Echo has one owner — but about a mislabelled revision silently defeating the
+ * equality rule: artifacts bound to a revision their transcript never had would
+ * pass `acceptArtifacts` against the wrong transcript.
+ */
+export function isRevisionInput(value: unknown): value is RevisionInput {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (typeof row.sessionId !== "string" || !/^[a-zA-Z0-9-]{1,64}$/.test(row.sessionId)) return false;
+  if (row.status !== "partial" && row.status !== "final") return false;
+  if (typeof row.text !== "string" || row.text.length > STITCHED_LIMITS.text) return false;
+  if (!Array.isArray(row.segments) || row.segments.length > STITCHED_LIMITS.segments) return false;
+  if (!Array.isArray(row.gaps) || row.gaps.length > STITCHED_LIMITS.gaps) return false;
+  for (const segment of row.segments) {
+    if (!segment || typeof segment !== "object") return false;
+    const item = segment as Record<string, unknown>;
+    if (typeof item.text !== "string" || item.text.length > STITCHED_LIMITS.segmentText) return false;
+    if (!Number.isFinite(item.startMs) || !Number.isFinite(item.endMs)) return false;
+    if ((item.endMs as number) < (item.startMs as number)) return false;
+  }
+  for (const gap of row.gaps) {
+    if (!gap || typeof gap !== "object") return false;
+    const item = gap as Record<string, unknown>;
+    if (typeof item.reason !== "string" || !GAP_REASONS.includes(item.reason)) return false;
+    if (!(item.sequence === null || Number.isSafeInteger(item.sequence))) return false;
+  }
+  return true;
+}
+
+/**
  * The exact transcript a generator is given. Built from the stitched segments
  * rather than the joined text so the generator sees the same timings the page
  * shows, and so the revision below covers them.
  */
-export function transcriptForArtifacts(stitched: StitchedTranscript): Transcript {
+export function transcriptForArtifacts(stitched: RevisionInput): Transcript {
   const segments = stitched.segments.map((segment) => ({ text: segment.text, startMs: segment.startMs, endMs: segment.endMs }));
   const durationMs = segments.length ? Math.max(...segments.map((segment) => segment.endMs)) : 0;
   return { text: stitched.text, segments, language: null, durationMs };
@@ -141,7 +198,7 @@ export function transcriptForArtifacts(stitched: StitchedTranscript): Transcript
  * so. Length prefixes are unambiguous without depending on anything around
  * them, which is the version that survives the next edit.
  */
-function revisionInput(stitched: StitchedTranscript): string {
+function revisionInput(stitched: RevisionInput): string {
   const field = (text: string) => `${text.length}:${text}`;
   const parts = [
     field(stitched.sessionId),
@@ -165,7 +222,7 @@ function revisionInput(stitched: StitchedTranscript): string {
  * `crypto.subtle` the chunk checksums already use, so this needs a secure
  * context exactly as WEB-004 does — which ENG-008 guards before capture starts.
  */
-export async function transcriptRevision(stitched: StitchedTranscript): Promise<string> {
+export async function transcriptRevision(stitched: RevisionInput): Promise<string> {
   const bytes = new TextEncoder().encode(revisionInput(stitched));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
