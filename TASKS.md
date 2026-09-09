@@ -689,9 +689,11 @@ Owner use of the diagnostic is `npm run doctor`, which reads `apps/web/.env.loca
 
 ## WEB-006 — Transcript stitching
 
-**Status:** Todo · **Dependencies:** WEB-005
+**Status:** In progress — acceptance setup and implementation under manual builder/checker review · **Branch:** `feat/WEB-006-transcript-stitching` · **Dependencies:** WEB-005
 
 **Acceptance:** Align session timestamps and overlap text, retain provenance, flag missing chunks, and finalize only complete sessions. Test repeated speech, overlap, gaps and out-of-order results.
+
+**Implementation boundary:** ADR-017 records conservative segment alignment and explicit browser-local capture completion evidence before implementation. WEB-005 is merged, while its browser acceptance and WEB-004's native acceptance remain outstanding; this task does not certify those earlier tasks.
 
 ## WEB-007 — Structured artifacts
 

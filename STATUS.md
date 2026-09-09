@@ -66,7 +66,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | WEB-003 Session and playable chunk model | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-002-recording-slice` |
 | WEB-004 Durable offline queue | Implemented; native browser/local verification and owner acceptance pending — NOT Done | — |
 | WEB-005 Incremental upload and transcription | Implemented and verified by test; the hook wiring that drains during capture is… | — |
-| WEB-006 Transcript stitching | Todo | — |
+| WEB-006 Transcript stitching | In progress — acceptance setup and implementation under manual builder/checker review | `feat/WEB-006-transcript-stitching` |
 | WEB-007 Structured artifacts | Todo | — |
 | WEB-008 Quick Note mode | Todo | — |
 | WEB-009 Session history | Todo | — |
