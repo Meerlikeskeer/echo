@@ -166,7 +166,14 @@ def main(suite):
     try:
         # Unlink the report itself, including a stale symlink, before launch.
         report.unlink(missing_ok=True)
-        completed = subprocess.run(command(suite), cwd=ROOT, capture_output=True, check=False)
+        runner_environment = os.environ.copy()
+        if suite == "unit":
+            # npm runs the web suite inside apps/web. Keep our required root
+            # cwd while giving tsx that same JSX and TypeScript configuration.
+            runner_environment["TSX_TSCONFIG_PATH"] = str(ROOT / "apps/web/tsconfig.json")
+        completed = subprocess.run(
+            command(suite), cwd=ROOT, env=runner_environment, capture_output=True, check=False
+        )
         runner_exit = completed.returncode
         if runner_exit < 0:
             runner_exit = 128 - runner_exit
@@ -177,4 +184,3 @@ def main(suite):
         # Do not echo recording content, test output, or environment values.
         print("Test adapter blocked: " + type(error).__name__, file=sys.stderr)
         return runner_exit or 1
-
