@@ -1,3 +1,8 @@
+"use client";
+
+// useId is a hook, so this file cannot render inside a Server Component.
+// It works today only because its one importer declares "use client"; the
+// directive states the constraint here instead of inheriting it.
 import { useId } from "react";
 import { stitchSession, type StitchedTranscript, type TranscriptEntry } from "../lib/recording/stitching";
 import type { Completion } from "../lib/recording/session-completion";
@@ -41,7 +46,7 @@ export function SessionTranscript({ transcript }: { transcript: StitchedTranscri
     {!transcript.segments.length ? <p className="mt-4 text-sm text-slate-500">Waiting for a transcript. Saved audio remains available below.</p> : null}
     {/* The badge above carries the status; this note explains what that word
         means without reading as a second status of its own. */}
-    <p className="mt-4 text-xs text-slate-500">Only verified overlapping segments are merged. Uncertain repetition is kept to preserve speech. A session is final once every expected transcript is present, which is not a verified remote copy of the audio.</p>
+    <p className="mt-4 text-xs text-slate-500">Only verified overlapping segments are merged. Uncertain repetition is kept to preserve speech. A session is final only when this browser saved its own record that capture finished and nothing above is missing; anything else stays partial. Neither status claims a verified remote copy of the audio.</p>
   </section>;
 }
 

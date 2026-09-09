@@ -70,7 +70,18 @@ export function summarizeQueue(entries: readonly QueueEntry[]): QueueProgress {
     blocked: count((entry) => entry.state === "blocked"),
   };
 }
+/** The one local-storage failure the user can fix themselves: another tab holds
+ *  the previous database version open, so the v1 → v2 upgrade cannot run. Its
+ *  message must survive storageFailure(), because generic advice would send the
+ *  owner to download clips when closing a tab is what actually recovers. */
+export class StorageBlockedError extends Error {
+  constructor(message = "Close other Echo tabs to upgrade local storage, then reload this page. Recording stopped; previously saved clips are retained.") {
+    super(message);
+    this.name = "StorageBlockedError";
+  }
+}
 export function storageFailure(error: unknown): string {
+  if (error instanceof Error && error.name === "StorageBlockedError") return error.message;
   return error instanceof Error && error.name === "QuotaExceededError"
     ? "Storage is full. Recording stopped. Previously saved clips are retained; download unsaved clips before leaving."
     : "Local saving failed. Recording stopped. Keep this page open and download unsaved clips before leaving.";
@@ -112,7 +123,7 @@ export class IndexedDBQueue implements QueueStore {
         if (!db.objectStoreNames.contains("sessions")) db.createObjectStore("sessions", { keyPath: "sessionId" });
       };
       request.onerror = () => reject(request.error);
-      request.onblocked = () => { blocked = true; reject(new Error("Close other Echo tabs to upgrade local storage")); };
+      request.onblocked = () => { blocked = true; reject(new StorageBlockedError()); };
       request.onsuccess = () => { if (blocked) { request.result.close(); return; } request.result.onversionchange = () => request.result.close(); resolve(request.result); };
     });
   }
@@ -173,14 +184,18 @@ export class IndexedDBQueue implements QueueStore {
     const manifest: Completion = { sessionId: completion.sessionId, chunks: completion.chunks.map(chunk => ({ ...chunk })) };
     const db = await this.open();
     return new Promise<void>((resolve, reject) => {
-      let tx: IDBTransaction;
+      let tx: IDBTransaction, request: IDBRequest<unknown[]>;
       let failure: Error | null = null;
-      try { tx = db.transaction(["chunks", "sessions"], "readwrite", { durability: "strict" }); }
-      catch (error) { db.close(); reject(error); return; }
+      // objectStore() throws NotFoundError on an unexpected schema, so it sits
+      // inside the same guard as transaction(): every error path closes the
+      // connection rather than leaking it behind a rejected promise.
+      try {
+        tx = db.transaction(["chunks", "sessions"], "readwrite", { durability: "strict" });
+        request = tx.objectStore("chunks").getAll();
+      } catch (error) { db.close(); reject(error); return; }
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onabort = () => { db.close(); reject(failure ?? tx.error ?? new Error("Completion transaction aborted")); };
       const fail = () => { failure = new Error("Capture completion conflicts with saved chunks"); tx.abort(); };
-      const request = tx.objectStore("chunks").getAll();
       request.onsuccess = () => {
         const saved = (request.result as QueueEntry[]).filter(entry => entry?.metadata?.sessionId === manifest.sessionId);
         if (saved.length !== manifest.chunks.length || !manifest.chunks.every(expected =>
@@ -199,11 +214,12 @@ export class IndexedDBQueue implements QueueStore {
   async listCompletions(): Promise<Completion[]> {
     const db = await this.open();
     return new Promise<Completion[]>((resolve, reject) => {
-      let tx: IDBTransaction;
+      let tx: IDBTransaction, request: IDBRequest<unknown[]>;
       let completions: Completion[] = [];
-      try { tx = db.transaction("sessions", "readonly"); }
-      catch (error) { db.close(); reject(error); return; }
-      const request = tx.objectStore("sessions").getAll();
+      try {
+        tx = db.transaction("sessions", "readonly");
+        request = tx.objectStore("sessions").getAll();
+      } catch (error) { db.close(); reject(error); return; }
       // Retain malformed evidence for the stitcher to flag as invalid instead
       // of promoting it to final or crashing the presentation boundary.
       request.onsuccess = () => { completions = request.result as Completion[]; };

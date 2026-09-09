@@ -21,7 +21,13 @@ export function useAudioQueue(canProcess = true) {
   const mounted = useRef(false);
   const refresh = useCallback(async () => {
     const rows = await store.current.list();
-    const manifests = await store.current.listCompletions();
+    // Completion evidence is a second, newer read, and WEB-004's promise — saved
+    // clips stay listable and downloadable — must not depend on it. Without it
+    // every session simply stays partial, which is the conservative reading;
+    // failing here instead would leave `ready` false, so Record stays disabled
+    // and already-saved audio never renders. Same philosophy as listCompletions
+    // retaining malformed evidence for the stitcher to flag.
+    const manifests = await store.current.listCompletions().catch((): Completion[] => []);
     const info = await capacity(rows);
     if (mounted.current) { setEntries((previous) => preserveAudio(previous, rows)); setSpace(info); setCompletions(manifests); setReady(true); }
     return info;
