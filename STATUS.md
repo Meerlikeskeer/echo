@@ -134,11 +134,11 @@ Cheaper here than in a search, and each one cost something to learn.
 
 ## Verification floor
 
-**The floor is 126 unit, 8 production HTTP, 4 self-host parity, 45 controller/adapter tests (16 + 29).** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 → 126 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+**The floor is 114 unit, 8 production HTTP, 4 self-host parity, 45 controller/adapter tests (16 + 29).** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
 
 | Command | What it covers |
 | --- | --- |
-| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **126 unit** → production build → **8 production HTTP** → **4 self-host parity** |
+| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **114 unit** → production build → **8 production HTTP** → **4 self-host parity** |
 | `python3 -m unittest discover -s tests` | **16 controller + 29 adapter tests** — controller and reporting-boundary coverage, never certification of the web application |
 | `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
 | `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |
