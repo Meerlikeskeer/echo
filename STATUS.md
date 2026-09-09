@@ -48,7 +48,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | --- | --- | --- |
 | DOC-001 Shared repository foundation | Done | — |
 | ENG-001 Bounded builder/checker workflow | Done | — |
-| ENG-017 Bounded loop test and acceptance adapters | Blocked — baseline commands unavailable; implementation not started | `eng/ENG-017-bounded-loop-adapters` |
+| ENG-017 Bounded loop test and acceptance adapters | Implemented and independently reviewed; full verification blocked by environment… | `eng/ENG-017-bounded-loop-adapters` |
 | ENG-002 Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
 | ENG-007 Pull request workflow and branch protection | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
 | ENG-008 Secure-context development server and diagnosis | Partially withdrawn — the `secure-context` diagnosis is Done and merged in `a032a01`; the… | `eng/ENG-008-https-dev-server` |
@@ -94,7 +94,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 - A secure-context guard (ENG-008) that refuses capture *before* the microphone opens on any origin without `crypto.subtle`, naming the address rather than failing later as a generic "Capture incomplete".
 - Browser-local durable storage (WEB-004): each completed audio container and its metadata are saved in IndexedDB, recovered and checksummed after a reload, and retried while the page is active, with a 64 MiB audio budget and a 4 MiB warning reserve. Results never delete raw audio and no HTTP response is counted as a verified remote copy. Development-only, owner-gated `/diagnostics/queue` exercises the adapter natively. **No browser has yet run that acceptance.**
 - A deployment defined in version control (ENG-010): `vercel.json`, and `npm run test:deployed` → `scripts/deployed-smoke.mjs`, which verifies a live origin over its real certificate — the gate, wrong-credential refusal, every linked compiled asset refused without credentials, `/diagnostics/*` absent, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Host-agnostic by design (ADR-010): it checks an origin, not a platform.
-- The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
+- The ENG-001 bounded controller, `scripts/agent_loop.py`, with its own tests. ENG-017 adds fixed-suite TAP-to-JSON unit and production HTTP adapters with independently frozen failure controls; verification and remaining environment blockers are recorded in its task handoff. **Its feature loop is off** (`agent-loop.json` has `"ready": false`).
 
 ### The deployed origin, and what it settled
 
@@ -134,12 +134,12 @@ Cheaper here than in a search, and each one cost something to learn.
 
 ## Verification floor
 
-**The floor is 114 unit, 8 production HTTP, 4 self-host parity, 16 controller.** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
+**The floor is 126 unit, 8 production HTTP, 4 self-host parity, 45 controller/adapter tests (16 + 29).** `npm run check` is the gate CI runs, and these counts only ever rise: **33 → 46 → 52 → 53 → 69 → 72 → 91 → 114 → 126 unit** and **4 → 6 → 7 → 8 production HTTP**. **If a change makes a count go down, that is a regression, not a cleanup.**
 
 | Command | What it covers |
 | --- | --- |
-| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **114 unit** → production build → **8 production HTTP** → **4 self-host parity** |
-| `python3 -m unittest discover -s tests` | **16 tests**, bounded controller only — it certifies the controller, never the web application |
+| `npm ci` then `npm run check` | `check:tracked` → `status:check` → lint → typecheck → **126 unit** → production build → **8 production HTTP** → **4 self-host parity** |
+| `python3 -m unittest discover -s tests` | **16 controller + 29 adapter tests** — controller and reporting-boundary coverage, never certification of the web application |
 | `npm run test:deployed -- <origin>` | A live origin over its real certificate. **Deliberately outside `npm run check`**: it needs a URL and real credentials, so CI cannot run it and must not appear to |
 | `npm run doctor` | Opt-in per-port credential diagnostics. Touches no provider code in fixture mode |
 | `selfhost-container` CI job | The container image. Docker is unavailable on the development machine, so this is verified in CI only; last passed 2026-09-08 |
