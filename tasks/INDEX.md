@@ -28,7 +28,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-014](ENG-014.md) Stop STATUS.md from causing merge conflicts | Done | `eng/ENG-014-status-per-task-files` |
 | [ENG-015](ENG-015.md) Scope the container job to where its result can change | Implemented; awaiting owner review | `eng/ENG-015-container-job-scope` |
 | [ENG-016](ENG-016.md) Auto-merge on green | Specified and merged; the workflow was applied by ENG-020, and three owner-side settings… | `eng/ENG-016-auto-merge-on-green` |
-| [ENG-017](ENG-017.md) Bounded loop test and acceptance adapters | Implemented and independently reviewed; full verification blocked by environment… | `eng/ENG-017-bounded-loop-adapters` |
+| [ENG-017](ENG-017.md) Bounded loop test and acceptance adapters | Unit adapter passing and failure evidence verified; production integration blocked by… | `eng/ENG-017-adapter-evidence` |
 | [ENG-018](ENG-018.md) `npm run check` could not pass in a worktree, because a test asserted a folder… | Implemented and verified; awaiting owner review | `eng/ENG-018-worktree-verification` |
 | [ENG-019](ENG-019.md) Stop the process from generating merge conflicts and locking agents out | Implemented and verified; awaiting owner review | `eng/ENG-019-conflict-free-task-records` |
 | [ENG-020](ENG-020.md) Apply the auto-merge workflow ENG-016 specified | Workflow applied and pushed; three owner-side settings remain | `eng/ENG-020-apply-auto-merge` |
