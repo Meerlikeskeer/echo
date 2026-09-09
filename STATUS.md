@@ -49,6 +49,7 @@ that every task must edit.**
 
 ## What exists today
 
+- Quick Note mode (WEB-008): one short clip becomes pending task/reminder/note/idea suggestions through the existing recording endpoint and provider abstraction. Audio, classification and timing survive in this browser's queue; offline captures visibly wait. Date phrases require confirmation and nothing is scheduled. Verification and live-provider latency acceptance are recorded in `tasks/WEB-008.md`.
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
 - The recorder page, development-only owner-gated `/diagnostics/capture`, and two Route Handlers: `POST /api/recordings` and `POST /api/sessions/artifacts`.
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.

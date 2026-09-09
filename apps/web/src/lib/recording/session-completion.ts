@@ -5,7 +5,8 @@ export interface Completion { readonly sessionId: string; readonly chunks: reado
 export function sameMetadata(a: AudioChunk, b: AudioChunk): boolean {
   return a.sessionId === b.sessionId && a.id === b.id && a.sequence === b.sequence &&
     a.startMs === b.startMs && a.endMs === b.endMs && a.overlapMs === b.overlapMs &&
-    a.mimeType === b.mimeType && a.size === b.size && a.checksum === b.checksum;
+    a.mimeType === b.mimeType && a.size === b.size && a.checksum === b.checksum &&
+    a.quickNote?.stoppedAt === b.quickNote?.stoppedAt && a.quickNote?.onlineAtStop === b.quickNote?.onlineAtStop;
 }
 
 export function isCompletion(value: unknown): value is Completion {

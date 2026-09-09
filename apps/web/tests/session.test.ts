@@ -13,7 +13,7 @@ type FakeRecorder = {
   stop(): void;
 };
 
-function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3]) {
+function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false) {
   let now = 0;
   let released = 0;
   let counter = 0;
@@ -44,7 +44,7 @@ function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<type
     },
   };
   const stream = { getTracks: () => [{ stop() { released++; } }] } as unknown as MediaStream;
-  const capture = captureSession(stream, { chunkMs: 30000, overlapMs }, io, onChunk);
+  const capture = captureSession(stream, { chunkMs: 30000, overlapMs, quickNote }, io, onChunk);
   return { capture, recorders, released: () => released, advance(target: number) {
     while (true) {
       const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
@@ -54,6 +54,20 @@ function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<type
     now = target;
   } };
 }
+
+test("Quick Note auto-stops one container at 30 seconds and persists stop context", async () => {
+  const saved: Parameters<NonNullable<Parameters<typeof captureSession>[3]>>[0][] = [];
+  const h = harness(0, false, async chunk => { saved.push(chunk); }, true);
+  h.advance(30000);
+  const result = await h.capture.finished;
+  assert.equal(result.session.captureStatus, "stopped");
+  assert.equal(h.recorders.length, 1);
+  assert.equal(h.released(), 1);
+  assert.equal(result.chunks[0].metadata.endMs, 30000);
+  assert.ok(result.chunks[0].metadata.quickNote!.stoppedAt > 0);
+  assert.equal(typeof result.chunks[0].metadata.quickNote!.onlineAtStop, "boolean");
+  assert.deepEqual(saved[0].metadata, result.chunks[0].metadata);
+});
 
 test("overlap capture owns separate containers and ordered checksummed session metadata", async () => {
   const h = harness(); h.advance(45000);
