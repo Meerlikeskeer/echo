@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { capacity, preserveAudio, chunkKey, drainQueue, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, type QueueEntry } from "../lib/recording/queue";
+import { capacity, preserveAudio, chunkKey, drainQueue, durableWarning, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, transientWarning, type QueueEntry, type StorageWarning } from "../lib/recording/queue";
 import { reportFailure } from "../lib/recording/log";
 import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
 import type { PlayableChunk, Session } from "../lib/recording/session";
@@ -23,11 +23,15 @@ export function useAudioQueue(canProcess = true) {
     unsavedNow.current = next(unsavedNow.current);
     setUnsaved(unsavedNow.current);
   }, []);
-  const [error, setError] = useState<string | null>(null);
+  // WEB-015. The warning is held with the one thing a message cannot carry:
+  // whether a later storage success withdraws it. The hook still returns a
+  // plain string, so nothing that renders it needs to know.
+  const [warning, setWarning] = useState<StorageWarning | null>(null);
+  const error = warning?.message ?? null;
   /** Withdraw a storage warning the moment a storage operation proves the
    *  condition is over. Called on every success path, never on a failure. */
   const settled = useCallback(() => {
-    if (mounted.current) setError((current) => resolveFailure(current, unsavedNow.current.length));
+    if (mounted.current) setWarning((current) => resolveFailure(current, unsavedNow.current.length));
   }, []);
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
@@ -67,7 +71,7 @@ export function useAudioQueue(canProcess = true) {
       });
     } catch (cause) {
       reportFailure("draining the upload queue", cause);
-      if (mounted.current) setError(storageFailure(cause, "maintenance"));
+      if (mounted.current) setWarning(transientWarning(storageFailure(cause, "maintenance")));
     }
   }, [refresh, settled]);
   useEffect(() => {
@@ -88,7 +92,7 @@ export function useAudioQueue(canProcess = true) {
         await sync();
       } catch (cause) {
         reportFailure(stale ? "recovering local storage on load" : "reading local storage", cause);
-        if (mounted.current) setError(storageFailure(cause, "maintenance"));
+        if (mounted.current) setWarning(transientWarning(storageFailure(cause, "maintenance")));
       }
     };
     void poll(true);
@@ -114,7 +118,7 @@ export function useAudioQueue(canProcess = true) {
       reportFailure("saving a recorded clip", cause);
       if (mounted.current) {
         trackUnsaved((previous) => previous.some((item) => chunkKey(item) === chunkKey(chunk)) ? previous : [...previous, chunk]);
-        setError(storageFailure(cause, "capture"));
+        setWarning(transientWarning(storageFailure(cause, "capture")));
       }
       throw cause;
     }
@@ -123,7 +127,10 @@ export function useAudioQueue(canProcess = true) {
     await navigator.storage?.persist().catch(() => false);
     const info = await refresh();
     if (info.nearFull) throw new DOMException("Insufficient recording reserve", "QuotaExceededError");
-    setError(null);
+    // Clears a durable warning too, and deliberately. A new recording is
+    // starting, so a previous session's unsaved completion record is no longer
+    // what this page is doing — and prepare() has just proved storage works.
+    setWarning(null);
   }, [refresh]);
   const complete = useCallback(async (captured: { session: Session; chunks: readonly PlayableChunk[] }) => {
     try {
@@ -131,7 +138,10 @@ export function useAudioQueue(canProcess = true) {
       await refresh();
     } catch (cause) {
       reportFailure("saving the capture-completion record", cause);
-      if (mounted.current) setError("Capture completion could not be saved. The session remains partial; saved audio is retained.");
+      // Durable. The session is permanently partial without this record — a
+      // successful store read five seconds later does not change that, so the
+      // five-second poll must not withdraw it.
+      if (mounted.current) setWarning(durableWarning("Capture completion could not be saved. The session remains partial; saved audio is retained."));
       throw cause;
     }
   }, [refresh]);

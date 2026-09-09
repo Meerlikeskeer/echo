@@ -73,9 +73,17 @@ export function summarizeQueue(entries: readonly QueueEntry[]): QueueProgress {
 /** The one local-storage failure the user can fix themselves: another tab holds
  *  the previous database version open, so the v1 → v2 upgrade cannot run. Its
  *  message must survive storageFailure(), because generic advice would send the
- *  owner to download clips when closing a tab is what actually recovers. */
+ *  owner to download clips when closing a tab is what actually recovers.
+ *
+ *  WEB-015. It carries the remedy and nothing else. It used to end "Recording
+ *  stopped; previously saved clips are retained", and storageFailure() returned
+ *  it verbatim before the situation was ever consulted — so the situation fix
+ *  below skipped the error that reaches the owner most often. A blocked upgrade
+ *  is thrown from the database open, which the load-time poll performs before
+ *  anything has been recorded, and the sentence asserted a recording had stopped
+ *  when none had started. The consequence belongs to the caller, which knows it. */
 export class StorageBlockedError extends Error {
-  constructor(message = "Close other Echo tabs to upgrade local storage, then reload this page. Recording stopped; previously saved clips are retained.") {
+  constructor(message = "Close other Echo tabs to upgrade local storage, then reload this page.") {
     super(message);
     this.name = "StorageBlockedError";
   }
@@ -96,11 +104,23 @@ export class StorageBlockedError extends Error {
  *   data, destroying saved audio, which the retention rules forbid as a remedy.
  */
 export type StorageSituation = "capture" | "starting" | "maintenance";
+/** What the situation means for the owner, stated once. A remedy that is the
+ *  same everywhere — closing a tab — still has a different consequence in each
+ *  situation, and only the caller knows which. */
+const CONSEQUENCE: Record<StorageSituation, string> = {
+  capture: "Recording stopped; previously saved clips are retained.",
+  starting: "Recording did not start; previously saved clips are retained.",
+  maintenance: "Nothing was recording, and nothing has been deleted; saved clips are retained.",
+};
 /** The error is never interpolated into the returned sentence. A storage error
  *  can carry a key name or a path, and this string is rendered on the page;
- *  `reportFailure` in ./log.ts is where the real cause goes. */
+ *  `reportFailure` in ./log.ts is where the real cause goes. The one exception
+ *  is StorageBlockedError, whose message Echo writes itself and which carries
+ *  the only remedy the owner can act on. */
 export function storageFailure(error: unknown, situation: StorageSituation = "capture"): string {
-  if (error instanceof Error && error.name === "StorageBlockedError") return error.message;
+  if (error instanceof Error && error.name === "StorageBlockedError") {
+    return `${error.message} ${CONSEQUENCE[situation]}`;
+  }
   const full = error instanceof Error && error.name === "QuotaExceededError";
   if (situation === "starting") {
     return full
@@ -129,8 +149,27 @@ export function storageFailure(error: unknown, situation: StorageSituation = "ca
  * clip is still unsaved is deliberate — that clip is the reason the warning was
  * worth showing. A genuinely persistent fault cannot be cleared this way,
  * because the operation that would clear it fails too.
+ *
+ * **`withdrawable` is what stops this from erasing true warnings.** The rule
+ * above holds for a *storage* warning, whose whole claim is that storage is not
+ * working. It does not hold for a warning about a durable fact — a session whose
+ * capture-completion record was never saved stays partial forever, and reading
+ * the store successfully five seconds later says nothing about it. Withdrawing
+ * that one on a successful poll is the same defect as never withdrawing the
+ * first, pointed the other way: the owner sees a true warning for five seconds.
  */
-export function resolveFailure(current: string | null, unsavedCount: number): string | null {
+export type StorageWarning = { readonly message: string; readonly withdrawable: boolean };
+/** A warning a successful storage operation can withdraw. */
+export function transientWarning(message: string): StorageWarning {
+  return { message, withdrawable: true };
+}
+/** A warning describing a fact no later success changes. Only a new recording
+ *  clears it, which prepare() does by starting a different session. */
+export function durableWarning(message: string): StorageWarning {
+  return { message, withdrawable: false };
+}
+export function resolveFailure(current: StorageWarning | null, unsavedCount: number): StorageWarning | null {
+  if (!current || !current.withdrawable) return current;
   return unsavedCount === 0 ? null : current;
 }
 export async function verifyChunk(chunk: PlayableChunk): Promise<void> {

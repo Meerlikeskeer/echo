@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUDIO_BUDGET, CAPACITY_RESERVE, EXHAUSTED, MAX_ATTEMPTS, preserveAudio, processingUpdate, recoverEntries, sendChunk, drainQueue, incompleteSessions, normalizeMime, orderEntries, resolveFailure, retryDelay, sameChunk, StorageBlockedError, storageFailure, summarizeQueue, UploadFailure, verifyChunk, type QueueEntry, type QueueStore } from "../src/lib/recording/queue";
+import { AUDIO_BUDGET, CAPACITY_RESERVE, EXHAUSTED, MAX_ATTEMPTS, preserveAudio, processingUpdate, recoverEntries, sendChunk, drainQueue, incompleteSessions, normalizeMime, durableWarning, orderEntries, resolveFailure, retryDelay, sameChunk, StorageBlockedError, storageFailure, summarizeQueue, transientWarning, UploadFailure, verifyChunk, type QueueEntry, type QueueStore } from "../src/lib/recording/queue";
 import { checksum } from "../src/lib/recording/session";
 import type { RecordingResult } from "../src/lib/recording/pipeline";
 
@@ -136,17 +136,42 @@ test("the blocked-upgrade remedy survives every situation, because closing a tab
     assert.match(storageFailure(blocked, situation), /Close other Echo tabs/);
   }
 });
+// WEB-015, second pass. The situation fix skipped the error the owner is most
+// likely to see. StorageBlockedError is thrown from the database open, which the
+// load-time poll performs before anything is recorded, and its own message ended
+// "Recording stopped" — returned verbatim, before the situation was consulted.
+test("a blocked upgrade states the situation's real consequence, not always a stopped recording", () => {
+  const blocked = new StorageBlockedError();
+  assert.match(storageFailure(blocked, "capture"), /Recording stopped/);
+  assert.doesNotMatch(storageFailure(blocked, "starting"), /Recording stopped/);
+  assert.match(storageFailure(blocked, "starting"), /did not start/);
+  assert.doesNotMatch(storageFailure(blocked, "maintenance"), /Recording stopped/);
+  assert.match(storageFailure(blocked, "maintenance"), /Nothing was recording/);
+  for (const situation of ["capture", "starting", "maintenance"] as const) {
+    assert.match(storageFailure(blocked, situation), /retained/);
+  }
+});
 // WEB-015. The banner used to be cleared only by a successful prepare(), which
 // runs only when Record is pressed, so a chunk that failed once and saved on
 // retry left "Recording stopped" up beside a queue showing nothing unsaved.
 test("a storage warning is withdrawn once nothing is left unsaved", () => {
-  assert.equal(resolveFailure("Local saving failed. Recording stopped.", 0), null);
+  assert.equal(resolveFailure(transientWarning("Local saving failed. Recording stopped."), 0), null);
   assert.equal(resolveFailure(null, 0), null);
 });
 test("a storage warning is held while a clip is still unsaved", () => {
-  const warning = "Local saving failed. Recording stopped.";
+  const warning = transientWarning("Local saving failed. Recording stopped.");
   assert.equal(resolveFailure(warning, 1), warning);
   assert.equal(resolveFailure(warning, 3), warning);
+});
+// WEB-015, second pass. Withdrawing on a successful poll is right for a warning
+// whose whole claim is that storage is not working, and wrong for a warning
+// about a durable fact. A session whose capture-completion record was never
+// saved stays partial forever; the five-second poll used to erase that within
+// five seconds, which is the original defect pointed the other way.
+test("a warning about a durable fact is never withdrawn by a later storage success", () => {
+  const partial = durableWarning("Capture completion could not be saved. The session remains partial; saved audio is retained.");
+  assert.equal(resolveFailure(partial, 0), partial);
+  assert.equal(resolveFailure(partial, 2), partial);
 });
 
 test("queue refresh preserves playback Blob identity while updating processing state", async () => {
