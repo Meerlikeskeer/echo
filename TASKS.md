@@ -467,6 +467,24 @@ Error: ENOENT: no such file or directory, open
 - **Not verified:** nothing about the running application changed, so no application behaviour was re-checked beyond the full suite. The generator parses the `**Status:**` line format that all 28 current entries share; an entry written in a different shape would silently fall back to `Todo`, which `status:check` would then show as a mismatch rather than a wrong row.
 - **Next:** the one-line ENG-012 fix so `npm run check` passes inside a worktree; opening mobile capture acceptance as its own task; WEB-004's four browser checks.
 
+
+## ENG-015 — Scope the container job to where its result can change
+
+**Status:** Implemented; awaiting owner review · **Branch:** `eng/ENG-015-container-job-scope` · **Dependencies:** ENG-002, ENG-007
+
+**Acceptance:** The self-hosted container image is still verified before anything merges, and is no longer rebuilt on work-in-progress pushes whose result it cannot change.
+
+### Handoff (2026-09-08)
+
+- **Branch/base:** `eng/ENG-015-container-job-scope`, from `main` @ `1559da2`.
+- **Why.** `.github/workflows/pull-request.yml` triggers `on: push` with no branch filter, so every push to every branch ran both `verify` and a full `docker build` plus image inspection and container smoke check. Echo's builder/checker protocol freezes acceptance tests *before* the builder starts, so a task branch is deliberately red from the freeze commit until implementation lands — five pushes on WEB-006 — each paying for a container build whose result could not change until the code existed.
+- **Change.** The container job moves to its own `.github/workflows/selfhost-container.yml`, triggered on `main`, on `pull_request` (`opened`, `synchronize`, `reopened`, `ready_for_review`) guarded by `if: github.event_name != 'pull_request' || github.event.pull_request.draft == false`, and on `workflow_dispatch`. `verify` is untouched and still runs `npm run check` on every push to every branch.
+- **This does not weaken the gate.** A draft cannot be merged, and marking a pull request ready for review runs the job before the merge button means anything. Docker is unavailable on the development machine, so this job remains the only place the image is ever built — which is the argument for spending it where it counts.
+- **Verified before commit:** both files parse as YAML, and the `verify` and `selfhost-container` job bodies were compared against `origin/main` after parsing and are identical — same runner, timeout, env and all nine container steps. Only the trigger, the `if` guard and the concurrency group differ.
+- **Not claimed.** This changes no notification volume for a genuinely failing branch: `verify` and `selfhost-container` are independent jobs, so a red `verify` reports once per push either way, which is correct. What it removes is roughly fifteen minutes of CI compute per work-in-progress commit.
+
+**Next:** owner reviews. The workflows themselves can only be exercised by GitHub, so this branch's own first push is their first real run — confirm that `verify` ran and `Self-hosted container` did **not**, since its pull request opens as a draft.
+
 ## ENG-003 — Shared status file and reading map
 
 **Status:** Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 · **Dependencies:** None
