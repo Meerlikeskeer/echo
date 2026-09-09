@@ -10,6 +10,7 @@ import { describeSecureContextProblem, readEnvironment } from "../lib/recording/
 import { SessionTranscripts } from "./session-transcript";
 import { useAudioQueue } from "./use-audio-queue";
 import { chunkKey, incompleteSessions, storageFailure, summarizeQueue } from "../lib/recording/queue";
+import { reportFailure } from "../lib/recording/log";
 
 const TARGET_MIN_MS = 30_000;
 const MAX_MS = 60_000;
@@ -95,7 +96,10 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     try { await queue.prepare(); }
     catch (cause) {
-      setFailure({ title: "Recording cannot be saved", detail: storageFailure(cause), retryable: true });
+      // WEB-015. "starting", because this runs before the microphone is opened:
+      // nothing was recording, so nothing stopped, and no clip is unsaved.
+      reportFailure("preparing local storage for a recording", cause);
+      setFailure({ title: "Recording cannot be saved", detail: storageFailure(cause, "starting"), retryable: true });
       setPhase("idle");
       return;
     }
@@ -105,6 +109,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (attempt !== generation.current) { stream.getTracks().forEach((track) => track.stop()); return; }
     } catch (error) {
+      reportFailure("opening the microphone", error);
       setFailure(describePermissionFailure(error));
       setPhase("idle");
       return;
@@ -113,7 +118,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     let active: ReturnType<typeof captureSession>;
     try {
       active = captureSession(stream, { chunkMs: 30_000, overlapMs }, undefined, queue.persist);
-    } catch {
+    } catch (cause) {
+      reportFailure("starting the audio recorder", cause);
       stream.getTracks().forEach((track) => track.stop());
       setFailure({ title: "Recording could not start", detail: "This browser could not open an audio recorder. Try a different browser or device.", retryable: false });
       setPhase("idle");
