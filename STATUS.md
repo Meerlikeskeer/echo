@@ -32,7 +32,7 @@ Short definitions so nobody has to reconstruct them from context.
 | **Provider / vendor** | The outside company doing the work. Currently Groq, marked temporary. |
 | **The access gate** | The username-and-password check that sits in front of every page and endpoint. |
 | **Fail closed** | When something is misconfigured, missing or unknown, refuse — never guess and continue. |
-| **Route Handler** | A server-side URL that accepts requests. Echo has one: `POST /api/recordings`. |
+| **Route Handler** | A server-side URL that accepts requests. Echo has two: `POST /api/recordings` for one chunk, and `POST /api/sessions/artifacts` for a whole session. |
 | **Bounded loop** | The optional automation in `AGENT_WORKFLOW.md`: a *builder* agent writes code, a separate *checker* agent verifies it, an *orchestrator* runs them in turns with hard stop rules. **Currently off.** |
 | `npm run check` | The single command that runs everything: style, types, tests, a real production build, and live HTTP tests. |
 
@@ -83,7 +83,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 ## What exists today
 
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
-- The recorder page, development-only owner-gated `/diagnostics/capture`, and one Route Handler, `POST /api/recordings`.
+- The recorder page, development-only owner-gated `/diagnostics/capture`, and two Route Handlers: `POST /api/recordings` and `POST /api/sessions/artifacts`.
 - The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
@@ -161,7 +161,7 @@ Cheaper here than in a search, and each one cost something to learn.
 
 **Live service check — 2026-09-06.** Machine-generated speech was posted to `POST /api/recordings` against the real Groq endpoints: HTTP 200 in **1.4 s**, correct transcript, sensible notes and action items, timestamps normalized. REQ-006 targets 5–10 s from stop to result; 1.4 s for a 7-second clip is inside it, but that is one measurement of one short clip on one connection, not a measured latency claim.
 
-**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding; WEB-004's IndexedDB acceptance in a native browser; WEB-005's drain-during-capture wiring; and WEB-006's v1-to-v2 migration and completion recovery. **All of these are now one script — [`status/acceptance/browser-acceptance.md`](status/acceptance/browser-acceptance.md)** — because they need the same session in a real Chrome and Safari, and were previously tracked as three separate sets of manual checks across three task handoffs. The hosted-origin items **are** now verified — the transport, Vercel's build of `vercel.json`, and whether a CDN edge answers for `/_next/static` in practice (it does not).
+**Still not verified:** microphone permission prompts, the 60-second auto-stop and independent browser decoding; WEB-004's IndexedDB acceptance in a native browser; WEB-005's drain-during-capture wiring; WEB-006's v1-to-v2 migration and completion recovery; and WEB-007's artifact generation, whose staleness rule can only be exercised by generating while chunks are still arriving. **All of these are now one script — [`status/acceptance/browser-acceptance.md`](status/acceptance/browser-acceptance.md)** — because they need the same session in a real Chrome and Safari, and were previously tracked as separate sets of manual checks across as many task handoffs. The hosted-origin items **are** now verified — the transport, Vercel's build of `vercel.json`, and whether a CDN edge answers for `/_next/static` in practice (it does not).
 
 ## Reading map
 

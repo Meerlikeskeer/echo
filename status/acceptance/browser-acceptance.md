@@ -1,10 +1,10 @@
-# Browser acceptance — the one session that closes WEB-003, WEB-004 and WEB-005
+# Browser acceptance — the one session that closes WEB-003 through WEB-007
 
 **Who runs this:** the owner, at a keyboard, in a real browser. No agent can. Every automated suite in this repository runs in Node against fixtures; nothing here has ever executed in a browser engine.
 
-**Why one script for three tasks:** WEB-003, WEB-004 and WEB-005 are each *implemented and test-verified* but none is Done, and all three are blocked on the same evidence — a real Chrome and a real Safari, driving real IndexedDB, a real `MediaRecorder` and a real microphone, in one sitting. Running them separately would mean setting the same session up three times.
+**Why one script for five tasks:** WEB-003, WEB-004, WEB-005, WEB-006 and WEB-007 are each *implemented and test-verified* but none is Done, and all of them are blocked on the same evidence — a real Chrome and a real Safari, driving real IndexedDB, a real `MediaRecorder` and a real microphone, in one sitting. Running them separately would mean setting the same session up three times.
 
-**Time:** about 20 minutes for Chrome, 10 more for Safari.
+**Time:** about 25 minutes for Chrome, 10 more for Safari.
 
 **Recording the result is part of the task.** An unrecorded pass is worth nothing to the next session. Fill in the results table at the bottom, including anything that failed. A failure here is a *good* outcome — it is the first browser evidence this code has ever had, and finding a defect is the reason to run it.
 
@@ -164,11 +164,37 @@ Use a private/incognito window, or DevTools → Application → Storage to const
 
 The diagnostic budget/abort tests in A1 are deterministic coverage of this path, but they inject a budget rather than exhausting real disk.
 
+### B6 — Session artifacts, and the staleness rule (WEB-007)
+
+In the session transcript section, below the transcript, there is a **Notes and actions** block with a **Generate notes** button. Nothing in WEB-007 has run in a browser.
+
+**B6a — a normal generation.** With a transcript on screen, press *Generate notes*.
+
+- The button reads *Writing…* and is disabled while the request is in flight.
+- Title, summary, key points, action items and **Suggested research** all render.
+- The note below Suggested research says Echo has not searched for any of them. **REQ-005 separates suggested research from opt-in external research (WEB-013), and this sentence is the separation the owner actually sees.**
+- With a partial transcript, the block says the notes describe only what has been transcribed so far, and the word *Final* appears nowhere in it.
+
+**B6b — the revision is computed server-side.** In DevTools → Network, open the `POST /api/sessions/artifacts` request.
+
+- The **request body contains no revision.** It carries `sessionId`, `text`, `status`, `segments` and `gaps` only.
+- The response carries a 64-character hex `transcriptRevision`.
+- Generating twice with an unchanged transcript returns the **same** revision.
+
+**B6c — the stale label. This is the check WEB-007 exists for and the one no test covers in a browser.** Start a recording so chunks keep arriving, and press *Generate notes* while capture is still running.
+
+- If the answer lands after a new chunk has changed the transcript, the notes are **discarded** and a message says the transcript changed and to generate again.
+- If artifacts were already on screen from an earlier revision, they **stay visible** with the label *The transcript has changed since these notes were written.* They must not silently disappear, and they must not be silently replaced by the older answer.
+
+Throttle the network in DevTools if the window is too narrow to hit by hand. Generating a second time before the first answer returns exercises the same rule from the other side: the older attempt must not overwrite the newer one.
+
+**B6d — `crypto.subtle` on the deployed origin.** A revision is a SHA-256 digest, so it needs a secure context exactly as the chunk checksums do. On the deployed HTTPS origin, confirm the block renders and a revision is produced. On an insecure origin it cannot be, which is what ENG-008's guard already refuses before capture.
+
 ---
 
 ## Part C — Safari
 
-Repeat **Part A** in full and **B1** in Safari. Safari is the reason several limits exist: its measured 204 kbps drove the 64 MiB audio budget, and its IndexedDB and `MediaRecorder` behaviour differ from Chrome's.
+Repeat **Part A** in full, and **B1** and **B6a**, in Safari. Safari is the reason several limits exist: its measured 204 kbps drove the 64 MiB audio budget, and its IndexedDB and `MediaRecorder` behaviour differ from Chrome's.
 
 WEB-004's handoff notes that Safari displayed `/diagnostics/queue` (HTTP 200) but automation lost the page view (`elementHasNoFrame`, `noWindowsAvailable`), so **no native PASS was ever observed in Safari.** Driving it by hand is exactly what is missing.
 
@@ -199,13 +225,18 @@ Fill this in as you go. Write what you observed, not what was expected. `not run
 | B4 disconnect / reload / recover / no playback reset | Chrome | | |
 | B4b Final survives reload; killed capture stays Partial | Chrome | | |
 | B5 quota exhaustion, nothing deleted | Chrome | | |
+| B6a artifacts render; research labelled as not searched | Chrome | | |
+| B6b request carries no revision; same transcript, same revision | Chrome | | |
+| B6c stale answer discarded; older artifacts stay labelled | Chrome | | |
+| B6d revision computed on the deployed HTTPS origin | Chrome | | |
 | A1 five PASS lines | Safari | | |
 | A2 recover 3 pending after reload | Safari | | |
 | A3 capture persisted ≥1 before stop | Safari | | |
 | A4 v1→v2 migration keeps existing clips | Safari | | |
 | B4b Final survives reload; killed capture stays Partial | Safari | | |
 | B1 permission, deny message, short clip | Safari | | |
+| B6a artifacts render; research labelled as not searched | Safari | | |
 
 **Browser versions:** Chrome ______ · Safari ______ · macOS ______ · Date ______
 
-**When this is filled in:** move the outcome into each task's handoff in `TASKS.md`, update the three `**Status:**` lines, run `npm run status:table`, and record in `STATUS.md` § *Verification floor* that the browser items under *Still not verified* are now verified — or say precisely which ones still are not.
+**When this is filled in:** move the outcome into each task's handoff in `TASKS.md`, update the four `**Status:**` lines, run `npm run status:table`, and record in `STATUS.md` § *Verification floor* that the browser items under *Still not verified* are now verified — or say precisely which ones still are not.
