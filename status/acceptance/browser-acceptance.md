@@ -75,6 +75,31 @@ Press **Test capture persistence**. This drives `captureSession` with an oscilla
 
 **N must be at least 1.** That is the whole point: it proves a chunk was durably committed *before* the session stopped, rather than everything being materialised at stop. `M` should equal the total chunk count.
 
+### A4 — The v1 → v2 migration, against real pre-existing data (WEB-006)
+
+**This is the check with no automated coverage of any kind.** WEB-006 raises the IndexedDB version from 1 to 2 to add a `sessions` store for capture-completion evidence. An independent review traced the upgrade and found it correct — existing `chunks` rows and the unique `sequence` index are guarded by `objectStoreNames.contains()` and never recreated — but **reading is not running**, and no test or diagnostic harness touches `IndexedDBQueue`, `saveCompletion` or `listCompletions`.
+
+To create genuine v1 data and then migrate it:
+
+1. Check out `main` (which has no `sessions` store) and run `npm run dev`.
+2. Record a short clip in the real recorder so audio is committed to IndexedDB at **version 1**. Note how many clips you have.
+3. Stop the dev server. Check out the WEB-006 branch. Run `npm run dev` again.
+4. Reload `http://127.0.0.1:3000` **in the same browser profile**.
+
+Require:
+
+- Every clip from step 2 is **still listed and still downloadable**. Nothing was dropped by the upgrade.
+- The recorder is usable — the Record button is enabled, not stuck disabled.
+- No storage error appears.
+
+Those pre-existing clips have no completion manifest and can never acquire one retroactively, so their session transcript must read **`Partial`**. That is correct behaviour, not a defect: a manifest records that capture finished successfully, and there is no evidence of that for a session recorded before the store existed.
+
+### A5 — The blocked-upgrade message
+
+The upgrade is exactly the moment a second open tab becomes likely, and a blocked upgrade is the one case where the user has to do something specific.
+
+Open Echo in **two tabs** on `main` first (so both hold a version 1 connection), then switch to the WEB-006 branch and reload only one of them. If the upgrade is blocked, require a message that **names the actual remedy** — closing other Echo tabs — rather than a generic "Local saving failed". Record the exact wording you see.
+
 ---
 
 ## Part B — the real recorder (WEB-003 and WEB-005)
@@ -115,6 +140,19 @@ While recording, turn off Wi-Fi (or use DevTools → Network → Offline). Keep 
 
 Repeat with **two tabs open** and an interrupted response. Local work must not duplicate. **Remote provider work may repeat** — the job ledger is in-process and best-effort, and a cold start, redeploy, second instance or TTL expiry all lose it (ADR-016). Seeing the same audio transcribed twice here is expected, not a bug.
 
+### B4b — Completion evidence survives a reload (WEB-006)
+
+The frozen tests for WEB-006 would **all still pass if the recorder never wrote completion evidence at all** — they exercise the pure domain module and a server-rendered component, never the storage round trip. This is the only check that observes it.
+
+Record a clip and let it finish completely, so every chunk has a transcript. Require the session transcript to read **`Final`**.
+
+Now **reload the page**. Require:
+
+- The session still reads `Final`. The manifest was read back out of IndexedDB, not held in memory.
+- Source chunk numbers and the `Original sources` disclosure are still present.
+
+Then record a clip and **kill the tab mid-recording** (do not press stop). Reopen. Require that session to read **`Partial`**, with a readable reason. A capture that never stopped successfully must never be finalised — that is the distinction ADR-017 exists to make, and it is the one thing no test can prove.
+
 ### B5 — Quota exhaustion and a mid-recording write failure
 
 Use a private/incognito window, or DevTools → Application → Storage to constrain the quota, and record until writes fail.
@@ -153,14 +191,19 @@ Fill this in as you go. Write what you observed, not what was expected. `not run
 | A1 five PASS lines | Chrome | | |
 | A2 recover 3 pending after reload | Chrome | | |
 | A3 capture persisted ≥1 before stop | Chrome | | |
+| A4 v1→v2 migration keeps existing clips | Chrome | | |
+| A5 blocked-upgrade message names the remedy | Chrome | | |
 | B1 permission, deny message, short clip | Chrome | | |
 | B2 60-second auto-stop | Chrome | | |
 | B3 POSTs during capture, UI responsive | Chrome | | |
 | B4 disconnect / reload / recover / no playback reset | Chrome | | |
+| B4b Final survives reload; killed capture stays Partial | Chrome | | |
 | B5 quota exhaustion, nothing deleted | Chrome | | |
 | A1 five PASS lines | Safari | | |
 | A2 recover 3 pending after reload | Safari | | |
 | A3 capture persisted ≥1 before stop | Safari | | |
+| A4 v1→v2 migration keeps existing clips | Safari | | |
+| B4b Final survives reload; killed capture stays Partial | Safari | | |
 | B1 permission, deny message, short clip | Safari | | |
 
 **Browser versions:** Chrome ______ · Safari ______ · macOS ______ · Date ______
