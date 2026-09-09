@@ -12,7 +12,10 @@ on:
       - 'int/**'
 
 permissions:
-  contents: read
+  # ENG-016. `contents` rises from read to write because enabling auto-merge
+  # ends in a merge commit on `main`. `pull-requests: write` alone can open a
+  # pull request but cannot land one.
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -51,3 +54,40 @@ jobs:
             --head "$BRANCH" \
             --title "$(git log -1 --pretty=%s)" \
             --body-file "$RUNNER_TEMP/pr-body.md"
+
+      # ENG-016, applied by ENG-020. Auto-merge skips no check. It presses the
+      # merge button the moment every required check is green, and never presses
+      # it otherwise. Scoped to eng/ and docs/ because those change tooling and
+      # prose; a feat/ branch changes what the owner sees in the app, and
+      # several are gated on browser acceptance no check can perform, so those
+      # stay one deliberate click on "Enable auto-merge".
+      - name: Let eng/ and docs/ branches merge themselves once green
+        if: startsWith(github.ref_name, 'eng/') || startsWith(github.ref_name, 'docs/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          state=$(gh pr view "$BRANCH" --json isDraft,autoMergeRequest \
+            --jq '(.isDraft|tostring) + " " + ((.autoMergeRequest != null)|tostring)')
+          draft=${state% *}
+          armed=${state#* }
+
+          if [ "$draft" = "true" ]; then
+            echo "$BRANCH is a draft. Auto-merge is deliberately not enabled on drafts."
+            exit 0
+          fi
+          if [ "$armed" = "true" ]; then
+            echo "Auto-merge is already enabled for $BRANCH."
+            exit 0
+          fi
+
+          # Fails loudly rather than continuing quietly: the fail-closed rule
+          # applied to CI. A misconfigured setting must be visible on the first
+          # push, not discovered later as work that silently never merged.
+          if ! gh pr merge "$BRANCH" --auto --squash; then
+            echo "::error::Could not enable auto-merge for $BRANCH."
+            echo "Check Settings > General > Pull Requests > 'Allow auto-merge',"
+            echo "and that main's ruleset requires at least one status check."
+            echo "GitHub refuses auto-merge on a pull request with nothing to wait for."
+            exit 1
+          fi
