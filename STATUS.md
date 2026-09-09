@@ -48,6 +48,7 @@ Echo is a private-first web AI note taker, **deployed and verified over HTTPS** 
 | --- | --- | --- |
 | DOC-001 Shared repository foundation | Done | — |
 | ENG-001 Bounded builder/checker workflow | Done | — |
+| ENG-017 Bounded loop test and acceptance adapters | Blocked — baseline commands unavailable; implementation not started | `eng/ENG-017-bounded-loop-adapters` |
 | ENG-002 Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
 | ENG-007 Pull request workflow and branch protection | Implemented; branch protection is owner-applied | `eng/ENG-007-pull-request-workflow` |
 | ENG-008 Secure-context development server and diagnosis | Partially withdrawn — the `secure-context` diagnosis is Done and merged in `a032a01`; the… | `eng/ENG-008-https-dev-server` |

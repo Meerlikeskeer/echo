@@ -16,6 +16,16 @@ Added independent role definitions, a Codex-backed orchestrator, Claude entry po
 
 **Integration note:** merged into `main`. The loop remains disabled: `agent-loop.json` still has `"ready": false`, and `scripts/run-app-tests.py` / `scripts/run-app-acceptance.py` do not exist. Controller tests were rerun after integration: 16 tests, 0 failures. Preflight correctly refuses to run (exit 2, "ready is false").
 
+## ENG-017 — Bounded loop test and acceptance adapters
+
+**Status:** Blocked — baseline commands unavailable; implementation not started · **Branch:** `eng/ENG-017-bounded-loop-adapters`
+
+**Acceptance:** Add `scripts/run-app-tests.py` and `scripts/run-app-acceptance.py`, deriving every selected test's stable ID and pass/fail outcome from real runner TAP. Fail closed for empty, malformed, partial, skipped, crashed and zero-test runs; preserve nonzero runner exits. Freeze Python fixture acceptance tests and obtain independent checker review before builder implementation. Increase Python coverage above the existing 16 controller tests. Keep `agent-loop.json` at `ready: false`. Use the manual orchestrator/builder/checker protocol, at most five builder attempts, and immediate workflow stops.
+
+**Handoff (2026-09-08):** Based on `main` at `f68ccca`. Baseline `npm ci` exited 255 (EPERM removing the workspace dependency bin directory); `npm run check` exited 127 (ESLint unavailable after tracked-source and generated-table checks passed); `python3 -m unittest discover -s tests` exited 1 (Python 3.9 crashed while reporting a test error). Unit, production HTTP and self-host suites: not run. No completed Python test count. Independent read-only checker confirmed missing baseline results require stopping under AGENT_WORKFLOW.md rule 3. Zero builder attempts; neither adapters nor acceptance tests implemented. Recovery details and local evidence paths are in `status/in-flight/ENG-017.md`.
+
+**Next step / not verified:** Restore dependency installation and Python 3.10+, then establish a complete baseline before implementation in a new owner-authorized run. Full required verification, frozen acceptance review and implementation review remain outstanding. Enabling the loop additionally requires independently verified real adapter outcomes and failure controls, independently reviewed goal-specific acceptance tests, reviewed check/protection configuration, and an explicit owner decision; enabling is outside ENG-017 scope.
+
 ## ENG-002 — Self-host parity verification
 
 **Status:** Implemented and verified, except the container build itself · **Branch:** `eng/ENG-002-self-host-parity` · **Dependencies:** WEB-001 (satisfied)
