@@ -1,8 +1,17 @@
-# Local secrets/configuration (including nested app environment files)
+# Local secrets/configuration (including nested app environment files).
+#
+# ENG-019: nothing matching `.env*` is tracked any more, not even a template.
+# Agent sandboxes deny writes to every such path — correctly, since that is
+# where secrets live — but the rule matched the tracked `.env.example` template
+# too, so a sandboxed agent could not check the repository out at all. It failed
+# on `error: unable to create file .env.example: Operation not permitted` before
+# running a single test. The template now lives at `env.example`, with no
+# leading dot, and the exceptions below are gone: a `.env*` path in this
+# repository is a secret, without exception, which is a simpler rule anyway.
 .env
 .env.*
-!.env.example
-!.env.*.example
+*.env
+*.env.*
 *.pem
 *.key
 *.p12

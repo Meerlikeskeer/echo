@@ -16,7 +16,7 @@ From the repository root:
 
 ```sh
 npm ci
-cp .env.example apps/web/.env.local
+cp env.example apps/web/.env.local
 ```
 
 Edit `apps/web/.env.local` and set `ECHO_OWNER_USERNAME` (any name without a colon) and `ECHO_OWNER_PASSWORD` (random, at least 32 characters).
@@ -239,4 +239,4 @@ Fill this in as you go. Write what you observed, not what was expected. `not run
 
 **Browser versions:** Chrome ______ · Safari ______ · macOS ______ · Date ______
 
-**When this is filled in:** move the outcome into each task's handoff in `TASKS.md`, update the four `**Status:**` lines, run `npm run status:table`, and record in `STATUS.md` § *Verification floor* that the browser items under *Still not verified* are now verified — or say precisely which ones still are not.
+**When this is filled in:** move the outcome into each task's own `tasks/<TASK-ID>.md` handoff, update its `**Status:**` line, run `npm run tasks:build`, and record in `STATUS.md` that the browser items under *Still not verified* are now verified — or say precisely which ones still are not.

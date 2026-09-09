@@ -57,7 +57,7 @@ The product direction is a 30–60 second recording → transcript → generated
 
 ## Configuration and privacy
 
-[.env.example](.env.example) contains blank configuration placeholders only. Use `apps/web/.env.local` for local configuration; never commit actual credentials. Private repository visibility does not replace application access control. Recording content and provider keys must not appear in logs, fixtures, analytics, or browser bundles.
+[env.example](env.example) contains blank configuration placeholders only. It has no leading dot on purpose: agent sandboxes deny writes to every `.env*` path, and a tracked one stopped them checking the repository out (ENG-019). Use `apps/web/.env.local` for local configuration; never commit actual credentials. Private repository visibility does not replace application access control. Recording content and provider keys must not appear in logs, fixtures, analytics, or browser bundles.
 
 User-supplied keys and provider choice are core requirements. Cloud processing must be explicit; self-hosted deployment is the architectural baseline. Calendar/reminder writes require user confirmation.
 
@@ -71,7 +71,7 @@ Use Node **22.23.2** (`nvm install && nvm use` if nvm is installed) and npm **10
 
 ```sh
 npm ci
-cp .env.example apps/web/.env.local
+cp env.example apps/web/.env.local
 # Edit apps/web/.env.local: set ECHO_OWNER_USERNAME and a random >=32-character ECHO_OWNER_PASSWORD.
 npm run dev
 ```
@@ -219,7 +219,7 @@ ECHO_OWNER_USERNAME=... ECHO_OWNER_PASSWORD=... \
 
 - ESLint is pinned to 9.39.5 because the current Next React lint plugin crashes under ESLint 10 (`context.getFilename` API removal). npm marks ESLint 9 unsupported; upgrading the compatible plugin/toolchain remains a maintenance requirement. No lint rules are disabled.
 - Provision the owner's username and random password in the server environment and configure HTTPS before hosted use. No real credentials are checked in or required by CI.
-- Recording requires provider configuration. Copy `.env.example` to `apps/web/.env.local` and set `TRANSCRIPTION_PROVIDER`/`LLM_PROVIDER` (`openai-compatible` or `fixture`) with the matching `*_BASE_URL`, `*_API_KEY` and `*_MODEL`. Echo validates this at startup and disables recording, naming the missing variables, until it is complete.
+- Recording requires provider configuration. Copy `env.example` to `apps/web/.env.local` and set `TRANSCRIPTION_PROVIDER`/`LLM_PROVIDER` (`openai-compatible` or `fixture`) with the matching `*_BASE_URL`, `*_API_KEY` and `*_MODEL`. Echo validates this at startup and disables recording, naming the missing variables, until it is complete.
 - The `openai-compatible` adapter is verified against a stubbed transport, not against a live vendor. A live check is a manual step: configure a real base URL and key, run `npm run dev`, and record a clip.
 - Storage, owner-scoped persisted data, mobile-browser validation, and deployment/recovery remain their later WEB tasks.
 - `agent-loop.json` is present with `"ready": false`; automation remains **disabled**. Do not set it true until its actual check commands and per-test reporting adapters are implemented and independently demonstrated to report failures and individual test outcomes. Current human/CI commands and Node TAP output are not an agent-loop adapter certification.
