@@ -3,9 +3,25 @@ import type { RecordingResult } from "./pipeline";
 import { isCompletion, sameMetadata, type Completion } from "./session-completion";
 import { validateQuickNote } from "./quick-note";
 
-export const AUDIO_BUDGET = 64 * 1024 * 1024;
-// Safari's measured 204 kbps, plus overlap/headroom: over two minutes.
-export const CAPACITY_RESERVE = 4 * 1024 * 1024;
+/**
+ * WEB-016 raised this from 64 MiB, which held about forty minutes at the
+ * bitrate browsers pick unprompted — less than one lecture. At the 32 kbps the
+ * recorder now requests, 256 MiB is roughly eighteen hours of audio, so the
+ * binding limit becomes the browser's own storage quota rather than this
+ * number. Nothing here deletes audio to stay under it: the budget refuses new
+ * clips, it never reclaims old ones (REQ retention rules).
+ */
+export const AUDIO_BUDGET = 256 * 1024 * 1024;
+// Enough headroom to finish the chunk in progress and start several more, at
+// Safari's measured 204 kbps rather than at the rate Echo asks for.
+export const CAPACITY_RESERVE = 8 * 1024 * 1024;
+/**
+ * Mirrors the transcription adapter's `maxClipBytes`. The server stays
+ * authoritative — this copy exists so an oversized chunk is named as oversized
+ * in the browser rather than spending eight upload attempts to be told so, once
+ * per chunk, for a whole lecture.
+ */
+export const MAX_UPLOAD_BYTES = 4_000_000;
 import { normalizeMime } from "./media-type";
 export { normalizeMime } from "./media-type";
 export const chunkKey = (chunk: PlayableChunk) => `${chunk.metadata.sessionId}/${chunk.metadata.id}`;
@@ -332,8 +348,14 @@ export class IndexedDBQueue implements QueueStore {
 }
 
 export class UploadFailure extends Error {
-  constructor(readonly retryable: boolean) { super(retryable ? "Server unavailable; retry scheduled." : "Processing rejected. Sign in or check provider configuration, then retry."); }
+  constructor(readonly retryable: boolean, message?: string) {
+    super(message ?? (retryable ? "Server unavailable; retry scheduled." : "Processing rejected. Sign in or check provider configuration, then retry."));
+  }
 }
+/** WEB-016. Too large to ever be accepted, so it is refused here rather than
+ *  eight times over the network. The audio is kept and stays downloadable —
+ *  this is a processing refusal, never a reason to drop a recording. */
+export const OVERSIZED = "This clip is larger than the server accepts, so it was not sent. The audio is saved here and can be downloaded. Shorter chunks will avoid this.";
 export const retryDelay = (attempt: number) => Math.min(60_000, 1000 * 2 ** Math.min(6, Math.max(0, attempt - 1)));
 /** Retrying forever against a server that is never going to accept this chunk
  *  burns the provider allowance and hides the failure behind an activity
@@ -365,6 +387,7 @@ export async function drainQueue(store: QueueStore, send: (chunk: PlayableChunk)
   }
 }
 export async function sendChunk(chunk: PlayableChunk): Promise<RecordingResult> {
+  if (chunk.audio.size > MAX_UPLOAD_BYTES) throw new UploadFailure(false, OVERSIZED);
   const body = new FormData();
   body.append("audio", chunk.audio, `recording.${chunk.audio.type.includes("ogg") ? "ogg" : chunk.audio.type.includes("mp4") ? "m4a" : "webm"}`);
   body.append("durationMs", String(chunk.metadata.endMs - chunk.metadata.startMs));

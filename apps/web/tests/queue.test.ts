@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUDIO_BUDGET, CAPACITY_RESERVE, EXHAUSTED, MAX_ATTEMPTS, preserveAudio, processingUpdate, recoverEntries, sendChunk, drainQueue, incompleteSessions, normalizeMime, durableWarning, orderEntries, resolveFailure, retryDelay, sameChunk, StorageBlockedError, storageFailure, summarizeQueue, transientWarning, UploadFailure, verifyChunk, type QueueEntry, type QueueStore } from "../src/lib/recording/queue";
+import { AUDIO_BUDGET, CAPACITY_RESERVE, EXHAUSTED, MAX_ATTEMPTS, MAX_UPLOAD_BYTES, OVERSIZED, preserveAudio, processingUpdate, recoverEntries, sendChunk, drainQueue, incompleteSessions, normalizeMime, durableWarning, orderEntries, resolveFailure, retryDelay, sameChunk, StorageBlockedError, storageFailure, summarizeQueue, transientWarning, UploadFailure, verifyChunk, type QueueEntry, type QueueStore } from "../src/lib/recording/queue";
 import { checksum } from "../src/lib/recording/session";
 import type { RecordingResult } from "../src/lib/recording/pipeline";
 
@@ -218,6 +218,28 @@ test("HTTP retry classification honors permanent provider failure even with 502"
     await assert.rejects(sendChunk(await entry()), (error: unknown) => error instanceof UploadFailure && !error.retryable);
     globalThis.fetch = async () => new Response("unavailable", { status: 503 });
     await assert.rejects(sendChunk(await entry()), (error: unknown) => error instanceof UploadFailure && error.retryable);
+  } finally { globalThis.fetch = original; }
+});
+
+/**
+ * WEB-016. Five-minute chunks put a real chunk within reach of the server's
+ * clip limit for the first time. A chunk over it is refused every time it is
+ * sent, so it is refused here instead — permanently, with its own reason, and
+ * without spending eight round trips per chunk for a whole lecture.
+ */
+test("an oversized chunk is refused locally, permanently, and says why", async () => {
+  const row = await entry();
+  const oversized = { ...row, audio: new Blob([new Uint8Array(MAX_UPLOAD_BYTES + 1)], { type: "audio/webm;codecs=opus" }) };
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => { throw new Error("an oversized chunk must never reach the network"); };
+    await assert.rejects(sendChunk(oversized), (error: unknown) =>
+      error instanceof UploadFailure && !error.retryable && error.message === OVERSIZED);
+    // The limit itself is not off by one, and a chunk at it still goes.
+    let sent = false;
+    globalThis.fetch = async () => { sent = true; return new Response(JSON.stringify(result), { status: 200 }); };
+    await sendChunk({ ...row, audio: new Blob([new Uint8Array(MAX_UPLOAD_BYTES)], { type: "audio/webm;codecs=opus" }) });
+    assert.equal(sent, true);
   } finally { globalThis.fetch = original; }
 });
 
