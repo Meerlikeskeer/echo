@@ -93,8 +93,14 @@ export function createFixtureNotesProvider(options: FixtureOptions = {}): NotesP
       failIfRequested("notes", options);
       return {
         title: "Fixture session",
+        // Null rather than an invented course name: the fixture models the
+        // honest answer, so a test that expects a course has to supply one.
+        course: null,
         summary: `Fixture session artifacts for a transcript of ${transcript.text.length} characters.`,
         keyPoints: ["Fixture session point one.", "Fixture session point two."],
+        outline: [{ heading: "Fixture section", notes: ["Fixture note one.", "Fixture note two."] }],
+        terms: [{ term: "Fixture term", definition: "Defined as the fixture defines it." }],
+        openQuestions: ["Fixture open question."],
         actionItems: ["Confirm the session action items."],
         // Suggestions only. Nothing was looked up; WEB-013 owns opt-in research.
         researchTopics: ["Fixture research topic."],

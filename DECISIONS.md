@@ -291,6 +291,16 @@ Render one derived session transcript with partial/final status and readable gap
 
 **Tradeoff:** Conservative alignment can leave repeated words visible when timestamps are too coarse to prove duplication. Preserving speech is preferable to silently deleting it. Recovered pre-manifest sessions cannot be retrospectively called complete. Native IndexedDB migration and capture lifecycle verification remain separate evidence from pure domain and rendering tests.
 
+## ADR-019 — Session notes are a lecture guide, and an over-long transcript is refused rather than truncated
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-017 · **Refines:** ADR-009, ADR-017
+
+**Context:** The session artifact schema was a meeting summary — title, summary, key points, action items, research topics — and a lecture flattened into it loses the argument, the terminology as the speaker uses it, and what was left unresolved. Two separate bounds also made a lecture impossible rather than merely poorly served: `isRevisionInput` refused a transcript over 24,000 characters with `400 bad_request`, and both generators truncated with `slice(0, MAX_TRANSCRIPT_CHARS)` and reported nothing, so notes could describe the first third of a session with no sign the rest existed. The stitched transcript's gaps reached the endpoint and were dropped before generating.
+
+**Decision:** `SessionArtifacts` gains a course or subject identified only from the recording itself and null otherwise, an outline of sections carrying the session's substance in order, terminology defined as the speaker defined it, and open questions. Nested objects are validated as strictly as the flat fields, unknown keys included. The transcript bound rises to a session-sized one and **the port refuses past it** rather than truncating: Echo sends the whole transcript and lets the configured model refuse what it cannot take, because a refusal is visible and a truncation is not. Gaps and partial status are stated to the generator, before the transcript, as Echo's own words about Echo's own data. Both route handlers declare `maxDuration` rather than inheriting a platform default.
+
+**Tradeoff:** A larger transcript costs more per generation and takes longer, and a model with a small context window now fails loudly on a long session where it used to succeed on a third of one — which is the point, and is why the notes model's context window becomes a real configuration constraint (`env.example` says so). A richer schema is more for a provider to get wrong, so one malformed section costs the whole set of notes; the validator's problem list keeps naming fields and reasons and never values. The vendor remains undecided (ADR-009): nothing here names one in code.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.

@@ -178,8 +178,10 @@ test("a notes failure never carries the transcript or the credential", async () 
 // thin answer rather than repairing one. They are stored against a transcript
 // revision, so a substituted placeholder would be indistinguishable from a real
 // result — the fallback that is right for notes is wrong here.
-const ARTIFACTS_JSON = '{"title":"Weekly planning","summary":"The team agreed the date.",'
-  + '"keyPoints":["The release slips."],"actionItems":["Assign the tasks."],'
+const ARTIFACTS_JSON = '{"title":"Weekly planning","course":null,"summary":"The team agreed the date.",'
+  + '"keyPoints":["The release slips."],"outline":[{"heading":"The date","notes":["It moves a week."]}],'
+  + '"terms":[{"term":"Release train","definition":"The weekly shipping slot."}],'
+  + '"openQuestions":["Who owns the rest?"],"actionItems":["Assign the tasks."],'
   + '"researchTopics":["Release checklist practices"]}';
 
 test("session artifacts unwrap the vendor envelope and ask for what the validator accepts", async () => {
@@ -200,8 +202,12 @@ test("session artifacts unwrap the vendor envelope and ask for what the validato
 
   assert.deepEqual(artifacts, {
     title: "Weekly planning",
+    course: null,
     summary: "The team agreed the date.",
     keyPoints: ["The release slips."],
+    outline: [{ heading: "The date", notes: ["It moves a week."] }],
+    terms: [{ term: "Release train", definition: "The weekly shipping slot." }],
+    openQuestions: ["Who owns the rest?"],
     actionItems: ["Assign the tasks."],
     researchTopics: ["Release checklist practices"],
   });
@@ -244,4 +250,48 @@ test("an artifact refusal never carries the credential or the transcript", async
   const serialized = `${error.message} ${error.stack ?? ""} ${JSON.stringify({ ...error })}`;
   assert.doesNotMatch(serialized, new RegExp(SECRET));
   assert.doesNotMatch(serialized, /hello world/);
+});
+
+/**
+ * WEB-017. The old code did `transcript.text.slice(0, MAX)` and said nothing,
+ * so notes for a fifty-minute lecture described its first twenty minutes with
+ * no sign anything was missing. Truncation is the defect; a larger cap that
+ * still truncates silently is the same defect further away.
+ */
+test("WEB-017 an over-long transcript is refused rather than silently truncated", async () => {
+  const { fetchImpl, calls } = stub(() => jsonResponse({ choices: [{ message: { content: ARTIFACTS_JSON } }] }));
+  const provider = createOpenAiCompatibleNotesProvider({ ...base, fetchImpl });
+  const huge = { ...transcript, text: "x".repeat(400_001) };
+  await assert.rejects(provider.generateArtifacts(huge), (error: unknown) => error instanceof ProviderError && error.port === "notes");
+  await assert.rejects(provider.generateNotes(huge), (error: unknown) => error instanceof ProviderError);
+  // Refused before a credential is used or a byte leaves the process.
+  assert.equal(calls.length, 0);
+});
+
+test("WEB-017 the whole transcript is sent, and gaps and partial status are stated before it", async () => {
+  const { fetchImpl, calls } = stub(() => jsonResponse({ choices: [{ message: { content: ARTIFACTS_JSON } }] }));
+  // Longer than the old 24,000 cap, so a surviving slice would be visible here.
+  const long = { ...transcript, text: `START ${"word ".repeat(6_000)}END` };
+  await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl }).generateArtifacts(long, {
+    gapMinutes: ["12:00 to 17:00"], transcriptStatus: "partial",
+  });
+  const sent = JSON.parse(String(calls[0].init.body)) as { messages: { content: string }[] };
+  assert.match(sent.messages[1].content, /END$/);
+  assert.equal(sent.messages[1].content.includes(long.text), true);
+  assert.match(sent.messages[1].content, /12:00 to 17:00/);
+  assert.match(sent.messages[1].content, /partial/i);
+  // The context is Echo's own words about Echo's own data, and it precedes the
+  // transcript: a note about what is missing is worthless past a model's
+  // attention, and the transcript may not introduce itself.
+  assert.ok(sent.messages[1].content.indexOf("12:00 to 17:00") < sent.messages[1].content.indexOf("Transcript:"));
+});
+
+test("WEB-017 the instructions ask for a lecture guide, not a meeting summary", async () => {
+  const { fetchImpl, calls } = stub(() => jsonResponse({ choices: [{ message: { content: ARTIFACTS_JSON } }] }));
+  await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl }).generateArtifacts(transcript);
+  const system = (JSON.parse(String(calls[0].init.body)) as { messages: { content: string }[] }).messages[0].content;
+  for (const asked of [/outline/, /terms/, /openQuestions/, /course/, /\[unclear\]/]) assert.match(system, asked);
+  // The rules that were never the style question stay exactly where they were.
+  assert.match(system, /untrusted/);
+  assert.match(system, /Do not look anything up/);
 });
