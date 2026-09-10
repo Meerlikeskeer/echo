@@ -22,6 +22,10 @@ export interface AudioChunk {
 }
 
 export interface PlayableChunk { readonly metadata: AudioChunk; readonly audio: Blob }
+export const SESSION_CAPTURE_MS = 2 * 60 * 60 * 1000;
+export const SESSION_CHUNK_MS = 60_000;
+export const SESSION_OVERLAP_MS = 3_000;
+
 export interface CaptureOptions { readonly chunkMs: number; readonly overlapMs: number; readonly quickNote?: boolean }
 
 export function validateCaptureOptions(options: CaptureOptions): void {

@@ -19,7 +19,10 @@ test("the recording action is the clearest action on the ready screen", () => {
   assert.match(html, /<h1[^>]*>Record a note<\/h1>/);
   assert.match(html, /aria-labelledby="record-title"/);
   assert.match(html, /<button[^>]*>Record<\/button>/);
-  assert.match(html, /Record 30–60 seconds/);
+  assert.match(html, /Record a lecture or meeting for up to two hours/);
+  assert.match(html, /Keep this tab open and your device awake/);
+  assert.match(html, /value="3000" selected=""/);
+  assert.match(html, /value="5000"/);
 });
 
 test("disclosure of an external processor is rendered from provider data", () => {

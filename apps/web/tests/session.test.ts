@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { captureSession, PREFERRED_MIME_TYPES, type CaptureRuntime } from "../src/lib/recording/capture";
-import { checksum, isAudioChunk, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
+import { SESSION_CAPTURE_MS, SESSION_CHUNK_MS, checksum, isAudioChunk, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
 
 type FakeRecorder = {
   mimeType: string;
@@ -13,7 +13,7 @@ type FakeRecorder = {
   stop(): void;
 };
 
-function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false) {
+function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false, chunkMs = 30000) {
   let now = 0;
   let released = 0;
   let counter = 0;
@@ -44,7 +44,7 @@ function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<type
     },
   };
   const stream = { getTracks: () => [{ stop() { released++; } }] } as unknown as MediaStream;
-  const capture = captureSession(stream, { chunkMs: 30000, overlapMs, quickNote }, io, onChunk);
+  const capture = captureSession(stream, { chunkMs, overlapMs, quickNote }, io, onChunk);
   return { capture, recorders, released: () => released, advance(target: number) {
     while (true) {
       const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
@@ -205,3 +205,26 @@ test("mid-session persistence failure stops capture and retains available chunks
   assert.equal(result.chunks.length, 2);
   assert.ok(result.chunks[0].audio.size > 0);
 });
+
+for (const overlapMs of [3000, 5000]) {
+  test(`two-hour lecture with ${overlapMs}ms overlap saves every container and releases the microphone`, async () => {
+    const saved: number[] = [];
+    const h = harness(overlapMs, false, async chunk => { saved.push(chunk.metadata.sequence); }, false, SESSION_CHUNK_MS);
+    h.advance(61_000);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(saved, [0]);
+    assert.equal(h.released(), 0, "capture continues beyond the old one-minute cap");
+    h.advance(SESSION_CAPTURE_MS);
+    const result = await h.capture.finished;
+    assert.equal(result.session.captureStatus, "stopped");
+    assert.equal(result.session.endedAt! - result.session.startedAt, SESSION_CAPTURE_MS);
+    assert.equal(result.chunks.length, Math.ceil(SESSION_CAPTURE_MS / (SESSION_CHUNK_MS - overlapMs)));
+    assert.equal(saved.length, result.chunks.length);
+    validateChunkOrder(result.chunks.map(c => c.metadata));
+    assert.ok(result.chunks.slice(1).every(c => c.metadata.overlapMs === overlapMs));
+    assert.equal(result.chunks.at(-1)!.metadata.endMs, SESSION_CAPTURE_MS);
+    assert.equal(h.released(), 1);
+    h.advance(SESSION_CAPTURE_MS * 2);
+    assert.equal(h.recorders.length, result.chunks.length, "no recording restarts after the deadline");
+  });
+}

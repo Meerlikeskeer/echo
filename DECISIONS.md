@@ -291,6 +291,16 @@ Render one derived session transcript with partial/final status and readable gap
 
 **Tradeoff:** Conservative alignment can leave repeated words visible when timestamps are too coarse to prove duplication. Preserving speech is preferable to silently deleting it. Recovered pre-manifest sessions cannot be retrospectively called complete. Native IndexedDB migration and capture lifecycle verification remain separate evidence from pure domain and rendering tests.
 
+## ADR-018 — Foreground lecture recording trial (WEB-016)
+
+**Status:** Accepted for implementation · **Date:** 2026-09-09
+
+**Context:** The owner requests lecture and meeting trials beyond the one-minute prototype, with slightly longer overlap. Existing incremental upload and browser-local storage can carry a longer session without a new service.
+
+**Decision:** Session mode uses 60-second complete containers, 3-second default / 5-second optional overlap, a requested 32 kbit/s bitrate and a two-hour deadline owned by the capture engine. Quick Note remains unchanged. Keep measured-byte storage guards and all retention restrictions; the browser may choose a different bitrate or run out of capacity earlier. State the open-tab/device-awake requirement and the absence of full-lecture study guides in the UI.
+
+**Verification boundary:** Simulated clocks establish control flow and ordering, not physical browser endurance, audio fidelity, remote durability or two-hour availability. Those require browser acceptance before a reliability claim. Whole-transcript note generation is a separate task; increasing capture duration does not remove its current input limitation.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderStatus } from "../lib/providers/status";
 import { DisclosureNotice, RecordingOutcome } from "./recording-result";
 import { captureSession } from "../lib/recording/capture";
-import type { PlayableChunk } from "../lib/recording/session";
+import { SESSION_CHUNK_MS, SESSION_OVERLAP_MS, type PlayableChunk } from "../lib/recording/session";
 import { describeSecureContextProblem, readEnvironment } from "../lib/recording/secure-context";
 
 import { SessionTranscripts } from "./session-transcript";
@@ -14,7 +14,6 @@ import { reportFailure } from "../lib/recording/log";
 import { QuickNotes } from "./quick-notes";
 
 const TARGET_MIN_MS = 30_000;
-const MAX_MS = 60_000;
 
 // First supported entry wins. Opus in WebM/Ogg keeps a 60 second clip far below
 // the 4 MB server limit, so this slice needs no object storage.
@@ -51,7 +50,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<"session" | "quick-note">("session");
   const [recorder, setRecorder] = useState<ReturnType<typeof captureSession> | null>(null);
-  const [overlapMs, setOverlapMs] = useState(1000);
+  const [overlapMs, setOverlapMs] = useState(SESSION_OVERLAP_MS);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
   const queue = useAudioQueue(status.ready);
@@ -121,7 +120,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     let active: ReturnType<typeof captureSession>;
     try {
-      active = captureSession(stream, mode === "quick-note" ? { chunkMs: 30_000, overlapMs: 0, quickNote: true } : { chunkMs: 30_000, overlapMs }, undefined, queue.persist);
+      active = captureSession(stream, mode === "quick-note" ? { chunkMs: 30_000, overlapMs: 0, quickNote: true } : { chunkMs: SESSION_CHUNK_MS, overlapMs }, undefined, queue.persist);
     } catch (cause) {
       reportFailure("starting the audio recorder", cause);
       stream.getTracks().forEach((track) => track.stop());
@@ -153,11 +152,6 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     void recorder.stop();
   }, [recorder]);
 
-  useEffect(() => {
-    if (phase !== "recording") return;
-    const timer = setTimeout(() => { void stop(); }, MAX_MS);
-    return () => clearTimeout(timer);
-  }, [phase, stop]);
 
   if (!status.ready) {
     return (
@@ -206,7 +200,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             ) : phase === "starting" ? (
               "Waiting for microphone permission…"
             ) : (
-              mode === "quick-note" ? "Capture a task, reminder, note or idea. Stop when ready; Quick Note stops at 30 seconds and classifies into pending suggestions." : "Record 30–60 seconds. Recording stops at one minute; play or transcribe each chunk below."
+              mode === "quick-note" ? "Capture a task, reminder, note or idea. Stop when ready; Quick Note stops at 30 seconds and classifies into pending suggestions." : "Record a lecture or meeting for up to two hours. Stop whenever you are ready."
             )}
           </p>
         </div>
@@ -223,12 +217,13 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         */}
         {mode === "session" ? <><label className="text-sm text-slate-600">Chunk overlap
           <select className="ml-3 rounded border p-1" value={overlapMs} disabled={busy || phase === "recording"} onChange={(event) => setOverlapMs(Number(event.target.value))}>
-            <option value={1000}>1 second</option><option value={2000}>2 seconds</option>
+            <option value={3000}>3 seconds</option><option value={5000}>5 seconds</option>
           </select>
         </label>
-        <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible.</p></> : <p className="mt-2 text-xs text-slate-500">One short clip, saved locally. Offline captures wait for this page to reconnect. Dates and suggestions need your review.</p>}
+        <p className="mt-2 text-xs text-slate-500">Audio is saved in overlapping one-minute clips while you record. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible.</p></> : <p className="mt-2 text-xs text-slate-500">One short clip, saved locally. Offline captures wait for this page to reconnect. Dates and suggestions need your review.</p>}
       </section>
 
+      {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab open and your device awake. Recording can stop early if browser storage fills; saved clips remain available. Full-lecture study guides are still in development.</p> : null}
       <QuickNotes entries={queue.entries} online={queue.online} />
       <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
         <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>

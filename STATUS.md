@@ -49,10 +49,12 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-016 adds foreground lecture recording trials: a two-hour engine deadline, one-minute playable chunks, 3-second default or 5-second overlap, and requested 32 kbit/s session audio. Quick Note retains its prior defaults. Storage can stop capture earlier; browser endurance and speech fidelity remain unverified. Full-lecture synthesis is still pending; the current notes adapter caps input at 24,000 characters. See `tasks/WEB-016.md` and ADR-018.
+
 - Quick Note mode (WEB-008): one short clip becomes pending task/reminder/note/idea suggestions through the existing recording endpoint and provider abstraction. Audio, classification and timing survive in this browser's queue; offline captures visibly wait. Date phrases require confirmation and nothing is scheduled. Verification and live-provider latency acceptance are recorded in `tasks/WEB-008.md`.
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
 - The recorder page, development-only owner-gated `/diagnostics/capture`, and two Route Handlers: `POST /api/recordings` and `POST /api/sessions/artifacts`.
-- The WEB-002 slice plus the WEB-003 extension: up to one minute of capture, overlapping playable chunks in browser memory, then a transcript and notes per chunk. Verified by test; **never exercised in a real browser.** No stitched session output yet.
+- The WEB-002/WEB-003 recording slice is now extended by WEB-016 above. Incremental transcription, stitching and session artifacts are described below; their task records distinguish automated evidence from browser acceptance.
 - Opt-in `npm run doctor`: safe per-port credential diagnostics, with an offline fixture mode.
 - A verified self-hosted deployment path (ENG-002): `output: "standalone"`, an assembly step, a `Dockerfile`, and four parity tests inside `npm run check` that boot the standalone bundle a container would run. The image is built and smoke-checked by the `selfhost-container` CI job, which passed on 2026-09-08. Docker is unavailable on the development machine, so the image is verified in CI only.
 - Incremental upload during capture (WEB-005): a chunk is sent as soon as it is durably committed rather than at session end, a failing chunk no longer blocks the ones behind it, retry is bounded before an entry blocks with a readable reason, and `uploading` is a **persisted** state so a page that died mid-upload is recoverable as *in flight, outcome unknown*. `POST /api/recordings` keeps a job ledger keyed by chunk identity, so a retry after a lost response replays the stored result instead of paying for a second provider call. **The ledger is in-process and best-effort, not exactly-once** — a cold start, a redeploy, a second instance or a TTL expiry all lose it (ADR-016). The drain-during-capture wiring itself is code-verified but has no automated test and awaits browser acceptance.
@@ -78,7 +80,7 @@ that every task must edit.**
 
 ## What does not exist
 
-Overlap stitching, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
+History, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 

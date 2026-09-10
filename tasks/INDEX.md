@@ -48,3 +48,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-013](WEB-013.md) Opt-in research | Todo | — |
 | [WEB-014](WEB-014.md) Confirmed reminder/calendar export | Todo | — |
 | [WEB-015](WEB-015.md) The recorder discards every error and its warning outlives the failure | Implemented and verified by test; awaiting owner review | `feat/WEB-015-recorder-error-reporting` |
+| [WEB-016](WEB-016.md) Lecture-length recording | Implemented; production verification and browser acceptance blocked | `feat/WEB-016-lecture-recording` |

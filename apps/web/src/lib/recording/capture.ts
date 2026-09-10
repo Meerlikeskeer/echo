@@ -1,4 +1,4 @@
-import { checksum, validateCaptureOptions, validateChunkOrder, type CaptureOptions, type PlayableChunk, type Session } from "./session";
+import { SESSION_CAPTURE_MS, checksum, validateCaptureOptions, validateChunkOrder, type CaptureOptions, type PlayableChunk, type Session } from "./session";
 
 export const PREFERRED_MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
 
@@ -16,7 +16,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   const mimeType = runtime ? "" : PREFERRED_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
   if (!runtime && !mimeType) throw new Error("No supported recording codec");
   const io: CaptureRuntime = runtime ?? {
-    create: () => new MediaRecorder(stream, { mimeType }),
+    create: () => new MediaRecorder(stream, { mimeType, ...(options.quickNote ? {} : { audioBitsPerSecond: 32_000 }) }),
     now: () => performance.now(),
     // setTimeout and clearTimeout are DOM globals that require `this` to be the
     // window. Assigned directly as properties they get called as io.schedule(),
@@ -120,6 +120,9 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
     void completion.then(finishedResolve).catch(() => finishedResolve({ session: { ...session, endedAt, captureStatus: "failed" }, chunks: [] }));
     return completion;
   }
+  // The capture engine owns the deadline, including when no UI is mounted.
+  // Like chunk timers, this requires an active browser; suspension can delay it.
+  schedule(() => { void stop(); }, SESSION_CAPTURE_MS);
   begin();
   return { session, stop, finished };
 }
