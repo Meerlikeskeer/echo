@@ -12,42 +12,18 @@ import { useAudioQueue } from "./use-audio-queue";
 import { chunkKey, incompleteSessions, storageFailure, summarizeQueue } from "../lib/recording/queue";
 import { reportFailure } from "../lib/recording/log";
 import { QuickNotes } from "./quick-notes";
-import { MAX_UPLOAD_BYTES } from "../lib/recording/queue";
+import { recordingHeadroom } from "../lib/recording/storage-estimate";
+import { MAX_UPLOAD_BYTES, CAPACITY_RESERVE } from "../lib/recording/queue";
 import { useWakeLock } from "./use-wake-lock";
 
 /** Quick Note is still one short clip, and still stops itself. */
 const QUICK_NOTE_MAX_MS = 60_000;
 
-/**
- * WEB-016. A session records until the owner stops it.
- *
- * Five minutes per chunk with five seconds of overlap, chosen so a lecture
- * costs about eighteen upload round trips rather than a hundred and eighty, and
- * so losing one chunk to a refused upload loses five minutes rather than the
- * hour around it. Notes still keep pace: each chunk is transcribed while the
- * next one records.
- */
-const SESSION_CHUNK_MS = 300_000;
+// Short complete containers bound the unsaved tail during a browser interruption.
+// Bitrate is a request; upload checks and actual saved-byte estimates stay authoritative.
+const SESSION_CHUNK_MS = 60_000;
 const SESSION_OVERLAP_MS = 5_000;
-/**
- * Not a feature — a runaway bound. A recording left running after everyone has
- * left the room fills storage and spends provider calls on an empty room, and
- * the owner is by definition not watching. Four hours is longer than any
- * lecture or meeting Echo is for.
- */
-const SESSION_MAX_MS = 4 * 60 * 60 * 1000;
-/**
- * Opus at 32 kbps is speech-transparent and about 240 KB a minute, so a
- * three-hour session is roughly 43 MB — inside the local budget with room to
- * spare, and about 1.2 MB per five-minute chunk against a 4 MB upload limit.
- * Left unset, browsers pick their own rate; Safari's measured 204 kbps is over
- * six times this.
- */
 const AUDIO_BITS_PER_SECOND = 32_000;
-
-// First supported entry wins. Opus in WebM or Ogg keeps a five-minute chunk far
-// below the 4 MB server limit at the bitrate above, so this still needs no
-// object storage.
 
 type Phase = "idle" | "starting" | "recording" | "processing" | "done";
 
@@ -95,12 +71,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   // Chunks committed for the recording in progress, so a long session shows
   // progress rather than a clock and nothing else.
   const chunkIndex = recorder ? queue.entries.filter(entry => entry.metadata.sessionId === recorder.session.id).length : 0;
-  // WEB-016. Storage headroom in the unit the owner is actually thinking in.
-  // Deliberately from the rate Echo requests: a browser recording faster than
-  // that gets shorter chunks, not a wrong estimate here, because `safeChunkMs`
-  // has already clamped the chunk to the same assumption.
-  const headroomMinutes = queue.space && Number.isFinite(queue.space.available)
-    ? Math.max(0, Math.floor(queue.space.available / (AUDIO_BITS_PER_SECOND / 8) / 60))
+  const headroomMinutes = queue.space
+    ? recordingHeadroom(queue.entries, recorder?.session.id, queue.space.available, elapsedMs, chunkMs, overlapMs, CAPACITY_RESERVE)
     : null;
   const gaps = incompleteSessions(queue.entries);
   const progress = summarizeQueue(queue.entries);
@@ -162,12 +134,17 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       return;
     }
 
-    // WEB-016. Sized before capture starts, from the rate this browser says it
-    // will use rather than the rate Echo asked for. A browser that overshoots
-    // gets shorter chunks; one that honours the request gets the full five
-    // minutes. Either way no chunk is built that no upload will accept.
+    // Use the reported rate only to shorten containers. Encoded size remains
+    // browser-dependent; an unknown rate gets a conservative 30-second clip.
     const measured = measureBitrate(stream, AUDIO_BITS_PER_SECOND);
-    const sessionChunkMs = safeChunkMs(SESSION_CHUNK_MS, measured, MAX_UPLOAD_BYTES);
+    let sessionChunkMs: number;
+    try { sessionChunkMs = safeChunkMs(SESSION_CHUNK_MS, measured, MAX_UPLOAD_BYTES); }
+    catch {
+      stream.getTracks().forEach(track => track.stop());
+      setFailure({ title: "Recording bitrate is unsupported", detail: "This browser reported an audio rate too high for a safe clip. Try another browser.", retryable: false });
+      setPhase("idle");
+      return;
+    }
     const sessionOverlapMs = Math.min(overlapMs, Math.floor(sessionChunkMs / 2) - 1);
     setChunkMs(mode === "quick-note" ? 30_000 : sessionChunkMs);
 
@@ -212,8 +189,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   // until the owner stops it, and this is only the runaway bound; Quick Note
   // keeps its own short one.
   useEffect(() => {
-    if (phase !== "recording") return;
-    const timer = setTimeout(() => { void stop(); }, mode === "quick-note" ? QUICK_NOTE_MAX_MS : SESSION_MAX_MS);
+    if (phase !== "recording" || mode !== "quick-note") return;
+    const timer = setTimeout(() => { void stop(); }, QUICK_NOTE_MAX_MS);
     return () => clearTimeout(timer);
   }, [phase, stop, mode]);
 
@@ -230,7 +207,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           {status.problems.map((problem) => <li key={problem}>{problem}</li>)}
         </ul>
         {queue.error ? <p role="alert">{queue.error}</p> : null}
-        <QuickNotes entries={queue.entries} online={queue.online} />
+        {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab visible and your device awake. App switches or a locked screen can interrupt capture. Reloading loses unfinished audio; saved clips recover as a partial session. Use a separate backup recorder for important lectures. Capture stops after four hours or earlier if storage fails.</p> : null}
+      <QuickNotes entries={queue.entries} online={queue.online} />
         <SessionTranscripts entries={sessionEntries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={sessionCompletions} />
         {chunks.length ? <div className="mt-5 space-y-4"><p>Saved audio remains available while processing is unconfigured. No clips are deleted.</p>
           {chunks.map((chunk) => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some((entry) => chunkKey(entry) === chunkKey(chunk))} disabled={false} onSave={() => { void queue.persist(chunk).catch(() => {}); }} />)}
@@ -276,7 +254,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
               Both are answered here rather than in the queue block below. */}
           {phase === "recording" && mode === "session" ? (
             <p aria-live="polite" className="text-center text-xs text-slate-500">
-              {Math.floor(chunkMs / 60_000)}-minute chunks · {chunkIndex} saved so far{headroomMinutes === null ? "" : ` · about ${headroomMinutes} minutes of room left on this browser`}
+              {Math.round(chunkMs / 1000)}-second chunks · {chunkIndex} saved so far{headroomMinutes === null ? " · estimating storage from saved audio" : ` · about ${headroomMinutes} more minutes with a safety reserve`}
             </p>
           ) : null}
         </div>
@@ -299,6 +277,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible, so a longer overlap trades a little repeated text for a smaller chance of losing a word at the seam.</p></> : <p className="mt-2 text-xs text-slate-500">One short clip, saved locally. Offline captures wait for this page to reconnect. Dates and suggestions need your review.</p>}
       </section>
 
+      {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab visible and your device awake. App switches or a locked screen can interrupt capture. Reloading loses unfinished audio; saved clips recover as a partial session. Use a separate backup recorder for important lectures. Capture stops after four hours or earlier if storage fails.</p> : null}
       <QuickNotes entries={queue.entries} online={queue.online} />
       <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
         <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>

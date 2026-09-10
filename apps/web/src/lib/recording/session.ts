@@ -38,6 +38,7 @@ export interface CaptureOptions {
 
 /** WEB-016. Ten minutes. Long enough for the five-minute chunks a lecture uses,
  *  short enough that losing one chunk loses minutes rather than a lecture. */
+export const MAX_SESSION_MS = 4 * 60 * 60 * 1000;
 export const MAX_CHUNK_MS = 600_000;
 
 export function validateCaptureOptions(options: CaptureOptions): void {
@@ -59,17 +60,17 @@ export function validateCaptureOptions(options: CaptureOptions): void {
  * bitrate the recorder reports before capture starts and shortens the chunk
  * instead, which costs more chunks and loses nothing.
  *
- * `bitsPerSecond` of 0, NaN or undefined means the browser would not say. Then
- * the requested length stands: guessing a shorter one on no evidence would
- * penalise every browser that behaves.
+ * `bitsPerSecond` of 0, NaN or undefined means the browser would not say. Use a short initial container when no rate is known; this is an estimate,
+ * not proof of the final encoded size. The upload boundary remains authoritative.
  */
 export function safeChunkMs(requestedMs: number, bitsPerSecond: number | undefined, maxClipBytes: number): number {
-  if (!Number.isFinite(bitsPerSecond) || !bitsPerSecond || bitsPerSecond <= 0) return requestedMs;
+  if (!Number.isFinite(bitsPerSecond) || !bitsPerSecond || bitsPerSecond <= 0) return Math.min(requestedMs, 30_000);
   // A container carries more than the audio it holds. The margin is deliberately
   // generous: being under the limit matters, being close to it does not.
   const usableBytes = maxClipBytes * 0.8;
   const fittingMs = Math.floor((usableBytes * 8_000) / bitsPerSecond);
-  return Math.max(15_000, Math.min(requestedMs, fittingMs));
+  if (fittingMs < 1000) throw new Error("Reported audio bitrate cannot fit a safe recording chunk");
+  return Math.min(requestedMs, fittingMs);
 }
 
 export async function checksum(audio: Blob): Promise<string> {

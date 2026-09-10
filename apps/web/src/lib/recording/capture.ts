@@ -1,4 +1,4 @@
-import { checksum, validateCaptureOptions, validateChunkOrder, type CaptureOptions, type PlayableChunk, type Session } from "./session";
+import { MAX_SESSION_MS, checksum, validateCaptureOptions, validateChunkOrder, type CaptureOptions, type PlayableChunk, type Session } from "./session";
 
 export const PREFERRED_MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
 
@@ -148,6 +148,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
     void completion.then(finishedResolve).catch(() => finishedResolve({ session: { ...session, endedAt, captureStatus: "failed" }, chunks: [] }));
     return completion;
   }
+  if (!options.quickNote) schedule(() => { void stop(); }, MAX_SESSION_MS);
   begin();
   return { session, stop, finished };
 }

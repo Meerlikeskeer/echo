@@ -1,3 +1,4 @@
+import { RECORDING_REQUEST_TIMEOUT_MS } from "./request-policy";
 import { checksum, isAudioChunk, validateChunkOrder, type PlayableChunk } from "./session";
 import type { RecordingResult } from "./pipeline";
 import { isCompletion, sameMetadata, type Completion } from "./session-completion";
@@ -392,7 +393,7 @@ export async function sendChunk(chunk: PlayableChunk): Promise<RecordingResult> 
   body.append("audio", chunk.audio, `recording.${chunk.audio.type.includes("ogg") ? "ogg" : chunk.audio.type.includes("mp4") ? "m4a" : "webm"}`);
   body.append("durationMs", String(chunk.metadata.endMs - chunk.metadata.startMs));
   body.append("chunk", JSON.stringify(chunk.metadata));
-  const response = await fetch("/api/recordings", { method: "POST", body, cache: "no-store", signal: AbortSignal.timeout(120_000) });
+  const response = await fetch("/api/recordings", { method: "POST", body, cache: "no-store", signal: AbortSignal.timeout(RECORDING_REQUEST_TIMEOUT_MS) });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     const error = body && typeof body === "object" && "error" in body ? body.error : null;

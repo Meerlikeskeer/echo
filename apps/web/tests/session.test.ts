@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { captureSession, PREFERRED_MIME_TYPES, type CaptureRuntime } from "../src/lib/recording/capture";
-import { checksum, isAudioChunk, MAX_CHUNK_MS, safeChunkMs, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
+import { checksum, isAudioChunk, MAX_CHUNK_MS, MAX_SESSION_MS, safeChunkMs, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
 
 type FakeRecorder = {
   mimeType: string;
@@ -13,7 +13,7 @@ type FakeRecorder = {
   stop(): void;
 };
 
-function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false) {
+function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false, chunkMs = 30000) {
   let now = 0;
   let released = 0;
   let counter = 0;
@@ -44,7 +44,7 @@ function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<type
     },
   };
   const stream = { getTracks: () => [{ stop() { released++; } }] } as unknown as MediaStream;
-  const capture = captureSession(stream, { chunkMs: 30000, overlapMs, quickNote }, io, onChunk);
+  const capture = captureSession(stream, { chunkMs, overlapMs, quickNote }, io, onChunk);
   return { capture, recorders, released: () => released, advance(target: number) {
     while (true) {
       const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
@@ -150,9 +150,9 @@ test("chunk length is clamped to what the measured bitrate can upload", () => {
   assert.ok(clamped < 300_000);
   assert.ok((clamped / 1000) * (204_000 / 8) <= 4_000_000);
   // No evidence is not evidence of a problem: the request stands.
-  for (const unknown of [undefined, 0, NaN, -1]) assert.equal(safeChunkMs(300_000, unknown, 4_000_000), 300_000);
+  for (const unknown of [undefined, 0, NaN, -1]) assert.equal(safeChunkMs(300_000, unknown, 4_000_000), 30_000);
   // Never clamped into uselessness, whatever the bitrate claims.
-  assert.equal(safeChunkMs(300_000, 320_000_000, 4_000_000), 15_000);
+  assert.throws(() => safeChunkMs(300_000, 320_000_000, 4_000_000));
 });
 test("unexpected recorder stop reports incomplete capture immediately", async () => {
   const h = harness(); h.advance(5000);
@@ -245,4 +245,23 @@ test("mid-session persistence failure stops capture and retains available chunks
   assert.equal(h.released(), 1);
   assert.equal(result.chunks.length, 2);
   assert.ok(result.chunks[0].audio.size > 0);
+});
+
+
+test("lecture capture persists a 90-minute timeline and its engine enforces the four-hour stop", async () => {
+  const saved: Parameters<NonNullable<Parameters<typeof captureSession>[3]>>[0][] = [];
+  const h = harness(5000, false, async chunk => { saved.push(chunk); }, false, 60000);
+  h.advance(90 * 60000);
+  assert.ok(h.recorders.length > 90, "overlapping chunks continue beyond the old minute limit");
+  assert.equal(h.released(), 0);
+  h.advance(MAX_SESSION_MS);
+  const result = await h.capture.finished;
+  assert.equal(result.session.captureStatus, "stopped");
+  assert.equal(h.released(), 1);
+  assert.equal(result.chunks.at(-1)!.metadata.endMs, MAX_SESSION_MS);
+  validateChunkOrder(saved.map(chunk => chunk.metadata));
+  assert.equal(saved.length, result.chunks.length);
+  const count = h.recorders.length;
+  h.advance(MAX_SESSION_MS + 60000);
+  assert.equal(h.recorders.length, count, "deadline cancels future rotation");
 });

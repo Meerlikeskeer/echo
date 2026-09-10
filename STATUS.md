@@ -49,6 +49,9 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-018 repairs the reviewed lecture branches: one-minute default containers (30 seconds for unknown bitrate), engine-owned four-hour limit, measured conservative storage headroom, chunk-based gap descriptions, coordinated provider/route/browser deadlines, and revision-bound browser-local study guide persistence/export. The development-only `/diagnostics/lecture` exercises a synthetic 90-minute timeline in native IndexedDB. This is not real lecture or microphone acceptance; see `tasks/WEB-018.md`.
+
+
 - Quick Note mode (WEB-008): one short clip becomes pending task/reminder/note/idea suggestions through the existing recording endpoint and provider abstraction. Audio, classification and timing survive in this browser's queue; offline captures visibly wait. Date phrases require confirmation and nothing is scheduled. Verification and live-provider latency acceptance are recorded in `tasks/WEB-008.md`.
 - A Next.js app behind a fail-closed single-owner access gate (checked on every route, plus an independent second check when a page renders).
 - The recorder page, development-only owner-gated `/diagnostics/capture`, and two Route Handlers: `POST /api/recordings` and `POST /api/sessions/artifacts`.

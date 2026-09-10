@@ -1,3 +1,4 @@
+import { TRANSCRIPTION_TIMEOUT_MS, CHUNK_NOTES_TIMEOUT_MS, ARTIFACT_TIMEOUT_MS } from "../recording/request-policy";
 import { ProviderError, codeForStatus } from "./errors";
 // WEB-007. The validator is shared with the domain rather than reimplemented at
 // this boundary, so the rules the tests pin down are the rules that run here.
@@ -23,7 +24,6 @@ export interface OpenAiCompatibleSettings {
   readonly fetchImpl?: typeof globalThis.fetch;
 }
 
-const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_CLIP_BYTES = 4_000_000; // Comfortably under Vercel's 4.5 MB request limit.
 /**
  * WEB-017. Raised from 24,000, which is about twenty minutes of speech — so a
@@ -84,8 +84,8 @@ function disclosureFor(port: ProviderPort, settings: OpenAiCompatibleSettings, s
   };
 }
 
-function requestSignal(settings: OpenAiCompatibleSettings, caller?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(settings.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+function requestSignal(settings: OpenAiCompatibleSettings, caller?: AbortSignal, timeoutMs = CHUNK_NOTES_TIMEOUT_MS): AbortSignal {
+  const timeout = AbortSignal.timeout(settings.timeoutMs ?? timeoutMs);
   return caller ? AbortSignal.any([caller, timeout]) : timeout;
 }
 
@@ -152,7 +152,7 @@ export function createOpenAiCompatibleTranscriptionProvider(settings: OpenAiComp
       form.append("model", settings.model);
       form.append("response_format", "verbose_json");
 
-      const payload = await send("transcription", settings, "/audio/transcriptions", { method: "POST", body: form, signal: requestSignal(settings, options?.signal) });
+      const payload = await send("transcription", settings, "/audio/transcriptions", { method: "POST", body: form, signal: requestSignal(settings, options?.signal, TRANSCRIPTION_TIMEOUT_MS) });
       if (!isRecord(payload) || typeof payload.text !== "string") throw new ProviderError("transcription", "invalid_response");
 
       const durationMs = toMillis(payload.duration, 0);
@@ -340,7 +340,7 @@ export function createOpenAiCompatibleNotesProvider(settings: OpenAiCompatibleSe
           ? "This transcript is incomplete: the recording is still being processed or some of it never arrived. Summarise what is here and say plainly that it is partial."
           : "",
         options?.gapMinutes?.length
-          ? `The recording has gaps and does not cover: ${options.gapMinutes.join(", ")}. Nothing was said in the transcript across those stretches because they were not recorded.`
+          ? `Transcript coverage warnings: ${options.gapMinutes.join("; ")}. Do not infer what was said in unavailable text or claim audio was never recorded. Chunk bounds can overlap available text.`
           : "",
       ].filter(Boolean).join(" ");
       const payload = await send("notes", settings, "/chat/completions", {
@@ -355,7 +355,7 @@ export function createOpenAiCompatibleNotesProvider(settings: OpenAiCompatibleSe
             { role: "user", content: `${context ? `${context}\n\n` : ""}Transcript:\n${transcript.text}` },
           ],
         }),
-        signal: requestSignal(settings, options?.signal),
+        signal: requestSignal(settings, options?.signal, ARTIFACT_TIMEOUT_MS),
       });
 
       const choices = isRecord(payload) ? payload.choices : undefined;

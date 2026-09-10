@@ -216,7 +216,7 @@ export interface RevisionInput {
   readonly text: string;
   readonly status: "partial" | "final";
   readonly segments: readonly { readonly text: string; readonly startMs: number; readonly endMs: number }[];
-  readonly gaps: readonly { readonly reason: string; readonly sequence: number | null }[];
+  readonly gaps: readonly { readonly reason: string; readonly sequence: number | null; readonly startMs?: number; readonly endMs?: number }[];
 }
 
 /**
@@ -265,39 +265,29 @@ export function isRevisionInput(value: unknown): value is RevisionInput {
     if (!gap || typeof gap !== "object") return false;
     const item = gap as Record<string, unknown>;
     if (typeof item.reason !== "string" || !GAP_REASONS.includes(item.reason)) return false;
-    if (!(item.sequence === null || Number.isSafeInteger(item.sequence))) return false;
+    if (!(item.sequence === null || (Number.isSafeInteger(item.sequence) && (item.sequence as number) >= 0))) return false;
+    if (item.startMs !== undefined || item.endMs !== undefined) {
+      if (!Number.isSafeInteger(item.startMs) || !Number.isSafeInteger(item.endMs) ||
+          (item.startMs as number) < 0 || (item.endMs as number) <= (item.startMs as number)) return false;
+    }
   }
   return true;
 }
 
-/**
- * WEB-017. The stretches of a session the recording does not cover, in minutes,
- * for the generator to name rather than write across.
- *
- * A gap is recorded against a chunk sequence, and sequence is not time, so this
- * converts by looking at where the transcript's own segments stop and start
- * around it. A gap that cannot be placed in time is still reported, by
- * sequence, because "part of this is missing" is worth saying even when the
- * minute is not known. `capture-unconfirmed` is deliberately excluded: it means
- * the browser never saved a completion record, not that any audio is absent.
- */
+/** Describe known chunk bounds, never infer them from silence or segment positions.
+ * Overlap may cover some of the named chunk; this is not a claim of missing audio
+ * throughout that interval. A pending transcript does not mean its audio was lost. */
 export function describeGaps(stitched: RevisionInput): string[] {
   const minute = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`;
-  const described: string[] = [];
-  for (const gap of stitched.gaps) {
-    if (gap.reason === "capture-unconfirmed") continue;
-    if (gap.sequence === null) { described.push("an unplaced part of the recording"); continue; }
-    // The segments are already ordered by the stitcher. The gap sits between
-    // the last segment before it and the first one after, which is the closest
-    // this can honestly get without inventing a chunk clock.
-    const before = stitched.segments.filter((segment) => segment.endMs <= (stitched.segments[gap.sequence!]?.startMs ?? Infinity));
-    const start = before.at(-1)?.endMs;
-    const end = stitched.segments.find((segment) => start !== undefined && segment.startMs >= start)?.startMs;
-    described.push(start !== undefined && end !== undefined && end > start
-      ? `${minute(start)} to ${minute(end)}`
-      : `part ${gap.sequence + 1} of the recording`);
-  }
-  return [...new Set(described)];
+  return [...new Set(stitched.gaps.filter(gap => gap.reason !== "capture-unconfirmed").map(gap => {
+    const part = gap.sequence === null ? "unplaced session data" : `chunk ${gap.sequence + 1}`;
+    const span = gap.startMs !== undefined && gap.endMs !== undefined
+      ? ` (chunk bounds ${minute(gap.startMs)} to ${minute(gap.endMs)})` : " (time unknown)";
+    const reason = gap.reason === "missing-transcript" ? "transcript unavailable; audio may still be saved"
+      : gap.reason === "missing-chunk" ? "audio chunk unavailable in this browser"
+      : "invalid session data; coverage cannot be established";
+    return `${part}${span}: ${reason}`;
+  }))];
 }
 
 /**
@@ -331,6 +321,7 @@ function revisionInput(stitched: RevisionInput): string {
   const field = (text: string) => `${text.length}:${text}`;
   const parts = [
     field(stitched.sessionId),
+    field(stitched.text),
     // Partial and final are different transcripts even when the text matches:
     // one is still growing. Artifacts must not carry across that boundary.
     field(stitched.status),
@@ -342,7 +333,7 @@ function revisionInput(stitched: RevisionInput): string {
   // A gap changes what the transcript means without necessarily changing a
   // character of its text, so it belongs in the identity too.
   parts.push(field(String(stitched.gaps.length)));
-  for (const gap of stitched.gaps) parts.push(field(gap.reason), field(String(gap.sequence)));
+  for (const gap of stitched.gaps) parts.push(field(gap.reason), field(String(gap.sequence)), field(String(gap.startMs ?? "")), field(String(gap.endMs ?? "")));
   return parts.join("");
 }
 

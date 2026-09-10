@@ -355,7 +355,7 @@ test("WEB-017 gaps are described in minutes, and capture-unconfirmed is not one"
     { text: "Two.", startMs: 300_000, endMs: 360_000 },
   ];
   const described = describeGaps({ ...stitched(), segments, gaps: [{ reason: "missing-chunk", sequence: 1 }] });
-  assert.deepEqual(described, ["1:00 to 5:00"]);
+  assert.deepEqual(described, ["chunk 2 (time unknown): audio chunk unavailable in this browser"]);
   // Not an absence of audio: it means this browser never saved a completion
   // record. Reporting it as a gap would put a hole in notes that have none.
   assert.deepEqual(describeGaps({ ...stitched(), gaps: [{ reason: "capture-unconfirmed", sequence: null }] }), []);

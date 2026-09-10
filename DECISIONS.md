@@ -324,3 +324,15 @@ Echo has deliberately **not** chosen the following. Do not silently pick one; ma
 - **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
 
 Also select supported mobile browsers/codecs, chunk/overlap durations, the retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.
+
+## ADR-020 — Conservative lecture recovery and guide persistence
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-018 · **Refines:** ADR-018, ADR-019
+
+The owner requested repair of the reviewed lecture reliability defects. Default session containers are one minute, with thirty-second containers when bitrate is unknown, to reduce the normal unsaved tail. The four-hour runaway deadline belongs to the capture engine. An impossible reported bitrate is refused; reported rates never guarantee encoded size. Storage headroom uses actual saved bytes per recording time, overlap, unfinished audio and a reserve. Browser suspension can still defer capture timers, so foreground operation and backup recording remain required for acceptance.
+
+Gap descriptions carry chunk bounds only from validated chunk metadata or completion manifests; bounds identify affected chunks, not exact missing speech within overlaps. Missing transcription is distinguished from absent local audio. Both gap timing and the text sent to generation participate in transcript revision identity.
+
+Transcription and per-chunk notes deadlines are 90 and 180 seconds, fitting together below the 300-second route allowance. Session guide generation has 240 seconds. Browser requests allow 310 seconds, so the route can return a readable provider timeout first.
+
+Validated guides are stored in a separate browser-local IndexedDB store keyed by session and transcript revision. This introduces no provider or server durability claim, does not migrate or delete audio, and cannot make an older revision appear current. A failed guide write leaves the displayed result downloadable and raises a warning. Real browser recovery and full-lecture acceptance remain separate from synthetic evidence.

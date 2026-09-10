@@ -40,6 +40,13 @@ export function SessionArtifacts({ transcript }: { transcript: RevisionInput }) 
       </button>
     </div>
 
+    {artifacts.storageError ? <p role="alert" className="mt-3 text-sm text-amber-800">{artifacts.storageError}</p> : null}
+    {record ? <button type="button" className="mt-3 text-sm underline" onClick={() => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(record, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = `echo-${record.sessionId}-notes.json`; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }}>Download notes</button> : null}
     {empty
       ? <p className="mt-2 text-sm text-slate-500">There is no transcript text to summarize yet.</p>
       : <p className="mt-2 text-xs text-slate-500">

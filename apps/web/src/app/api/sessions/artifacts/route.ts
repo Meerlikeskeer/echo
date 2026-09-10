@@ -26,12 +26,8 @@ import { describeGaps, isRevisionInput, transcriptForArtifacts, transcriptRevisi
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/**
- * WEB-017. Summarising an hour of transcript is a single long model call, and
- * the platform default this inherits is not something Echo should be guessing
- * about from a dashboard. Five minutes is the platform's own ceiling on the
- * plan Echo runs on, and well past what a completed call takes.
- */
+/** The artifact provider has a shorter deadline so a readable timeout response
+ * can be returned before this route allowance expires. */
 export const maxDuration = 300;
 
 const json = (status: number, body: unknown) =>

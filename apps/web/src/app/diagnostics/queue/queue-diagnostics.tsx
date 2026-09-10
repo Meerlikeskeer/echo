@@ -37,7 +37,7 @@ async function nativeTests(): Promise<string[]> {
   passed.push("PASS quota budget abort mid-session preserves prior commit (not OS disk exhaustion)");
   // Abort after a successful native request: request success is NOT commit.
   await new Promise<void>((resolve, reject) => {
-    const request = indexedDB.open(name, 1);
+    const request = indexedDB.open(name);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result, tx = db.transaction("chunks", "readwrite");
