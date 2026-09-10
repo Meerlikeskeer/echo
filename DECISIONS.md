@@ -291,6 +291,16 @@ Render one derived session transcript with partial/final status and readable gap
 
 **Tradeoff:** Conservative alignment can leave repeated words visible when timestamps are too coarse to prove duplication. Preserving speech is preferable to silently deleting it. Recovered pre-manifest sessions cannot be retrospectively called complete. Native IndexedDB migration and capture lifecycle verification remain separate evidence from pure domain and rendering tests.
 
+## ADR-018 — A session records until the owner stops it, at a bitrate Echo chooses
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-016 · **Refines:** ADR-012, ADR-017
+
+**Context:** Echo stopped every recording after one minute, and three separate limits enforced it: a timer in the recorder, a 60-second ceiling in `validateCaptureOptions`, and a 120-second span ceiling in `isAudioChunk`, which is also the upload boundary's validator. The product is a note taker for lectures and meetings, so a one-minute recording is not a smaller version of the thing — it is a different thing. Two limits made a longer recording unsafe rather than merely unavailable. Browsers pick their own Opus bitrate when none is requested, and Safari 26.4 was measured at 204 kbps; at that rate a five-minute chunk is 7.6 MB against a 4 MB upload limit, and the 64 MiB local audio budget holds about forty minutes.
+
+**Decision:** A session records until the owner stops it, bounded only by a four-hour runaway limit. Chunks are five minutes with five seconds of overlap. Echo requests 32 kbps Opus rather than accepting the browser's default, reads back the rate the recorder says it will use, and shortens the chunk when that rate would put it over the upload limit. A chunk larger than the upload limit is refused in the browser with its own reason instead of retried over the network. The local audio budget rises to 256 MiB, so the binding constraint becomes the browser's own quota. The screen wake lock is held while a session records, as one more defence and never as something correctness rests on.
+
+**Tradeoff:** Five-minute chunks mean a chunk lost to a refused upload costs five minutes rather than one, and the first transcript now appears five minutes in rather than one. Five seconds of overlap will usually appear twice in the stitched transcript, because ADR-017's deduplication needs identical segment timing and two separate transcription calls rarely produce it — visible repetition over dropped speech, as ADR-017 chose. 32 kbps is speech-transparent and not music-transparent; Echo is a note taker. The wake lock is unavailable in some browsers and refused in a background tab, so a long recording still depends on the tab staying open.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.

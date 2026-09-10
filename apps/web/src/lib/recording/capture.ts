@@ -2,6 +2,29 @@ import { checksum, validateCaptureOptions, validateChunkOrder, type CaptureOptio
 
 export const PREFERRED_MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
 
+/**
+ * WEB-016. The bitrate this browser says it will actually use.
+ *
+ * `audioBitsPerSecond` is a request. Chrome honours it; Safari 26.4 was
+ * measured at 204 kbps unprompted, and at that rate a five-minute chunk is
+ * 7.6 MB — over the upload limit, refused permanently, for every chunk of the
+ * lecture. Reading the value back off a recorder that is constructed and never
+ * started costs nothing and lets the caller size the chunk to fit.
+ *
+ * Returns undefined when the browser will not say, which callers must read as
+ * "no evidence" rather than as a low number.
+ */
+export function measureBitrate(stream: MediaStream, requested: number): number | undefined {
+  try {
+    const mimeType = PREFERRED_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+    const probe = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: requested } : { audioBitsPerSecond: requested });
+    const rate = probe.audioBitsPerSecond;
+    return typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 type RecorderLike = Pick<MediaRecorder, "mimeType" | "state" | "ondataavailable" | "onstop" | "onerror" | "start" | "stop">;
 export interface CaptureRuntime {
   create(): RecorderLike;
@@ -16,7 +39,12 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   const mimeType = runtime ? "" : PREFERRED_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
   if (!runtime && !mimeType) throw new Error("No supported recording codec");
   const io: CaptureRuntime = runtime ?? {
-    create: () => new MediaRecorder(stream, { mimeType }),
+    // WEB-016. The bitrate is requested here and nowhere else. A browser is free
+    // to ignore it, which is why the recorder reads back what it will really use
+    // and sizes the chunk from that rather than from what was asked for.
+    create: () => new MediaRecorder(stream, options.audioBitsPerSecond
+      ? { mimeType, audioBitsPerSecond: options.audioBitsPerSecond }
+      : { mimeType }),
     now: () => performance.now(),
     // setTimeout and clearTimeout are DOM globals that require `this` to be the
     // window. Assigned directly as properties they get called as io.schedule(),
