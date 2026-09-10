@@ -295,3 +295,14 @@ test("WEB-017 the instructions ask for a lecture guide, not a meeting summary", 
   assert.match(system, /untrusted/);
   assert.match(system, /Do not look anything up/);
 });
+
+
+test("a provider body interrupted after headers remains retryable, unlike malformed JSON", async () => {
+  for (const name of ["AbortError", "TimeoutError", "SyntaxError"]) {
+    const response = jsonResponse({});
+    response.json = async () => { throw Object.assign(new Error("synthetic body failure"), { name }); };
+    const { fetchImpl } = stub(() => response);
+    await assert.rejects(createOpenAiCompatibleNotesProvider({ ...base, fetchImpl }).generateArtifacts(transcript),
+      (error: unknown) => error instanceof ProviderError && error.code === (name === "SyntaxError" ? "invalid_response" : "timeout") && error.retryable === (name !== "SyntaxError"));
+  }
+});

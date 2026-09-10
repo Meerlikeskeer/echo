@@ -106,8 +106,9 @@ async function send(port: ProviderPort, settings: OpenAiCompatibleSettings, path
   if (!response.ok) throw new ProviderError(port, codeForStatus(response.status), response.status);
   try {
     return await response.json();
-  } catch {
-    throw new ProviderError(port, "invalid_response", response.status);
+  } catch (error) {
+    const aborted = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new ProviderError(port, aborted ? "timeout" : "invalid_response", response.status);
   }
 }
 

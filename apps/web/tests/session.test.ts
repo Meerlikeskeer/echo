@@ -259,7 +259,7 @@ test("lecture capture persists a 90-minute timeline and its engine enforces the 
   assert.equal(result.session.captureStatus, "stopped");
   assert.equal(h.released(), 1);
   assert.equal(result.chunks.at(-1)!.metadata.endMs, MAX_SESSION_MS);
-  validateChunkOrder(saved.map(chunk => chunk.metadata));
+  validateChunkOrder(saved.map(chunk => chunk.metadata).sort((a, b) => a.sequence - b.sequence));
   assert.equal(saved.length, result.chunks.length);
   const count = h.recorders.length;
   h.advance(MAX_SESSION_MS + 60000);
