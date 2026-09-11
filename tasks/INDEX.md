@@ -50,4 +50,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-015](WEB-015.md) The recorder discards every error and its warning outlives the failure | Implemented and verified by test; awaiting owner review | `feat/WEB-015-recorder-error-reporting` |
 | [WEB-016](WEB-016.md) Lecture-length sessions | Implemented and verified by test; browser acceptance on a real long recording outstanding | `feat/WEB-016-long-sessions` |
 | [WEB-017](WEB-017.md) Lecture note guide | Implemented and verified by test; a real lecture transcript has never been through it | `feat/WEB-017-lecture-notes` |
-| [WEB-018](WEB-018.md) Lecture reliability review fixes | Implementation and verification in progress; real lecture acceptance pending | `fix/WEB-018-lecture-reliability` |
+| [WEB-018](WEB-018.md) Lecture reliability review fixes | Implemented; CI and native Chrome recovery verified; physical lecture acceptance and… | `fix/WEB-018-lecture-reliability` |
