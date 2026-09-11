@@ -5,7 +5,8 @@ import { IndexedDBQueue, drainQueue, UploadFailure } from "../../../lib/recordin
 import { ArtifactStore } from "../../../lib/recording/artifact-store";
 import { checksum, type PlayableChunk } from "../../../lib/recording/session";
 import { stitchSession } from "../../../lib/recording/stitching";
-import { transcriptRevision } from "../../../lib/recording/artifacts";
+import { SessionArtifacts } from "../../session-artifacts";
+import { transcriptRevision, type RevisionInput } from "../../../lib/recording/artifacts";
 import { createFixtureNotesProvider, createFixtureTranscriptionProvider } from "../../../lib/providers/fixture";
 import { processRecording } from "../../../lib/recording/pipeline";
 
@@ -19,6 +20,7 @@ async function result(chunk: PlayableChunk) {
 }
 
 export function LectureDiagnostics() {
+  const [guideTranscript, setGuideTranscript] = useState<RevisionInput | null>(null);
   const [report, setReport] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   async function run(action: () => Promise<string[]>) {
@@ -79,7 +81,8 @@ export function LectureDiagnostics() {
     const transcript = stitchSession({ sessionId, chunks: rows.map(row => ({ metadata: row.metadata, transcript: row.result?.transcript })), completion });
     const record = await new ArtifactStore(guidesName).load(sessionId, await transcriptRevision(transcript));
     check(transcript.status === "final" && record?.generation === 4, "guide and final transcript recover across actual reload");
-    return ["PASS: guide and final transcript recovered after reload."];
+    setGuideTranscript(transcript);
+    return ["PASS: guide and final transcript recovered after reload. Generate notes below to exercise the actual page hook and endpoint, then reload and verify again."];
   }
   return <main className="mx-auto max-w-3xl space-y-5 p-8">
     <h1 className="text-2xl font-semibold">Lecture recovery diagnostics</h1>
@@ -87,6 +90,7 @@ export function LectureDiagnostics() {
     <button disabled={busy} onClick={() => { void run(seed); }} className="rounded border p-3">Seed synthetic lecture</button>{" "}
     <button disabled={busy} onClick={() => { void run(recover); }} className="rounded border p-3">Recover and test interruption</button>{" "}
     <button disabled={busy} onClick={() => { void run(guide); }} className="rounded border p-3">Verify saved guide</button>
+    {guideTranscript ? <SessionArtifacts transcript={guideTranscript} /> : null}
     <div aria-live="polite">{busy ? "Running…" : report.map((line, index) => <p key={index}>{line}</p>)}</div>
   </main>;
 }
