@@ -33,3 +33,15 @@ The development-only, owner-gated `/diagnostics/lecture` uses a separate synthet
 ## Current result
 
 Physical full-lecture/backup acceptance: **not run**. Chrome/MacBook is the owner's intended platform; backup availability and the actual lecture remain pending.
+
+### Executed native Chrome evidence (2026-09-10)
+
+Against commit `2190844` on loopback with synthetic owner credentials and fixture providers:
+
+- Seeded 90 synthetic minute containers (21.6 MB) into real Chrome IndexedDB and saved completion metadata.
+- Reloaded the actual Chrome tab, then recovered. One injected processing failure did not block the last chunk; retry preserved every local ID/checksum. Completed manifest-backed session became final; prefix without completion stayed partial.
+- Saved a guide in the isolated diagnostic guide store, reopened it, rejected a different revision, and reloaded Chrome again. The saved guide recovered.
+- Mounted the actual `SessionArtifacts` component, generated through `POST /api/sessions/artifacts` (HTTP 200 observed), then reloaded and remounted. The actual hook restored the guide with Generate again and Download notes controls, without a second generation request.
+- Dev startup initially hit EMFILE watcher/restart errors. Supported `WATCHPACK_POLLING=true` let the diagnostic run. The test URL must not contain Basic credentials when exercising relative fetch; Chrome's cached synthetic login was used on a clean loopback URL.
+
+This did not use a microphone, turn off Wi-Fi, switch apps during capture, or run a 90-minute wall-clock lecture. Byte fixtures are not playable audio. Those physical acceptance steps remain not run.
