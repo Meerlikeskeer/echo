@@ -291,6 +291,26 @@ Render one derived session transcript with partial/final status and readable gap
 
 **Tradeoff:** Conservative alignment can leave repeated words visible when timestamps are too coarse to prove duplication. Preserving speech is preferable to silently deleting it. Recovered pre-manifest sessions cannot be retrospectively called complete. Native IndexedDB migration and capture lifecycle verification remain separate evidence from pure domain and rendering tests.
 
+## ADR-018 — A session records until the owner stops it, at a bitrate Echo chooses
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-016 · **Refines:** ADR-012, ADR-017
+
+**Context:** Echo stopped every recording after one minute, and three separate limits enforced it: a timer in the recorder, a 60-second ceiling in `validateCaptureOptions`, and a 120-second span ceiling in `isAudioChunk`, which is also the upload boundary's validator. The product is a note taker for lectures and meetings, so a one-minute recording is not a smaller version of the thing — it is a different thing. Two limits made a longer recording unsafe rather than merely unavailable. Browsers pick their own Opus bitrate when none is requested, and Safari 26.4 was measured at 204 kbps; at that rate a five-minute chunk is 7.6 MB against a 4 MB upload limit, and the 64 MiB local audio budget holds about forty minutes.
+
+**Decision:** A session records until the owner stops it, bounded only by a four-hour runaway limit. Chunks are five minutes with five seconds of overlap. Echo requests 32 kbps Opus rather than accepting the browser's default, reads back the rate the recorder says it will use, and shortens the chunk when that rate would put it over the upload limit. A chunk larger than the upload limit is refused in the browser with its own reason instead of retried over the network. The local audio budget rises to 256 MiB, so the binding constraint becomes the browser's own quota. The screen wake lock is held while a session records, as one more defence and never as something correctness rests on.
+
+**Tradeoff:** Five-minute chunks mean a chunk lost to a refused upload costs five minutes rather than one, and the first transcript now appears five minutes in rather than one. Five seconds of overlap will usually appear twice in the stitched transcript, because ADR-017's deduplication needs identical segment timing and two separate transcription calls rarely produce it — visible repetition over dropped speech, as ADR-017 chose. 32 kbps is speech-transparent and not music-transparent; Echo is a note taker. The wake lock is unavailable in some browsers and refused in a background tab, so a long recording still depends on the tab staying open.
+
+## ADR-019 — Session notes are a lecture guide, and an over-long transcript is refused rather than truncated
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-017 · **Refines:** ADR-009, ADR-017
+
+**Context:** The session artifact schema was a meeting summary — title, summary, key points, action items, research topics — and a lecture flattened into it loses the argument, the terminology as the speaker uses it, and what was left unresolved. Two separate bounds also made a lecture impossible rather than merely poorly served: `isRevisionInput` refused a transcript over 24,000 characters with `400 bad_request`, and both generators truncated with `slice(0, MAX_TRANSCRIPT_CHARS)` and reported nothing, so notes could describe the first third of a session with no sign the rest existed. The stitched transcript's gaps reached the endpoint and were dropped before generating.
+
+**Decision:** `SessionArtifacts` gains a course or subject identified only from the recording itself and null otherwise, an outline of sections carrying the session's substance in order, terminology defined as the speaker defined it, and open questions. Nested objects are validated as strictly as the flat fields, unknown keys included. The transcript bound rises to a session-sized one and **the port refuses past it** rather than truncating: Echo sends the whole transcript and lets the configured model refuse what it cannot take, because a refusal is visible and a truncation is not. Gaps and partial status are stated to the generator, before the transcript, as Echo's own words about Echo's own data. Both route handlers declare `maxDuration` rather than inheriting a platform default.
+
+**Tradeoff:** A larger transcript costs more per generation and takes longer, and a model with a small context window now fails loudly on a long session where it used to succeed on a third of one — which is the point, and is why the notes model's context window becomes a real configuration constraint (`env.example` says so). A richer schema is more for a provider to get wrong, so one malformed section costs the whole set of notes; the validator's problem list keeps naming fields and reasons and never values. The vendor remains undecided (ADR-009): nothing here names one in code.
+
 ## Open decisions
 
 Echo has deliberately **not** chosen the following. Do not silently pick one; make the choice through its implementation task and record it as an ADR.
@@ -304,3 +324,15 @@ Echo has deliberately **not** chosen the following. Do not silently pick one; ma
 - **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
 
 Also select supported mobile browsers/codecs, chunk/overlap durations, the retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.
+
+## ADR-020 — Conservative lecture recovery and guide persistence
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-018 · **Refines:** ADR-018, ADR-019
+
+The owner requested repair of the reviewed lecture reliability defects. Default session containers are one minute, with thirty-second containers when bitrate is unknown, to reduce the normal unsaved tail. The four-hour runaway deadline belongs to the capture engine. An impossible reported bitrate is refused; reported rates never guarantee encoded size. Storage headroom uses actual saved bytes per recording time, overlap, unfinished audio and a reserve. Browser suspension can still defer capture timers, so foreground operation and backup recording remain required for acceptance.
+
+Gap descriptions carry chunk bounds only from validated chunk metadata or completion manifests; bounds identify affected chunks, not exact missing speech within overlaps. Missing transcription is distinguished from absent local audio. Both gap timing and the text sent to generation participate in transcript revision identity.
+
+Transcription and per-chunk notes deadlines are 90 and 180 seconds, fitting together below the 300-second route allowance. Session guide generation has 240 seconds. Browser requests allow 310 seconds, so the route can return a readable provider timeout first.
+
+Validated guides are stored in a separate browser-local IndexedDB store keyed by session and transcript revision. This introduces no provider or server durability claim, does not migrate or delete audio, and cannot make an older revision appear current. A failed guide write leaves the displayed result downloadable and raises a warning. Real browser recovery and full-lecture acceptance remain separate from synthetic evidence.

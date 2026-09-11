@@ -54,3 +54,16 @@ test("WEB-007 never presents research as performed", () => {
   const rendered = html(<SessionArtifacts transcript={transcript()} />);
   assert.doesNotMatch(rendered, /findings|we found|according to|source:/i);
 });
+
+/**
+ * WEB-017. The outline is the note guide and the reason the panel exists, so it
+ * is rendered as sections rather than folded into one more bullet list. Nothing
+ * has been generated in this render, so the assertion is about the empty state:
+ * no section may imply an answer exists before one does.
+ */
+test("WEB-017 promises no notes, terms or open questions before any are generated", () => {
+  const rendered = html(<SessionArtifacts transcript={transcript()} />);
+  assert.doesNotMatch(rendered, /Open questions/);
+  assert.doesNotMatch(rendered, /Terms/);
+  assert.doesNotMatch(rendered, /No sections were written/);
+});

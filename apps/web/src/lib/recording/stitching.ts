@@ -11,7 +11,7 @@ export interface StitchedTranscript {
   sessionId: string; text: string; status: "partial" | "final";
   sources: TranscriptSource[];
   segments: { text: string; startMs: number; endMs: number; sourceIndexes: number[] }[];
-  gaps: { reason: "capture-unconfirmed" | "missing-chunk" | "missing-transcript" | "invalid-input"; sequence: number | null }[];
+  gaps: { reason: "capture-unconfirmed" | "missing-chunk" | "missing-transcript" | "invalid-input"; sequence: number | null; startMs?: number; endMs?: number }[];
 }
 // Fold case, whitespace and terminal sentence punctuation only. Symbols and
 // internal punctuation distinguish C++/C#, 2+2/22 and re-sign/resign.
@@ -97,6 +97,14 @@ export function stitchSession(input: { sessionId: string; chunks: readonly Trans
       }));
     if (duplicate && !duplicate.sourceIndexes.some(i => output.sources[i].sequence === source.sequence)) duplicate.sourceIndexes.push(index);
     else output.segments.push({ text: source.originalText, startMs: source.startMs, endMs: source.endMs, sourceIndexes: [index] });
+  }
+  // Only chunk metadata can locate a gap. Segment array indexes are not chunk numbers.
+  for (const gap of output.gaps) {
+    const metadata = gap.reason === "missing-chunk"
+      ? manifest?.chunks.find(chunk => chunk.sequence === gap.sequence)
+      : gap.reason === "missing-transcript"
+        ? rows.find(row => row.metadata.sequence === gap.sequence)?.metadata : undefined;
+    if (metadata) { gap.startMs = metadata.startMs; gap.endMs = metadata.endMs; }
   }
   output.text = output.segments.map(segment => segment.text).filter(Boolean).join(" ");
   output.status = manifest && !output.gaps.length ? "final" : "partial";

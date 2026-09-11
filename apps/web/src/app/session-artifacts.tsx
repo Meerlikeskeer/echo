@@ -40,6 +40,13 @@ export function SessionArtifacts({ transcript }: { transcript: RevisionInput }) 
       </button>
     </div>
 
+    {artifacts.storageError ? <p role="alert" className="mt-3 text-sm text-amber-800">{artifacts.storageError}</p> : null}
+    {record ? <button type="button" className="mt-3 text-sm underline" onClick={() => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(record, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = `echo-${record.sessionId}-notes.json`; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }}>Download notes</button> : null}
     {empty
       ? <p className="mt-2 text-sm text-slate-500">There is no transcript text to summarize yet.</p>
       : <p className="mt-2 text-xs text-slate-500">
@@ -59,9 +66,46 @@ export function SessionArtifacts({ transcript }: { transcript: RevisionInput }) 
     {record ? <div className="mt-4">
       <h4 className="text-sm font-semibold text-slate-900">Title</h4>
       <p className="mt-1 text-sm leading-6 text-slate-700">{record.artifacts.title}</p>
+      {/* WEB-017. Shown only when the recording identified itself. An absent
+          course is not rendered as "Unknown": a label with nothing behind it
+          invites the reader to supply a guess Echo refused to make. */}
+      {record.artifacts.course
+        ? <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{record.artifacts.course}</p>
+        : null}
       <h4 className="mt-4 text-sm font-semibold text-slate-900">Summary</h4>
       <p className="mt-1 text-sm leading-6 text-slate-700">{record.artifacts.summary}</p>
       <Items heading="Key points" items={record.artifacts.keyPoints} empty="No key points were identified." />
+
+      {/* WEB-017. The note guide itself, and the reason the rest of this panel
+          exists — so it is rendered as sections rather than folded into one
+          more bullet list. */}
+      <div className="mt-5">
+        <h4 className="text-sm font-semibold text-slate-900">Notes</h4>
+        {record.artifacts.outline.length
+          ? <div className="mt-2 space-y-4">
+              {record.artifacts.outline.map((section, index) => <div key={index}>
+                <h5 className="text-sm font-medium text-slate-900">{section.heading}</h5>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                  {section.notes.map((note, noteIndex) => <li key={noteIndex}>{note}</li>)}
+                </ul>
+              </div>)}
+            </div>
+          : <p className="mt-1 text-sm text-slate-500">No sections were written for this session.</p>}
+      </div>
+
+      <div className="mt-5">
+        <h4 className="text-sm font-semibold text-slate-900">Terms</h4>
+        {record.artifacts.terms.length
+          ? <dl className="mt-1 space-y-1 text-sm leading-6 text-slate-700">
+              {record.artifacts.terms.map((entry, index) => <div key={index}>
+                <dt className="inline font-medium text-slate-900">{entry.term}</dt>
+                <dd className="inline"> — {entry.definition}</dd>
+              </div>)}
+            </dl>
+          : <p className="mt-1 text-sm text-slate-500">No terminology was singled out.</p>}
+      </div>
+
+      <Items heading="Open questions" items={record.artifacts.openQuestions} empty="Nothing was left explicitly open." />
       <Items heading="Action items" items={record.artifacts.actionItems} empty="No action items were identified." />
       <Items heading="Suggested research" items={record.artifacts.researchTopics} empty="No research topics were suggested." />
       {/* REQ-005 separates suggested research from opt-in external research.

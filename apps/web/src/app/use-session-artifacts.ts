@@ -15,9 +15,15 @@ import {
   type ArtifactRecord, type RevisionInput,
 } from "../lib/recording/artifacts";
 
+import { ArtifactStore } from "../lib/recording/artifact-store";
+import { ARTIFACT_REQUEST_TIMEOUT_MS } from "../lib/recording/request-policy";
+
 export type ArtifactStatus = "idle" | "working";
 
 export function useSessionArtifacts(transcript: RevisionInput) {
+  const store = useRef(new ArtifactStore());
+  const inFlight = useRef<AbortController | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const mounted = useRef(false);
   const [record, setRecord] = useState<ArtifactRecord | null>(null);
   const [revision, setRevision] = useState<string | null>(null);
@@ -34,7 +40,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
   useEffect(() => { latest.current = transcript; }, [transcript]);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => { mounted.current = false; inFlight.current?.abort(); };
   }, []);
 
   // The revision of the transcript as it stands. Recomputed whenever it changes,
@@ -48,7 +54,25 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     return () => { current = false; };
   }, [transcript]);
 
+  useEffect(() => {
+    if (!revision) return;
+    let current = true;
+    const startedAtAttempt = attempts.current;
+    void store.current.load(transcript.sessionId, revision).then(saved => {
+      if (!current || !saved || inFlight.current || attempts.current !== startedAtAttempt) return;
+      attempts.current = Math.max(attempts.current, saved.generation);
+      held.current = saved;
+      setRecord(saved);
+    }).catch(() => {
+      if (current) setStorageError("Saved notes could not be recovered. Audio is separate; you can generate notes again.");
+    });
+    return () => { current = false; };
+  }, [revision, transcript.sessionId]);
+
   const generate = useCallback(async () => {
+    if (inFlight.current) return;
+    const controller = new AbortController();
+    inFlight.current = controller;
     const generation = ++attempts.current;
     setStatus("working");
     setError(null);
@@ -56,11 +80,12 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       const source = latest.current;
       const response = await fetch("/api/sessions/artifacts", {
         method: "POST",
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(ARTIFACT_REQUEST_TIMEOUT_MS)]),
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sessionId: source.sessionId, text: source.text, status: source.status,
           segments: source.segments.map((segment) => ({ text: segment.text, startMs: segment.startMs, endMs: segment.endMs })),
-          gaps: source.gaps.map((gap) => ({ reason: gap.reason, sequence: gap.sequence })),
+          gaps: source.gaps.map((gap) => ({ reason: gap.reason, sequence: gap.sequence, startMs: gap.startMs, endMs: gap.endMs })),
         }),
       });
       const body: unknown = await response.json().catch(() => null);
@@ -87,6 +112,12 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       if (decision.accepted) {
         held.current = decision.record;
         setRecord(decision.record);
+        try {
+          await store.current.save(decision.record);
+          if (mounted.current) setStorageError(null);
+        } catch {
+          if (mounted.current) setStorageError("These notes could not be saved. Download them before leaving this page.");
+        }
         return;
       }
       // A rejection is not an error. Nothing failed: the answer described a
@@ -98,12 +129,14 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     } catch (cause) {
       if (mounted.current) setError(cause instanceof Error ? cause.message : "Notes could not be generated.");
     } finally {
+      if (inFlight.current === controller) inFlight.current = null;
       if (mounted.current) setStatus("idle");
     }
   }, []);
 
   return {
     record,
+    storageError,
     revision,
     status,
     error,

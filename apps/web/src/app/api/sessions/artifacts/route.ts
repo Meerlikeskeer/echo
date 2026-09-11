@@ -22,10 +22,13 @@ import { requireOwnerAccess } from "../../../../lib/owner-access";
 import { providerSetup } from "../../../../lib/providers/registry";
 import { describeFailure, type RecordingErrorBody } from "../../../../lib/recording/http";
 import { ProviderError } from "../../../../lib/providers/errors";
-import { isRevisionInput, transcriptForArtifacts, transcriptRevision } from "../../../../lib/recording/artifacts";
+import { describeGaps, isRevisionInput, transcriptForArtifacts, transcriptRevision } from "../../../../lib/recording/artifacts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** The artifact provider has a shorter deadline so a readable timeout response
+ * can be returned before this route allowance expires. */
+export const maxDuration = 300;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -71,7 +74,13 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const revision = await transcriptRevision(stitched);
-    const artifacts = await providers.notes.generateArtifacts(transcriptForArtifacts(stitched));
+    const artifacts = await providers.notes.generateArtifacts(transcriptForArtifacts(stitched), {
+      // The gaps were always in this request; until WEB-017 they were used only
+      // to compute the revision and then dropped, so notes for a session with
+      // four minutes missing read exactly like notes for a complete one.
+      gapMinutes: describeGaps(stitched),
+      transcriptStatus: stitched.status,
+    });
     return json(200, {
       sessionId: stitched.sessionId,
       transcriptRevision: revision,

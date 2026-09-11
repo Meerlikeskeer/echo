@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { captureSession, PREFERRED_MIME_TYPES, type CaptureRuntime } from "../src/lib/recording/capture";
-import { checksum, isAudioChunk, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
+import { checksum, isAudioChunk, MAX_CHUNK_MS, MAX_SESSION_MS, safeChunkMs, validateCaptureOptions, validateChunkOrder } from "../src/lib/recording/session";
 
 type FakeRecorder = {
   mimeType: string;
@@ -13,7 +13,7 @@ type FakeRecorder = {
   stop(): void;
 };
 
-function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false) {
+function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<typeof captureSession>[3], quickNote = false, chunkMs = 30000) {
   let now = 0;
   let released = 0;
   let counter = 0;
@@ -44,7 +44,7 @@ function harness(overlapMs = 1000, stopThrows = false, onChunk?: Parameters<type
     },
   };
   const stream = { getTracks: () => [{ stop() { released++; } }] } as unknown as MediaStream;
-  const capture = captureSession(stream, { chunkMs: 30000, overlapMs, quickNote }, io, onChunk);
+  const capture = captureSession(stream, { chunkMs, overlapMs, quickNote }, io, onChunk);
   return { capture, recorders, released: () => released, advance(target: number) {
     while (true) {
       const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
@@ -112,6 +112,47 @@ test("recorder error ends capture and notifies the consumer", async () => {
 });
 test("invalid options fail before opening a recorder", () => {
   for (const overlapMs of [-1, 15000, NaN, 1.5]) assert.throws(() => validateCaptureOptions({ chunkMs: 30000, overlapMs }));
+});
+// WEB-016. The ceiling moved from one minute to ten, and a lecture depends on
+// it: at the old bound the five-minute chunk the recorder now asks for threw
+// before the microphone was ever opened.
+test("a lecture-length chunk is accepted and anything past the ceiling is not", () => {
+  assert.doesNotThrow(() => validateCaptureOptions({ chunkMs: 300_000, overlapMs: 5_000, audioBitsPerSecond: 32_000 }));
+  assert.doesNotThrow(() => validateCaptureOptions({ chunkMs: MAX_CHUNK_MS, overlapMs: 10_000 }));
+  assert.throws(() => validateCaptureOptions({ chunkMs: MAX_CHUNK_MS + 1, overlapMs: 5_000 }));
+  for (const audioBitsPerSecond of [0, 1_000, 400_000, NaN, 32_000.5]) {
+    assert.throws(() => validateCaptureOptions({ chunkMs: 300_000, overlapMs: 5_000, audioBitsPerSecond }));
+  }
+});
+// The metadata guard is also the upload boundary's validator, so a five-minute
+// chunk has to survive it or every chunk of a lecture is refused as malformed.
+test("chunk metadata spanning five minutes is valid, and an implausible span is not", async () => {
+  const audio = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" });
+  const base = {
+    sessionId: "s-1", id: "c-1", sequence: 0, startMs: 0, endMs: 300_000, overlapMs: 0,
+    mimeType: "audio/webm", size: audio.size, checksum: await checksum(audio),
+  };
+  assert.equal(isAudioChunk(base), true);
+  assert.equal(isAudioChunk({ ...base, endMs: MAX_CHUNK_MS + 60_001 }), false);
+});
+/**
+ * WEB-016. The failure this prevents is silent and total: a browser recording
+ * at a higher bitrate than requested builds chunks no upload will ever accept,
+ * and only says so five minutes into the lecture, once per chunk, until the end.
+ */
+test("chunk length is clamped to what the measured bitrate can upload", () => {
+  // A browser that honours 32 kbps: a five-minute chunk is ~1.2 MB, so nothing
+  // is taken away.
+  assert.equal(safeChunkMs(300_000, 32_000, 4_000_000), 300_000);
+  // Safari's measured 204 kbps would make that chunk 7.6 MB. The clamp keeps it
+  // under the limit with the container margin applied.
+  const clamped = safeChunkMs(300_000, 204_000, 4_000_000);
+  assert.ok(clamped < 300_000);
+  assert.ok((clamped / 1000) * (204_000 / 8) <= 4_000_000);
+  // No evidence is not evidence of a problem: the request stands.
+  for (const unknown of [undefined, 0, NaN, -1]) assert.equal(safeChunkMs(300_000, unknown, 4_000_000), 30_000);
+  // Never clamped into uselessness, whatever the bitrate claims.
+  assert.throws(() => safeChunkMs(300_000, 320_000_000, 4_000_000));
 });
 test("unexpected recorder stop reports incomplete capture immediately", async () => {
   const h = harness(); h.advance(5000);
@@ -204,4 +245,23 @@ test("mid-session persistence failure stops capture and retains available chunks
   assert.equal(h.released(), 1);
   assert.equal(result.chunks.length, 2);
   assert.ok(result.chunks[0].audio.size > 0);
+});
+
+
+test("lecture capture persists a 90-minute timeline and its engine enforces the four-hour stop", async () => {
+  const saved: Parameters<NonNullable<Parameters<typeof captureSession>[3]>>[0][] = [];
+  const h = harness(5000, false, async chunk => { saved.push(chunk); }, false, 60000);
+  h.advance(90 * 60000);
+  assert.ok(h.recorders.length > 90, "overlapping chunks continue beyond the old minute limit");
+  assert.equal(h.released(), 0);
+  h.advance(MAX_SESSION_MS);
+  const result = await h.capture.finished;
+  assert.equal(result.session.captureStatus, "stopped");
+  assert.equal(h.released(), 1);
+  assert.equal(result.chunks.at(-1)!.metadata.endMs, MAX_SESSION_MS);
+  validateChunkOrder(saved.map(chunk => chunk.metadata).sort((a, b) => a.sequence - b.sequence));
+  assert.equal(saved.length, result.chunks.length);
+  const count = h.recorders.length;
+  h.advance(MAX_SESSION_MS + 60000);
+  assert.equal(h.recorders.length, count, "deadline cancels future rotation");
 });

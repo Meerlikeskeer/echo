@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  ARTIFACT_LIMITS, STITCHED_LIMITS, acceptArtifacts, isRevisionInput, readArtifactResponse, transcriptForArtifacts, transcriptRevision, validateArtifacts,
+  ARTIFACT_LIMITS, STITCHED_LIMITS, acceptArtifacts, describeGaps, isRevisionInput, readArtifactResponse, transcriptForArtifacts, transcriptRevision, validateArtifacts,
   type ArtifactRecord, type SessionArtifacts,
 } from "../src/lib/recording/artifacts";
 import type { StitchedTranscript } from "../src/lib/recording/stitching";
 
 const good: SessionArtifacts = {
   title: "Weekly planning",
+  course: "Team planning",
   summary: "The team agreed the release date and split the remaining work.",
   keyPoints: ["The release slips by one week.", "Two tasks are unowned."],
+  outline: [{ heading: "Release date", notes: ["The date moves by one week.", "Nobody objected."] }],
+  terms: [{ term: "Release train", definition: "The fixed weekly slot the team ships in." }],
+  openQuestions: ["Who owns the two remaining tasks?"],
   actionItems: ["Assign the two unowned tasks."],
   researchTopics: ["Release checklist practices"],
 };
@@ -298,4 +302,64 @@ test("a generation number that is not a whole non-negative number is refused", (
     assert.ok(!decision.accepted, `generation ${generation} must be refused`);
     assert.equal(decision.reason, "invalid-generation");
   }
+});
+
+/**
+ * WEB-017. The bound that mattered was not a style choice: at 24,000 characters
+ * the endpoint answered 400 to any transcript over about twenty minutes, which
+ * is every lecture.
+ */
+test("a lecture-length transcript is accepted where the old bound refused it", () => {
+  const hour = "word ".repeat(11_000); // ~55,000 characters, about an hour of speech.
+  assert.ok(hour.length > 24_000);
+  assert.equal(isRevisionInput({ ...stitched(), text: hour }), true);
+  assert.equal(isRevisionInput({ ...stitched(), text: "x".repeat(STITCHED_LIMITS.text + 1) }), false);
+});
+
+test("WEB-017 course is optional, and only an absent key is malformed", () => {
+  assert.equal(validateArtifacts({ ...raw(), course: null }).ok, true);
+  // An empty string is read as "not identified" rather than costing the owner
+  // an otherwise complete set of notes.
+  const blank = validateArtifacts({ ...raw(), course: "   " });
+  assert.equal(blank.ok, true);
+  assert.equal(blank.ok && blank.artifacts.course, null);
+  const missing = { ...raw() }; delete missing.course;
+  assert.deepEqual(validateArtifacts(missing), { ok: false, problems: [{ field: "course", reason: "missing" }] });
+  assert.equal(validateArtifacts({ ...raw(), course: 7 }).ok, false);
+});
+
+test("WEB-017 outline and terms are validated as strictly as the flat fields", () => {
+  const bad = (over: Record<string, unknown>) => validateArtifacts({ ...raw(), ...over }).ok;
+  // A heading with nothing under it is a table of contents, not a note.
+  assert.equal(bad({ outline: [{ heading: "Empty", notes: [] }] }), false);
+  assert.equal(bad({ outline: [{ heading: "  ", notes: ["a"] }] }), false);
+  assert.equal(bad({ outline: [{ heading: "H", notes: ["a"], extra: "x" }] }), false);
+  assert.equal(bad({ outline: [{ heading: "H", notes: [1] }] }), false);
+  assert.equal(bad({ outline: [{ heading: "x".repeat(ARTIFACT_LIMITS.heading + 1), notes: ["a"] }] }), false);
+  assert.equal(bad({ outline: Array.from({ length: ARTIFACT_LIMITS.sections + 1 }, () => ({ heading: "H", notes: ["a"] })) }), false);
+  assert.equal(bad({ terms: [{ term: "T", definition: "" }] }), false);
+  assert.equal(bad({ terms: [{ term: "T", definition: "D", extra: 1 }] }), false);
+  // Case and spacing folded, exactly as the flat lists do it.
+  assert.equal(bad({ terms: [{ term: "Release train", definition: "A" }, { term: "release  TRAIN", definition: "B" }] }), false);
+  assert.equal(validateArtifacts({ ...raw(), outline: [{ heading: "H", notes: ["  a  "] }] }).ok, true);
+});
+
+/**
+ * The gaps were always in the request and were dropped before generating, so
+ * notes for a session missing minutes read exactly like notes for a complete
+ * one. This is what gets handed to the generator instead.
+ */
+test("WEB-017 gaps are described in minutes, and capture-unconfirmed is not one", () => {
+  const segments = [
+    { text: "One.", startMs: 0, endMs: 60_000 },
+    { text: "Two.", startMs: 300_000, endMs: 360_000 },
+  ];
+  const described = describeGaps({ ...stitched(), segments, gaps: [{ reason: "missing-chunk", sequence: 1 }] });
+  assert.deepEqual(described, ["chunk 2 (time unknown): audio chunk unavailable in this browser"]);
+  // Not an absence of audio: it means this browser never saved a completion
+  // record. Reporting it as a gap would put a hole in notes that have none.
+  assert.deepEqual(describeGaps({ ...stitched(), gaps: [{ reason: "capture-unconfirmed", sequence: null }] }), []);
+  // A gap that cannot be placed in time is still reported, because "part of
+  // this is missing" is worth saying even when the minute is not known.
+  assert.equal(describeGaps({ ...stitched(), segments: [], gaps: [{ reason: "missing-chunk", sequence: 3 }] }).length, 1);
 });

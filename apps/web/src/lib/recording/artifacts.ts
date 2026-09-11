@@ -12,9 +12,9 @@
  * here performs a lookup, and a topic must never be rendered as a finding.
  */
 
-import type { SessionArtifacts, Transcript } from "../providers/types";
+import type { ArtifactSection, ArtifactTerm, SessionArtifacts, Transcript } from "../providers/types";
 
-export type { SessionArtifacts };
+export type { ArtifactSection, ArtifactTerm, SessionArtifacts };
 
 /** Artifacts plus the provenance that makes them safe to store and replace. */
 export interface ArtifactRecord {
@@ -28,13 +28,22 @@ export interface ArtifactRecord {
 
 export const ARTIFACT_LIMITS = {
   title: 200,
-  summary: 4_000,
-  item: 500,
+  // WEB-017. A lecture summary that has to fit a meeting's summary field turns
+  // into a sentence about the topic rather than an account of the argument.
+  summary: 8_000,
+  item: 1_000,
   items: 50,
+  heading: 200,
+  /** Sections in the outline, and notes within one section. */
+  sections: 40,
+  sectionNotes: 60,
+  term: 200,
+  definition: 1_000,
+  terms: 60,
 } as const;
 
-const LIST_FIELDS = ["keyPoints", "actionItems", "researchTopics"] as const;
-const FIELDS = ["title", "summary", ...LIST_FIELDS] as const;
+const LIST_FIELDS = ["keyPoints", "actionItems", "researchTopics", "openQuestions"] as const;
+const FIELDS = ["title", "course", "summary", "outline", "terms", ...LIST_FIELDS] as const;
 export type ArtifactField = (typeof FIELDS)[number];
 
 /**
@@ -46,6 +55,12 @@ export type ArtifactField = (typeof FIELDS)[number];
 export type ArtifactProblem =
   | { readonly field: ArtifactField | "$"; readonly reason: "missing" | "wrong-type" | "empty" | "too-long" | "too-many" | "duplicate" }
   | { readonly field: "$"; readonly reason: "unknown-field" };
+
+/** WEB-017. The keys a section and a term may carry, checked as strictly as the
+ *  top level: an unknown key inside a nested object is the same vendor shape
+ *  leaking in, one level down. */
+const SECTION_KEYS = ["heading", "notes"] as const;
+const TERM_KEYS = ["term", "definition"] as const;
 
 export type ArtifactValidation =
   | { readonly ok: true; readonly artifacts: SessionArtifacts }
@@ -103,10 +118,84 @@ export function validateArtifacts(value: unknown): ArtifactValidation {
     return kept;
   };
 
+  /**
+   * WEB-017. `null` is a real answer here and the only honest one when the
+   * recording never says what it is. It is distinguished from a missing key,
+   * which is still a malformed response.
+   */
+  const optionalText = (field: "course", limit: number): string | null => {
+    const candidate = raw[field];
+    if (candidate === undefined) { problems.push({ field, reason: "missing" }); return null; }
+    if (candidate === null) return null;
+    if (typeof candidate !== "string") { problems.push({ field, reason: "wrong-type" }); return null; }
+    const trimmed = candidate.trim();
+    // An empty string is not a course. Read as "not identified" rather than
+    // rejected, so one blank field never costs the owner a whole set of notes.
+    if (!trimmed) return null;
+    if (trimmed.length > limit) { problems.push({ field, reason: "too-long" }); return null; }
+    return trimmed;
+  };
+
+  const outline = (): ArtifactSection[] => {
+    const candidate = raw.outline;
+    if (candidate === undefined || candidate === null) { problems.push({ field: "outline", reason: "missing" }); return []; }
+    if (!Array.isArray(candidate)) { problems.push({ field: "outline", reason: "wrong-type" }); return []; }
+    if (candidate.length > ARTIFACT_LIMITS.sections) { problems.push({ field: "outline", reason: "too-many" }); return []; }
+    const kept: ArtifactSection[] = [];
+    for (const entry of candidate) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) { problems.push({ field: "outline", reason: "wrong-type" }); continue; }
+      const row = entry as Record<string, unknown>;
+      if (Object.keys(row).some((key) => !(SECTION_KEYS as readonly string[]).includes(key))) { problems.push({ field: "$", reason: "unknown-field" }); continue; }
+      const heading = typeof row.heading === "string" ? row.heading.trim() : "";
+      if (!heading) { problems.push({ field: "outline", reason: typeof row.heading === "string" ? "empty" : "wrong-type" }); continue; }
+      if (heading.length > ARTIFACT_LIMITS.heading) { problems.push({ field: "outline", reason: "too-long" }); continue; }
+      if (!Array.isArray(row.notes)) { problems.push({ field: "outline", reason: "wrong-type" }); continue; }
+      if (row.notes.length > ARTIFACT_LIMITS.sectionNotes) { problems.push({ field: "outline", reason: "too-many" }); continue; }
+      const notes: string[] = [];
+      for (const note of row.notes) {
+        if (typeof note !== "string") { problems.push({ field: "outline", reason: "wrong-type" }); continue; }
+        const trimmed = note.trim();
+        if (!trimmed) { problems.push({ field: "outline", reason: "empty" }); continue; }
+        if (trimmed.length > ARTIFACT_LIMITS.item) { problems.push({ field: "outline", reason: "too-long" }); continue; }
+        notes.push(trimmed);
+      }
+      // A heading with nothing under it is a table of contents, not a note.
+      if (!notes.length) { problems.push({ field: "outline", reason: "empty" }); continue; }
+      kept.push({ heading, notes });
+    }
+    return kept;
+  };
+
+  const terms = (): ArtifactTerm[] => {
+    const candidate = raw.terms;
+    if (candidate === undefined || candidate === null) { problems.push({ field: "terms", reason: "missing" }); return []; }
+    if (!Array.isArray(candidate)) { problems.push({ field: "terms", reason: "wrong-type" }); return []; }
+    if (candidate.length > ARTIFACT_LIMITS.terms) { problems.push({ field: "terms", reason: "too-many" }); return []; }
+    const kept: ArtifactTerm[] = [];
+    const seen = new Set<string>();
+    for (const entry of candidate) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) { problems.push({ field: "terms", reason: "wrong-type" }); continue; }
+      const row = entry as Record<string, unknown>;
+      if (Object.keys(row).some((key) => !(TERM_KEYS as readonly string[]).includes(key))) { problems.push({ field: "$", reason: "unknown-field" }); continue; }
+      const term = typeof row.term === "string" ? row.term.trim() : "";
+      const definition = typeof row.definition === "string" ? row.definition.trim() : "";
+      if (!term || !definition) { problems.push({ field: "terms", reason: term || definition ? "empty" : "wrong-type" }); continue; }
+      if (term.length > ARTIFACT_LIMITS.term || definition.length > ARTIFACT_LIMITS.definition) { problems.push({ field: "terms", reason: "too-long" }); continue; }
+      if (seen.has(fold(term))) { problems.push({ field: "terms", reason: "duplicate" }); continue; }
+      seen.add(fold(term));
+      kept.push({ term, definition });
+    }
+    return kept;
+  };
+
   const artifacts: SessionArtifacts = {
     title: text("title", ARTIFACT_LIMITS.title),
+    course: optionalText("course", ARTIFACT_LIMITS.title),
     summary: text("summary", ARTIFACT_LIMITS.summary),
     keyPoints: list("keyPoints"),
+    outline: outline(),
+    terms: terms(),
+    openQuestions: list("openQuestions"),
     actionItems: list("actionItems"),
     researchTopics: list("researchTopics"),
   };
@@ -127,12 +216,22 @@ export interface RevisionInput {
   readonly text: string;
   readonly status: "partial" | "final";
   readonly segments: readonly { readonly text: string; readonly startMs: number; readonly endMs: number }[];
-  readonly gaps: readonly { readonly reason: string; readonly sequence: number | null }[];
+  readonly gaps: readonly { readonly reason: string; readonly sequence: number | null; readonly startMs?: number; readonly endMs?: number }[];
 }
 
-/** Bounds on a request body, so a malformed or hostile one is refused before a
- *  credential is used. The transcript cap matches the notes port's own. */
-export const STITCHED_LIMITS = { text: 24_000, segments: 2_000, gaps: 500, segmentText: 8_000 } as const;
+/**
+ * Bounds on a request body, so a malformed or hostile one is refused before a
+ * credential is used.
+ *
+ * **WEB-017 raised the text bound from 24,000 characters, which refused a
+ * lecture.** An hour of speech is roughly 55,000 characters, so the endpoint
+ * that exists to summarise a session answered `400 bad_request` to the only
+ * kind of session anyone wants summarised. 400,000 is about six hours, past
+ * both the four-hour capture bound and any model Echo would be pointed at; the
+ * notes port refuses what its own model cannot take, and says so, rather than
+ * this bound silently deciding it.
+ */
+export const STITCHED_LIMITS = { text: 400_000, segments: 8_000, gaps: 500, segmentText: 8_000 } as const;
 
 const GAP_REASONS: readonly string[] = ["capture-unconfirmed", "missing-chunk", "missing-transcript", "invalid-input"];
 
@@ -166,9 +265,29 @@ export function isRevisionInput(value: unknown): value is RevisionInput {
     if (!gap || typeof gap !== "object") return false;
     const item = gap as Record<string, unknown>;
     if (typeof item.reason !== "string" || !GAP_REASONS.includes(item.reason)) return false;
-    if (!(item.sequence === null || Number.isSafeInteger(item.sequence))) return false;
+    if (!(item.sequence === null || (Number.isSafeInteger(item.sequence) && (item.sequence as number) >= 0))) return false;
+    if (item.startMs !== undefined || item.endMs !== undefined) {
+      if (!Number.isSafeInteger(item.startMs) || !Number.isSafeInteger(item.endMs) ||
+          (item.startMs as number) < 0 || (item.endMs as number) <= (item.startMs as number)) return false;
+    }
   }
   return true;
+}
+
+/** Describe known chunk bounds, never infer them from silence or segment positions.
+ * Overlap may cover some of the named chunk; this is not a claim of missing audio
+ * throughout that interval. A pending transcript does not mean its audio was lost. */
+export function describeGaps(stitched: RevisionInput): string[] {
+  const minute = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`;
+  return [...new Set(stitched.gaps.filter(gap => gap.reason !== "capture-unconfirmed").map(gap => {
+    const part = gap.sequence === null ? "unplaced session data" : `chunk ${gap.sequence + 1}`;
+    const span = gap.startMs !== undefined && gap.endMs !== undefined
+      ? ` (chunk bounds ${minute(gap.startMs)} to ${minute(gap.endMs)})` : " (time unknown)";
+    const reason = gap.reason === "missing-transcript" ? "transcript unavailable; audio may still be saved"
+      : gap.reason === "missing-chunk" ? "audio chunk unavailable in this browser"
+      : "invalid session data; coverage cannot be established";
+    return `${part}${span}: ${reason}`;
+  }))];
 }
 
 /**
@@ -202,6 +321,7 @@ function revisionInput(stitched: RevisionInput): string {
   const field = (text: string) => `${text.length}:${text}`;
   const parts = [
     field(stitched.sessionId),
+    field(stitched.text),
     // Partial and final are different transcripts even when the text matches:
     // one is still growing. Artifacts must not carry across that boundary.
     field(stitched.status),
@@ -213,7 +333,7 @@ function revisionInput(stitched: RevisionInput): string {
   // A gap changes what the transcript means without necessarily changing a
   // character of its text, so it belongs in the identity too.
   parts.push(field(String(stitched.gaps.length)));
-  for (const gap of stitched.gaps) parts.push(field(gap.reason), field(String(gap.sequence)));
+  for (const gap of stitched.gaps) parts.push(field(gap.reason), field(String(gap.sequence)), field(String(gap.startMs ?? "")), field(String(gap.endMs ?? "")));
   return parts.join("");
 }
 

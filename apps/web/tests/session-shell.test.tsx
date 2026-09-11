@@ -19,7 +19,12 @@ test("the recording action is the clearest action on the ready screen", () => {
   assert.match(html, /<h1[^>]*>Record a note<\/h1>/);
   assert.match(html, /aria-labelledby="record-title"/);
   assert.match(html, /<button[^>]*>Record<\/button>/);
-  assert.match(html, /Record 30–60 seconds/);
+  // WEB-016. The ready screen used to promise a one-minute recording and stop
+  // at it. Asserting the absence as well as the presence: the old sentence
+  // surviving anywhere on this screen would be a promise the recorder no
+  // longer keeps.
+  assert.match(html, /Records until you press stop/);
+  assert.doesNotMatch(html, /30–60 seconds|stops at one minute/);
 });
 
 test("disclosure of an external processor is rendered from provider data", () => {

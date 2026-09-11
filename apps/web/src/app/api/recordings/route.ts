@@ -11,6 +11,9 @@ import { normalizeMime } from "../../../lib/recording/media-type";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Allows both sequential provider calls and response validation; request-policy.ts
+ * keeps provider deadlines below this route limit and the browser above it. */
+export const maxDuration = 300;
 
 const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
