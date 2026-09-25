@@ -49,7 +49,9 @@ that every task must edit.**
 
 ## What exists today
 
-- WEB-019 adds `firmware/echo-device`, a PlatformIO XIAO ESP32S3 Sense diagnostics console (ADR-021). Firmware compilation and simulated UI tests are separate from pending physical acceptance. It does not yet run Echo recording/transcription or connect to a Mac app.
+- ENG-021 (ADR-022) organizes the repository into `echo-web-app`, `echo-device`, and a documented `echo-mac-app` placeholder. Root web commands and the `@echo/web` package name stay the same. Earlier evidence uses historical paths. PRs are ready for review by default; drafts require an explicit owner-action checklist.
+
+- WEB-019 adds `echo-device`, a PlatformIO XIAO ESP32S3 Sense diagnostics console (ADR-021). Firmware compilation and simulated UI tests are separate from pending physical acceptance. It does not yet run Echo recording/transcription or connect to a Mac app.
 
 - WEB-018 repairs the reviewed lecture branches: one-minute default containers (30 seconds for unknown bitrate), engine-owned four-hour limit, measured conservative storage headroom, chunk-based gap descriptions, coordinated provider/route/browser deadlines, and revision-bound browser-local study guide persistence/export. The development-only `/diagnostics/lecture` exercises a synthetic 90-minute timeline in native IndexedDB. This is not real lecture or microphone acceptance; see `tasks/WEB-018.md`.
 
@@ -77,7 +79,7 @@ that every task must edit.**
 
 **The CDN question ENG-010 exists to answer is answered: Vercel's edge does not bypass Echo's gate.** The risk was that a CDN serves `/_next/static` before the application runs, leaving compiled assets public on the deployed origin while every loopback suite stays green — a failure no local check can see. **All 9 linked compiled assets were refused unauthenticated over the real certificate and served only to the owner.** The same run confirmed, on the platform rather than on loopback: the Basic challenge, refusal of wrong credentials, the owner reaching the page, an unknown path challenged rather than answered, both `/diagnostics/*` pages 404 for the authenticated owner, `POST /api/recordings` guarding itself independently of the proxy, and no owner password or `NEXT_PUBLIC_` value in the page, in any asset, or in an error body.
 
-**Two limits on how far that generalises.** The URL tested was deployment-specific, not a project alias — same edge, same settings, but an alias should be re-checked rather than assumed. And **with Vercel Deployment Protection off, Echo's own fail-closed gate is the only thing in front of the origin.** That is the intended design under ADR-008 and the passing run is evidence it holds on the platform, but it makes `apps/web/src/proxy.ts` load-bearing in production: adding a path exclusion there is now a production access change.
+**Two limits on how far that generalises.** The URL tested was deployment-specific, not a project alias — same edge, same settings, but an alias should be re-checked rather than assumed. And **with Vercel Deployment Protection off, Echo's own fail-closed gate is the only thing in front of the origin.** That is the intended design under ADR-008 and the passing run is evidence it holds on the platform, but it makes `echo-web-app/src/proxy.ts` load-bearing in production: adding a path exclusion there is now a production access change.
 
 **Deploying and checking are owner-only.** `npx vercel` needs the owner's account, and `npx` also fails from an agent sandbox on npm cache permissions. An agent can run neither the deploy nor `npm run test:deployed` against the hosted origin, and must record `not run` rather than infer a result.
 
@@ -154,7 +156,7 @@ Read `STATUS.md`, then **only** the rows that match your task. Do not read a doc
 | Starting or resuming a task | `status/in-flight/README.md`, and your own `status/in-flight/<TASK-ID>.md` | other tasks' in-flight files |
 | Implementing a `WEB-###` task | that one task entry in `TASKS.md`; `ARCHITECTURE.md` § *Technology Stack*; the § *… boundaries* section of the nearest shipped task | other task entries, `ROADMAP.md`, full `REQUIREMENTS.md` |
 | Adding or swapping a transcription / notes service | `DECISIONS.md` ADR-009 and ADR-010; `ARCHITECTURE.md` § *External AI Services* and § *Provider boundaries* | the rest of `DECISIONS.md` |
-| Touching login, access or credentials | `ARCHITECTURE.md` § *WEB-001 access and verification boundaries*; `apps/web/src/lib/access.ts` | product docs |
+| Touching login, access or credentials | `ARCHITECTURE.md` § *WEB-001 access and verification boundaries*; `echo-web-app/src/lib/access.ts` | product docs |
 | Touching hosting, deployment or infrastructure | `DECISIONS.md` ADR-008, ADR-010 and ADR-014; `ARCHITECTURE.md` § *Hosting and Deployment* | product docs |
 | Working on retention or deletion | `REQUIREMENTS.md` § *Raw audio lifecycle*; `DECISIONS.md` ADR-004 | the rest |
 | Introducing **any** framework, database, host, UI library or major service | `AGENTS.md` § *Technology stack constraints*; `ARCHITECTURE.md` § *Changing a stack decision* — **before writing code** | — |

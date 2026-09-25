@@ -131,8 +131,8 @@ class TapParser:
 
 def command(suite):
     if suite == "unit":
-        directory = ROOT / "apps/web/tests"
-        # Matches the two top-level globs in apps/web/package.json.
+        directory = ROOT / "echo-web-app/tests"
+        # Matches the two top-level globs in echo-web-app/package.json.
         selected = sorted(directory.glob("*.test.ts")) + sorted(directory.glob("*.test.tsx"))
         if not selected:
             raise InvalidTap("unit suite selects no test files")
@@ -168,9 +168,9 @@ def main(suite):
         report.unlink(missing_ok=True)
         runner_environment = os.environ.copy()
         if suite == "unit":
-            # npm runs the web suite inside apps/web. Keep our required root
+            # npm runs the web suite inside echo-web-app. Keep our required root
             # cwd while giving tsx that same JSX and TypeScript configuration.
-            runner_environment["TSX_TSCONFIG_PATH"] = str(ROOT / "apps/web/tsconfig.json")
+            runner_environment["TSX_TSCONFIG_PATH"] = str(ROOT / "echo-web-app/tsconfig.json")
         completed = subprocess.run(
             command(suite), cwd=ROOT, env=runner_environment, capture_output=True, check=False
         )

@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { createServer } from "node:net";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const username = "synthetic-owner";
 const password = "synthetic-production-password-123456789";
@@ -12,7 +13,7 @@ const PAGE_MARKER = /Record a note/;
 const PRIVATE_PATHS = ["/diagnostics/lecture", "/diagnostics/queue", "/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/api/sessions/artifacts", "/_next/static/missing.js", "/?_rsc=probe"];
 
 // Every provider variable is blanked explicitly so a developer's real
-// apps/web/.env.local can never configure a server under test, and no test can
+// echo-web-app/.env.local can never configure a server under test, and no test can
 // reach a real vendor. Individual tests opt back in with the fixture adapter.
 const BLANK_PROVIDERS = {
   TRANSCRIPTION_PROVIDER: "", TRANSCRIPTION_BASE_URL: "", TRANSCRIPTION_API_KEY: "", TRANSCRIPTION_MODEL: "",
@@ -93,8 +94,8 @@ async function withServer({ configured, providers = BLANK_PROVIDERS }, run) {
   const port = socket.address().port;
   await new Promise((resolve) => socket.close(resolve));
   // Explicit values override any inherited secrets; never print process environment.
-  const child = spawn(process.execPath, ["../../node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", String(port)], {
-    cwd: new URL("../apps/web/", import.meta.url),
+  const child = spawn(process.execPath, [fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url)), "start", "--hostname", "127.0.0.1", "--port", String(port)], {
+    cwd: new URL("../echo-web-app/", import.meta.url),
     env: { ...process.env, NODE_ENV: "production", ECHO_OWNER_USERNAME: configured ? username : "", ECHO_OWNER_PASSWORD: configured ? password : "", ...providers },
     stdio: "pipe",
   });

@@ -1,7 +1,7 @@
 # Echo device console — XIAO ESP32S3 Sense
 
 Embedded firmware in the Echo repository, separate from the Next.js application.
-Open this `firmware/echo-device` folder in VS Code for PlatformIO development.
+Open this `echo-device` folder in VS Code for PlatformIO development.
 Do not use the earlier standalone installer: the repository is now the source of truth.
 
 ## First upload

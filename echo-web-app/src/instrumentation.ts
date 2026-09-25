@@ -5,6 +5,6 @@ export async function register(): Promise<void> {
   if (providerSetup.ok) return;
   console.warn(
     `[echo] recording is disabled until provider configuration is complete:\n  - ${providerSetup.problems.join("\n  - ")}\n` +
-      "  (this reflects configuration at startup; restart the server after editing apps/web/.env.local)",
+      "  (this reflects configuration at startup; restart the server after editing echo-web-app/.env.local)",
   );
 }

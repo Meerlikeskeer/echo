@@ -38,7 +38,7 @@ test("Vercel builds do not, because its build hook cannot find the trace file", 
 });
 
 test("output file tracing still points at the workspace root in both cases", async () => {
-  // Echo is an npm workspace with hoisted dependencies; tracing from apps/web
+  // Echo is an npm workspace with hoisted dependencies; tracing from echo-web-app
   // emits a bundle whose imports resolve to nothing. That is invisible at build
   // time and appears only when the emitted server is started, which is what
   // scripts/selfhost.test.mjs does.
@@ -54,7 +54,7 @@ test("output file tracing still points at the workspace root in both cases", asy
   //
   // What the root has to *be* is the directory whose package.json declares the
   // workspaces — that is what hoists dependencies into its node_modules, and it
-  // is the whole reason tracing from apps/web breaks. Asserting that is stricter
+  // is the whole reason tracing from echo-web-app breaks. Asserting that is stricter
   // than the old check, which a directory named `echo` anywhere would satisfy.
   const appDirectory = path.resolve(fileURLToPath(import.meta.url), "..", "..");
   for (const vercel of [undefined, "1"]) {
@@ -69,11 +69,11 @@ test("output file tracing still points at the workspace root in both cases", asy
       assert.fail(`tracing root has no package.json when VERCEL=${vercel}: ${root}`);
     }
     assert.ok(
-      Array.isArray(manifest.workspaces) && manifest.workspaces.includes("apps/web"),
+      Array.isArray(manifest.workspaces) && manifest.workspaces.includes("echo-web-app"),
       `tracing root is not the workspace root when VERCEL=${vercel}: ${root}`,
     );
     // And this app must sit inside it, so tracing actually covers the code being
     // built rather than some other workspace root further up the filesystem.
-    assert.equal(path.resolve(root, "apps", "web"), appDirectory, `tracing root does not contain this app when VERCEL=${vercel}`);
+    assert.equal(path.resolve(root, "echo-web-app"), appDirectory, `tracing root does not contain this app when VERCEL=${vercel}`);
   }
 });

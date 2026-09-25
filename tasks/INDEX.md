@@ -32,6 +32,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-018](ENG-018.md) `npm run check` could not pass in a worktree, because a test asserted a folder… | Implemented and verified; awaiting owner review | `eng/ENG-018-worktree-verification` |
 | [ENG-019](ENG-019.md) Stop the process from generating merge conflicts and locking agents out | Implemented and verified; awaiting owner review | `eng/ENG-019-conflict-free-task-records` |
 | [ENG-020](ENG-020.md) Apply the auto-merge workflow ENG-016 specified | Workflow applied and pushed; three owner-side settings remain | `eng/ENG-020-apply-auto-merge` |
+| [ENG-021](ENG-021.md) Organize the repository by application | Done — reorganized; web and container CI verified; awaiting owner merge | `refactor/ENG-021-repository-layout` |
 | [INT-001](INT-001.md) Branch integration and architecture documentation | Done | — |
 | [WEB-001](WEB-001.md) Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | [WEB-002](WEB-002.md) Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |

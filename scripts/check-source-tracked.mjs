@@ -3,7 +3,7 @@
 //
 // This is not hypothetical. `.gitignore` carried the line `recordings/`, meant
 // for saved audio. That pattern matches a directory of that name at ANY depth,
-// including `apps/web/src/app/api/recordings/`. The WEB-002 Route Handler was
+// including `echo-web-app/src/app/api/recordings/`. The WEB-002 Route Handler was
 // silently excluded from every commit while lint, types, unit tests, the
 // production build and the production HTTP tests all passed — because they ran
 // against the copy sitting on disk. A fresh clone would have answered 404 to
@@ -14,12 +14,12 @@
 
 import { execFileSync } from "node:child_process";
 
-const SOURCE_PATHS = ["apps/web/src", "apps/web/tests", "scripts", "tests"];
+const SOURCE_PATHS = ["echo-web-app/src", "echo-web-app/tests", "echo-device/src", "echo-device/include", "echo-device/tests", "scripts", "tests"];
 
 // Extensions that are always source. Build artefacts and caches under these
 // directories (`__pycache__`, `*.pyc`, `*.tsbuildinfo`) are legitimately
 // ignored and must not trip the guard.
-const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mjs", ".cjs", ".js", ".jsx", ".css", ".py"];
+const SOURCE_EXTENSIONS = [".cpp", ".h", ".ts", ".tsx", ".mjs", ".cjs", ".js", ".jsx", ".css", ".py"];
 
 const isSource = (file) => SOURCE_EXTENSIONS.some((extension) => file.endsWith(extension));
 

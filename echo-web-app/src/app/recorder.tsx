@@ -202,7 +202,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     return (
       <section aria-labelledby="unconfigured-title" className="rounded-2xl border border-amber-300 bg-amber-50 p-6 sm:p-8">
         <h2 id="unconfigured-title" className="text-xl font-semibold text-amber-900">Recording is unavailable</h2>
-        <p className="mt-3 leading-7 text-amber-900">Echo checks its provider configuration at startup and stays closed until it is complete. Set these in <code className="rounded bg-amber-100 px-1">apps/web/.env.local</code> and restart:</p>
+        <p className="mt-3 leading-7 text-amber-900">Echo checks its provider configuration at startup and stays closed until it is complete. Set these in <code className="rounded bg-amber-100 px-1">echo-web-app/.env.local</code> and restart:</p>
         <ul className="mt-4 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-900">
           {status.problems.map((problem) => <li key={problem}>{problem}</li>)}
         </ul>
