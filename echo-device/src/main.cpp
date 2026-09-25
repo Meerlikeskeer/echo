@@ -10,6 +10,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include "console_page.h"
+#include "recording_page.h"
 
 // XIAO ESP32S3 Sense only. GPIO21 is SD CS and must not be toggled as an LED.
 WebServer server(80);
@@ -43,11 +44,12 @@ void json(const String &s, int status = 200) {
 }
 void fail(const String &s, int code = 503) { json("{\"error\":" + quote(s) + "}", code); }
 void ok(const String &s) { json("{\"message\":" + quote(s) + "}"); }
+static bool idleOnly();
 bool action() {
   // A foreign web page cannot send this header without a CORS preflight.
   // No CORS access is granted; every associated Wi-Fi client is trusted.
   if (server.header("X-Echo-Action") != "1") { fail("Action header required", 403); return false; }
-  return true;
+  return idleOnly();
 }
 const char *resetReason() {
   switch (esp_reset_reason()) {
@@ -94,6 +96,7 @@ bool validPath(const String &p) {
   return true;
 }
 void listFiles() {
+  if(!idleOnly()) return;
   if (!sdReady) { fail("microSD is not mounted"); return; }
   String path = server.hasArg("path") ? server.arg("path") : "/";
   if (!validPath(path)) { fail("Invalid path", 400); return; }
@@ -165,21 +168,30 @@ void recordMicrophone() {
   server.send_P(200, "audio/wav", (const char *)wav, dataBytes + 44);
   free(wav); logEvent("Microphone stopped; sample delivered, not saved to SD");
 }
+#include "recorder.h"
+
 void routes() {
+  recorderRoutes();
   const char *headers[] = {"X-Echo-Action"}; server.collectHeaders(headers, 1);
   server.on("/", HTTP_GET, [] {
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("X-Frame-Options", "DENY");
+    server.sendHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
+    server.send_P(200,"text/html",RECORDING_PAGE);
+  });
+  server.on("/diagnostics", HTTP_GET, [] {
     server.sendHeader("Cache-Control", "no-store");
     server.sendHeader("X-Frame-Options", "DENY");
     server.sendHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; media-src 'self' blob:; frame-ancestors 'none'");
     server.send_P(200,"text/html",CONSOLE_PAGE);
   });
   server.on("/api/status", HTTP_GET, [] {
-    String s = "{\"firmware\":\"0.1.0\",\"chip\":" + quote(ESP.getChipModel()) + ",\"uptime\":" + String((unsigned long long)(esp_timer_get_time()/1000));
+    String s = "{\"firmware\":\"0.2.0\",\"chip\":" + quote(ESP.getChipModel()) + ",\"uptime\":" + String((unsigned long long)(esp_timer_get_time()/1000));
     s += ",\"reset\":" + quote(resetReason()) + ",\"cpu\":" + String(ESP.getCpuFreqMHz()) + ",\"heap\":" + String(ESP.getFreeHeap());
     s += ",\"minHeap\":" + String(ESP.getMinFreeHeap()) + ",\"psram\":" + String(ESP.getFreePsram()) + ",\"flash\":" + String(ESP.getFlashChipSize());
     s += ",\"ssid\":" + quote(ssid) + ",\"ip\":" + quote(WiFi.softAPIP().toString()) + ",\"clients\":" + String(WiFi.softAPgetStationNum());
     s += ",\"ble\":" + String(bleOn ? "true" : "false") + ",\"sd\":" + (sdReady ? "true" : "false");
-    s += ",\"sdUsed\":" + String((unsigned long long)(sdReady ? SD.usedBytes() : 0)) + ",\"sdTotal\":" + String((unsigned long long)(sdReady ? SD.totalBytes() : 0)) + ",\"ledPin\":21}";
+    s += ",\"sdUsed\":" + String((unsigned long long)(cardUsed)) + ",\"sdTotal\":" + String((unsigned long long)(cardTotal)) + ",\"ledPin\":21}";
     json(s);
   });
   server.on("/api/logs", HTTP_GET, [] {
@@ -190,6 +202,7 @@ void routes() {
   server.on("/api/camera/start", HTTP_POST, [] { if(action()) { if(cameraStart()) ok("Camera ready"); else fail("Camera initialization failed; check expansion board and USB logs"); } });
   server.on("/api/camera/stop", HTTP_POST, [] { if(action()) { cameraStop(); ok("Camera off"); } });
   server.on("/api/camera.jpg", HTTP_GET, [] {
+    if(!idleOnly()) return;
     if(!cameraReady) { fail("Start the camera first",409); return; }
     camera_fb_t *fb = esp_camera_fb_get();
     if(!fb) { logEvent("Camera capture failed"); fail("Camera capture failed"); return; }
@@ -202,6 +215,7 @@ void routes() {
   server.on("/api/sd/files", HTTP_GET, listFiles);
   server.on("/api/sd/test", HTTP_POST, testCard);
   server.on("/api/sd/file", HTTP_GET, [] {
+    if(!idleOnly()) return;
     if(!sdReady) { fail("Card not mounted"); return; }
     String p = server.arg("path");
     if(!validPath(p)) { fail("Invalid path",400); return; }
@@ -273,11 +287,12 @@ void setup() {
   // Password deliberately appears only on the local USB console, not web logs.
   Serial.printf("\nWi-Fi network: %s\nWi-Fi password: %s\nOpen http://192.168.4.1\n\n",ssid.c_str(),password.c_str());
   logEvent("Local Wi-Fi ready; connection details are in USB serial output");
-  SPI.begin(7,8,9,21); mountCard(); routes();
+  SPI.begin(7,8,9,21); mountCard(); cacheCard(); pinMode(0,INPUT_PULLUP); routes();
   logEvent("Web console ready; camera, microphone and BLE are off");
 }
 void loop() {
   server.handleClient();
+  pollRecordButton();
   if(restartAt && (int32_t)(millis()-restartAt)>=0) ESP.restart();
   static uint32_t heartbeat=0;
   if(millis()-heartbeat>30000) { heartbeat=millis(); logEvent("Heartbeat; free heap="+String(ESP.getFreeHeap())+"; Wi-Fi clients="+String(WiFi.softAPgetStationNum())); }
