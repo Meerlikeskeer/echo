@@ -23,7 +23,7 @@ const RETRYABLE: ReadonlySet<ProviderErrorCode> = new Set<ProviderErrorCode>(["r
 // the difference between a one-minute fix and an afternoon of guessing.
 const MESSAGES: Readonly<Record<ProviderErrorCode, string>> = {
   unconfigured: "Echo is missing settings it needs for this step.",
-  unauthorized: "The API key was rejected. Check the key in apps/web/.env.local.",
+  unauthorized: "The API key was rejected. Check the key in echo-web-app/.env.local.",
   rate_limited: "The service is busy and asked Echo to slow down. Try again in a moment.",
   timeout: "The service took too long to answer.",
   unavailable: "Echo could not reach the service.",

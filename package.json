@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/web"
+    "echo-web-app"
   ],
   "engines": {
     "node": ">=22 <23",
@@ -20,7 +20,7 @@
     "build": "npm run build --workspace @echo/web",
     "test:production": "node --test scripts/production.test.mjs",
     "selfhost:assemble": "node scripts/selfhost-assemble.mjs",
-    "selfhost:start": "node apps/web/.next/standalone/apps/web/server.js",
+    "selfhost:start": "node echo-web-app/.next/standalone/echo-web-app/server.js",
     "test:selfhost": "node --test scripts/selfhost.test.mjs",
     "check:tracked": "node scripts/check-source-tracked.mjs",
     "test:deployed": "node scripts/deployed-smoke.mjs",

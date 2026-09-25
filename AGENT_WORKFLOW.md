@@ -25,7 +25,7 @@ A regression preserves the code and evidence for human inspection; it does not a
 
 Echo now has a web application (WEB-001) and a real npm toolchain, but `agent-loop.json` deliberately keeps `ready: false` and the loop still blocks before spending model tokens. Preflight exits 2 with `BLOCKED: Configure real app and goal acceptance checks; ready is false.`
 
-What is now satisfied: `npm run typecheck`, `npm run lint` and `npm run build` are real commands backed by `apps/web`.
+What is now satisfied: `npm run typecheck`, `npm run lint` and `npm run build` are real commands backed by `echo-web-app`.
 
 What still blocks enabling it:
 
@@ -66,7 +66,7 @@ The loop creates no commits, pushes or deployments. Review its resulting diff be
 python3 -m unittest discover -s tests -v
 ```
 
-These tests use synthetic repositories and stub model calls; they exercise green, repairs, five-cycle exhaustion, regressions, missing reports, protected edits and process failures without model costs. **They certify the controller only — they do not validate `apps/web` or a live authenticated model run.** Last rerun after branch integration: 16 tests, 0 failures.
+These tests use synthetic repositories and stub model calls; they exercise green, repairs, five-cycle exhaustion, regressions, missing reports, protected edits and process failures without model costs. **They certify the controller only — they do not validate `echo-web-app` or a live authenticated model run.** Last rerun after branch integration: 16 tests, 0 failures.
 
 ## Implementation references
 

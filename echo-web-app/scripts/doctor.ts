@@ -6,7 +6,7 @@ async function main() {
   if (process.env.TRANSCRIPTION_PROVIDER !== "fixture" || process.env.LLM_PROVIDER !== "fixture") {
     try { loadEnvFile(".env.local"); } catch (error) {
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-        console.log("FAIL configuration: unable to load apps/web/.env.local");
+        console.log("FAIL configuration: unable to load echo-web-app/.env.local");
         process.exitCode = 1;
         return;
       }

@@ -368,3 +368,27 @@ readback test is not durable-copy evidence for Echo's retention rules. GPIO21 is
 reserved for SD chip-select rather than exposed as an LED toggle. Camera preview
 and microphone recording are exercised separately. Build and simulated UI tests
 do not establish physical peripheral function; hardware acceptance remains pending.
+
+
+## ADR-022 — Three application folders under Echo
+
+**Status:** Accepted · **Date:** 2026-09-25 · **Task:** ENG-021 · **Refines:** ADR-007, ADR-010, ADR-021
+
+The owner requested one `echo` root with `echo-web-app`, `echo-mac-app`, and
+`echo-device`. Move `apps/web` to `echo-web-app` and `firmware/echo-device` to
+`echo-device`; reserve `echo-mac-app` with a README because no Mac implementation
+exists yet. Keep shared scripts, controller tests, project documents and the npm
+lockfile at the root. Keep `@echo/web` as the package name and all existing runtime
+boundaries. Update web tracing depth, standalone paths, Docker assembly, npm
+workspace metadata, adapter paths, tests and current instructions together.
+
+Historical task records and earlier ADRs retain the paths used when their evidence
+was collected; this ADR is their current-path translation. No secrets, captured
+media, generated outputs or local dependencies are moved. Existing deployments
+are not changed by this source reorganization.
+
+The owner also requires ready-for-review PRs by default. A draft requires an
+explicit checklist of concrete owner actions needed to complete it. Pending CI,
+unverified hardware, local tool failures and stacked branches alone do not justify
+a draft. This is recorded in AGENTS.md and the PR template, without weakening
+verification or authorizing agents to merge.

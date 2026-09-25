@@ -19,7 +19,7 @@ Do not introduce a second frontend framework.
 ### Embedded diagnostics (WEB-019)
 
 ADR-021 opens a bounded hardware bring-up phase at the owner's request.
-`firmware/echo-device` is a separate PlatformIO build for the XIAO ESP32S3 Sense:
+`echo-device` is a separate PlatformIO build for the XIAO ESP32S3 Sense:
 C++, the Arduino ESP32 framework from pinned espressif32 7.1.3, bundled peripheral
 drivers, and a small HTML/JavaScript page served from flash. The existing Next.js
 application stack and deployment stay unchanged. The board exposes diagnostics
@@ -47,7 +47,7 @@ shadcn/ui is the approved base component system and enters the repository when a
 
 The intended workflow is: feature branch → GitHub → Vercel preview deployment → manual and automated verification → merge → production deployment. Keep feature branches compatible with preview deployments.
 
-**Vercel is a deployment target, not Echo's runtime (ADR-010).** REQ-009 makes self-hosted deployment an architectural baseline, so Echo must also run as a container using the Next.js standalone server. Application code targets portable primitives; introducing a platform-specific service — managed blob storage, queue, workflow, cron, KV or edge-config binding — requires an ADR stating how self-hosted deployments satisfy the same need. GPU-backed inference is always reached as a configured HTTP endpoint, never co-located with the web application. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. **Echo is deployed.** The Vercel project exists, the owner has set all ten environment variables for Production and Preview, and `npm run test:deployed` passes against the live origin over its real certificate — including the check this was built for, that Vercel's edge does not serve `/_next/static` ahead of Echo's gate. Two limits on how far that generalises: the URL tested was deployment-specific rather than a project alias, so an alias should be re-checked rather than assumed; and with Vercel Deployment Protection off, **Echo's own fail-closed gate is the only thing in front of the origin**, which makes `apps/web/src/proxy.ts` load-bearing in production — adding a path exclusion there is a production access change. Deploying is still an explicit owner-run command, never a push (ADR-014).
+**Vercel is a deployment target, not Echo's runtime (ADR-010).** REQ-009 makes self-hosted deployment an architectural baseline, so Echo must also run as a container using the Next.js standalone server. Application code targets portable primitives; introducing a platform-specific service — managed blob storage, queue, workflow, cron, KV or edge-config binding — requires an ADR stating how self-hosted deployments satisfy the same need. GPU-backed inference is always reached as a configured HTTP endpoint, never co-located with the web application. Do not introduce AWS, Railway, Render, Firebase Hosting, or another application-hosting platform without a specific architectural reason and an explicit decision recorded in `DECISIONS.md`. **Echo is deployed.** The Vercel project exists, the owner has set all ten environment variables for Production and Preview, and `npm run test:deployed` passes against the live origin over its real certificate — including the check this was built for, that Vercel's edge does not serve `/_next/static` ahead of Echo's gate. Two limits on how far that generalises: the URL tested was deployment-specific rather than a project alias, so an alias should be re-checked rather than assumed; and with Vercel Deployment Protection off, **Echo's own fail-closed gate is the only thing in front of the origin**, which makes `echo-web-app/src/proxy.ts` load-bearing in production — adding a path exclusion there is a production access change. Deploying is still an explicit owner-run command, never a push (ADR-014).
 
 #### ENG-002 self-host parity boundaries
 
@@ -55,7 +55,7 @@ ADR-010's promise is verified continuously rather than asserted.
 
 | Piece | Responsibility |
 | --- | --- |
-| `apps/web/next.config.ts` | `output: "standalone"` plus `outputFileTracingRoot` set to the repository root. The root matters: Echo is an npm workspace with hoisted dependencies, and tracing from `apps/web` emits a bundle whose imports resolve to nothing — a failure invisible until the emitted server is started. |
+| `echo-web-app/next.config.ts` | `output: "standalone"` plus `outputFileTracingRoot` set to the repository root. The root matters: Echo is an npm workspace with hoisted dependencies, and tracing from `echo-web-app` emits a bundle whose imports resolve to nothing — a failure invisible until the emitted server is started. |
 | `scripts/selfhost-assemble.mjs` | The single definition of "assemble a self-hosted bundle": copies `.next/static`, and `public/` when it exists. Both the test and the `Dockerfile` call it, so the tested layout and the shipped layout cannot drift. |
 | `scripts/selfhost.test.mjs` | Boots the assembled bundle — not `next start` — and asserts it serves every asset it links, still enforces the access gate, is configured purely at runtime, and runs correctly when relocated outside the repository the way the container relocates it. Runs inside `npm run check`. |
 | `Dockerfile` / `.dockerignore` | The portable deployment artifact. Carries no configuration and no environment file. |
@@ -78,13 +78,13 @@ ENG-010 makes deploying Echo reproducible and verifiable. It provisions nothing:
 | `scripts/deployed-smoke.mjs` | Verifies a live origin: HTTPS, the gate, wrong-credential refusal, every linked compiled asset refused without credentials, unknown paths private, `/diagnostics/*` absent in production, the Route Handler's own guard, and no password or `NEXT_PUBLIC_` value in anything served. Reads credentials from the environment and never prints them. |
 | `npm run test:deployed` | Runs it. Deliberately **not** part of `npm run check`: it needs a live URL and real credentials, so a CI gate cannot run it and must not appear to. |
 
-**The failure mode this exists to catch.** `apps/web/src/proxy.ts` excludes nothing, and `scripts/production.test.mjs` proves the gate covers page, RSC, API, static and unknown paths against a Node server. A hosting platform commonly serves `/_next/static` from a CDN edge that answers *before* the application runs. If it does, compiled assets become public on the deployed origin while every local check stays green — the same shape as the ENG-002 static-asset failure, one layer further out. The deployed check fetches each linked asset without credentials and fails if any is served.
+**The failure mode this exists to catch.** `echo-web-app/src/proxy.ts` excludes nothing, and `scripts/production.test.mjs` proves the gate covers page, RSC, API, static and unknown paths against a Node server. A hosting platform commonly serves `/_next/static` from a CDN edge that answers *before* the application runs. If it does, compiled assets become public on the deployed origin while every local check stays green — the same shape as the ENG-002 static-asset failure, one layer further out. The deployed check fetches each linked asset without credentials and fails if any is served.
 
-**`output: "standalone"` is conditional, and that is a deployment boundary rather than a detail.** ADR-010 needs standalone output for the container; Vercel needs it absent. The platform injects its own `modifyConfig` and an `onBuildComplete` hook that reads `.next/next-server.js.nft.json`, and with standalone on that file is not where the hook looks — the build fails with `ENOENT` *after* compiling, type-checking and generating pages successfully, so it reads as a code error and is not one. `apps/web/next.config.ts` therefore sets `output` from `process.env.VERCEL`, and `apps/web/tests/next-config.test.ts` asserts both branches. Vercel performs its own output tracing, so the container loses nothing and neither does Vercel.
+**`output: "standalone"` is conditional, and that is a deployment boundary rather than a detail.** ADR-010 needs standalone output for the container; Vercel needs it absent. The platform injects its own `modifyConfig` and an `onBuildComplete` hook that reads `.next/next-server.js.nft.json`, and with standalone on that file is not where the hook looks — the build fails with `ENOENT` *after* compiling, type-checking and generating pages successfully, so it reads as a code error and is not one. `echo-web-app/next.config.ts` therefore sets `output` from `process.env.VERCEL`, and `echo-web-app/tests/next-config.test.ts` asserts both branches. Vercel performs its own output tracing, so the container loses nothing and neither does Vercel.
 
 **Host-agnostic by construction (ADR-010).** The script takes a base URL and asserts only on HTTP behavior, so it verifies the container behind the owner's own reverse proxy exactly as it verifies Vercel. Nothing platform-specific enters application code: `vercel.json` is build configuration, not a queue, blob store, cron or KV binding, and adopting one of those still requires its own ADR.
 
-**Deployment is a prerequisite, not a nicety.** `checksum()` in `apps/web/src/lib/recording/session.ts` needs `crypto.subtle`, which browsers expose only in a secure context, and ADR-013 makes a deployed HTTPS origin the only way Echo is reachable from a second device. Mobile capture acceptance depends on this task completing.
+**Deployment is a prerequisite, not a nicety.** `checksum()` in `echo-web-app/src/lib/recording/session.ts` needs `crypto.subtle`, which browsers expose only in a secure context, and ADR-013 makes a deployed HTTPS origin the only way Echo is reachable from a second device. Mobile capture acceptance depends on this task completing.
 
 ### Initial Backend
 
@@ -115,7 +115,7 @@ Documented from what is actually present in the repository:
 
 | Tool | Detail |
 | --- | --- |
-| npm workspaces | Root `package.json` declares `workspaces: ["apps/web"]`; root scripts delegate to the `@echo/web` workspace |
+| npm workspaces | Root `package.json` declares `workspaces: ["echo-web-app"]`; root scripts delegate to the `@echo/web` workspace |
 | npm | `10.9.8` (`packageManager`), `engines.npm >=10 <11` |
 | Node.js | `22.23.2` pinned in `.nvmrc`; `engines.node >=22 <23` |
 | `package-lock.json` | Committed at the repository root; `npm ci` installs it without rewriting resolution |
@@ -131,7 +131,7 @@ Documented from what is actually present in the repository. Do not claim a frame
 | --- | --- |
 | ESLint `9.39.5` + `eslint-config-next` | Linting; `--max-warnings=0` |
 | `next typegen` + `tsc --noEmit` | Generated route types, then strict type checking |
-| Node built-in test runner via `tsx` | Unit/behavior tests in `apps/web/tests/` |
+| Node built-in test runner via `tsx` | Unit/behavior tests in `echo-web-app/tests/` |
 | Node built-in test runner (`node --test`) | Production HTTP tests in `scripts/production.test.mjs` against a real production build |
 | Node built-in test runner (`node --test`) | Self-host parity tests in `scripts/selfhost.test.mjs` against the standalone bundle a container runs (ENG-002) |
 | `next build` | Real production compilation, emitting the standalone bundle |
@@ -199,7 +199,7 @@ A future agent must not silently replace, or introduce an alternative to, a docu
 
 What exists today, after integrating DOC-001, ENG-001 and WEB-001 into `main`:
 
-- `apps/web`: a Next.js App Router application behind a fail-closed single-owner HTTP Basic gate, with one page — the recorder — and one Route Handler, `POST /api/recordings`.
+- `echo-web-app`: a Next.js App Router application behind a fail-closed single-owner HTTP Basic gate, with one page — the recorder — and one Route Handler, `POST /api/recordings`.
 - The WEB-002 vertical slice: browser microphone capture of a single 30–60 second clip, uploaded in one request, transcribed and turned into notes through the `TranscriptionProvider` and `NotesProvider` ports, then displayed. Two adapters ship per port, `openai-compatible` and `fixture` (ADR-009).
 - Provider configuration is validated at server startup, so a missing key disables recording with a 503 and a named-variable explanation instead of failing at the first recording.
 - Verification: ESLint, strict TypeScript, unit tests, a real production build, and production HTTP tests, aggregated by `npm run check` and run in GitHub Actions.
@@ -207,26 +207,23 @@ What exists today, after integrating DOC-001, ENG-001 and WEB-001 into `main`:
 
 WEB-003 adds browser-memory sessions and complete playable chunk capture on the feature branch, pending full verification. See its boundaries below. Overlap stitching, incremental processing during capture, persistence, offline queueing, history, diarization, research, reminders, background processing still do not exist in the web application. WEB-019 adds a separate, not yet hardware-verified diagnostic firmware. No database, object storage or production authentication is wired up.
 
-## Layout (only apps/web is implemented)
+## Layout (ADR-022)
 
 ```text
-apps/web/                 Next.js + TypeScript + Tailwind UI and server endpoints
-  src/app/                Pages, client components, and Route Handlers
-  src/lib/access.ts       Single-owner access policy (WEB-001)
-  src/lib/providers/      Provider ports, adapters, configuration, disclosure
-  src/lib/recording/      The WEB-002 clip → transcript → notes pipeline
-packages/audio/           Capture, chunk metadata, durable queue contracts
-packages/transcription/   Transcription provider interface and adapters
-packages/ai/              Structured notes and classification providers
-packages/storage/         Durable object storage and verification adapters
-packages/research/        Opt-in research providers and cited results
-packages/reminders/       Confirmed reminder/calendar export adapters
-packages/shared/          Domain types, validation, processing states
-docs/                    Future detailed designs (not scaffolded yet)
-tests/                    Future integration and synthetic fixtures
+echo/
+  echo-web-app/           Next.js + React UI, server endpoints, web tests
+  echo-mac-app/           Documented placeholder; native receiver not implemented
+  echo-device/            PlatformIO C++ firmware and embedded console
+  scripts/               Shared build, deployment verification and controller
+  tests/                 Controller and adapter tests
+  tasks/, status/        Task records and acceptance evidence
 ```
 
-Only `apps/web/`, `scripts/` and `tests/` exist today; the `packages/` tree is planned, not scaffolded. Introduce directories when they contain real implementation. A separate worker service is not required for the first milestone; keep processing boundaries extractable so longer jobs can later move to a durable worker.
+Root npm workspace scripts target `echo-web-app`; the package name stays `@echo/web`.
+Its tracing root is one directory above the web app. Standalone output mirrors this
+layout at `echo-web-app/.next/standalone/echo-web-app/server.js`. Firmware is built
+separately with PlatformIO, not npm. The Mac directory introduces no implementation
+or new framework. Future shared packages should be added only with an immediate need.
 
 ## Flow
 
@@ -299,9 +296,9 @@ Historical WEB-002 behavior; WEB-003 supersedes the one-clip capture boundary be
 
 ## WEB-001 access and verification boundaries
 
-`apps/web/src/proxy.ts` applies a fail-closed HTTP Basic gate to every route, including assets and RSC. `src/lib/access.ts` checks server configuration and exact credentials using constant-time digest comparison. The server page also calls the server-only `requireOwnerAccess` guard independently; future endpoints, actions, and data access must call the guard at their own boundary. There is no development bypass. This is a single-owner shell, not a multi-user identity system. No data store or external SDK exists. Server credentials are never passed to components.
+`echo-web-app/src/proxy.ts` applies a fail-closed HTTP Basic gate to every route, including assets and RSC. `src/lib/access.ts` checks server configuration and exact credentials using constant-time digest comparison. The server page also calls the server-only `requireOwnerAccess` guard independently; future endpoints, actions, and data access must call the guard at their own boundary. There is no development bypass. This is a single-owner shell, not a multi-user identity system. No data store or external SDK exists. Server credentials are never passed to components.
 
-Root npm workspace scripts delegate to `apps/web`; synthetic behavior tests and a real production HTTP smoke suite back PR CI. Tailwind compiles locally through PostCSS with system fonts; builds do not need a font service. See ADR-007 and README for limitations and disabled agent-loop requirements. The ENG-001 controller shares this repository but is independent of the web application: its Python tests certify the controller's own control flow and do not certify `apps/web`. Its `test` and `acceptance` adapters (`scripts/run-app-tests.py`, `scripts/run-app-acceptance.py`) are not implemented, so the loop stays disabled; see ADR-006 and AGENT_WORKFLOW.md.
+Root npm workspace scripts delegate to `echo-web-app`; synthetic behavior tests and a real production HTTP smoke suite back PR CI. Tailwind compiles locally through PostCSS with system fonts; builds do not need a font service. See ADR-007 and README for limitations and disabled agent-loop requirements. The ENG-001 controller shares this repository but is independent of the web application: its Python tests certify the controller's own control flow and do not certify `echo-web-app`. Its `test` and `acceptance` adapters (`scripts/run-app-tests.py`, `scripts/run-app-acceptance.py`) are not implemented, so the loop stays disabled; see ADR-006 and AGENT_WORKFLOW.md.
 
 ## WEB-004 durable queue boundaries
 

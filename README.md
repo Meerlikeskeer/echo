@@ -39,25 +39,34 @@ Vercel is the hosted target but not Echo's runtime: the application must also ru
 ## Repository structure
 
 ```text
-apps/web/                 Next.js application (the only implemented app)
-  src/app/                App Router pages, layout, session shell
-  src/lib/                access policy and the server-only owner guard
-  src/proxy.ts            fail-closed request gate over every route
-  tests/                  unit/behavior tests (Node test runner via tsx)
-scripts/agent_loop.py     ENG-001 bounded builder/checker controller
-scripts/production.test.mjs  production HTTP tests against a real build
-tests/test_agent_loop.py  controller tests (Python unittest)
-agents/, .claude/         builder/checker role definitions and commands
-agent-loop.json           controller configuration — "ready": false (disabled)
-.github/workflows/        pull-request checks
-packages/*                planned, not scaffolded
+echo/
+  echo-web-app/           Next.js application, server endpoints and web tests
+  echo-mac-app/           Reserved for the native Mac receiver (not implemented)
+  echo-device/            XIAO ESP32S3 Sense PlatformIO firmware and diagnostics
+  scripts/               Shared build, verification and agent-controller tooling
+  tests/                 Controller and verification-adapter tests
+  tasks/, status/        Task records and acceptance evidence
+  .github/               Pull-request templates and checks
+  package.json           Web workspace commands, run from this root
+  package-lock.json      Shared npm lockfile
 ```
+
+Open `echo/` in VS Code for repository-wide work, or `echo-device/` for the
+PlatformIO firmware tools. The Mac folder is a documented placeholder, not a
+working desktop application. Web commands remain `npm ci`, `npm run dev` and
+`npm run check` from the repository root. Device commands run inside `echo-device`.
+
+When updating an existing local checkout, move your own untracked web configuration
+from the old web folder to `echo-web-app/.env.local` yourself; do not commit it.
+This reorganization does not read or copy local secrets, recordings or generated
+build directories. Existing deployments remain unchanged until an explicit deployment.
+
 
 The product direction is a 30–60 second recording → transcript → generated notes, then durable chunking and offline behavior before expanding features. Modular packages for audio, transcription, AI, storage, research, reminders, and shared domain types remain planned paths.
 
 ## Configuration and privacy
 
-[env.example](env.example) contains blank configuration placeholders only. It has no leading dot on purpose: agent sandboxes deny writes to every `.env*` path, and a tracked one stopped them checking the repository out (ENG-019). Use `apps/web/.env.local` for local configuration; never commit actual credentials. Private repository visibility does not replace application access control. Recording content and provider keys must not appear in logs, fixtures, analytics, or browser bundles.
+[env.example](env.example) contains blank configuration placeholders only. It has no leading dot on purpose: agent sandboxes deny writes to every `.env*` path, and a tracked one stopped them checking the repository out (ENG-019). Use `echo-web-app/.env.local` for local configuration; never commit actual credentials. Private repository visibility does not replace application access control. Recording content and provider keys must not appear in logs, fixtures, analytics, or browser bundles.
 
 User-supplied keys and provider choice are core requirements. Cloud processing must be explicit; self-hosted deployment is the architectural baseline. Calendar/reminder writes require user confirmation.
 
@@ -71,8 +80,8 @@ Use Node **22.23.2** (`nvm install && nvm use` if nvm is installed) and npm **10
 
 ```sh
 npm ci
-cp env.example apps/web/.env.local
-# Edit apps/web/.env.local: set ECHO_OWNER_USERNAME and a random >=32-character ECHO_OWNER_PASSWORD.
+cp env.example echo-web-app/.env.local
+# Edit echo-web-app/.env.local: set ECHO_OWNER_USERNAME and a random >=32-character ECHO_OWNER_PASSWORD.
 npm run dev
 ```
 
@@ -127,7 +136,7 @@ feature branch → GitHub → Vercel preview deployment
 
 `--include=dev` is not optional and the first production deployment failed without it. Vercel sets `NODE_ENV=production` for the install step, and npm reads that as `--omit=dev`, so a plain `npm ci` installs 26 packages instead of 373. Everything `next build` needs to compile — `typescript`, `tailwindcss`, `@tailwindcss/postcss`, the `@types/*` packages — is a devDependency, correctly so: they are build-time tools, not runtime dependencies. The build then dies resolving `@tailwindcss/postcss` from `globals.css`, and Vercel reports only `Command "npm run build" exited with 1`. Reproduce it locally with `NODE_ENV=production npm ci && npm run build`; the same commands with `--include=dev` succeed.
 
-Echo is an npm workspace whose application lives in `apps/web` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** — answer `./` when the CLI asks where your code is located — and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `apps/web` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
+Echo is an npm workspace whose application lives in `echo-web-app` while `package-lock.json` and the hoisted `node_modules` live at the root. Keeping the Vercel **Root Directory at the repository root** — answer `./` when the CLI asks where your code is located — and naming the commands here is what makes the hosted install match `npm ci` locally. The alternative — setting Root Directory to `echo-web-app` in the dashboard — needs "Include source files outside of the Root Directory" enabled as well, and stores the arrangement somewhere Git cannot see. Use it only as a fallback if the build above fails, and record why.
 
 #### Provisioning runbook
 
@@ -165,7 +174,7 @@ CI is unaffected: `.github/workflows/pull-request.yml` still runs `npm run check
 
 `npm run check` exercises the application against `next start` on loopback, and `scripts/container-smoke.mjs` exercises the self-hosted image. Neither can see what a hosting platform puts *in front of* the application.
 
-`apps/web/src/proxy.ts` gates every path with no exclusions — page, RSC, API, static assets and unknown paths alike — and `scripts/production.test.mjs` proves that against a Node server. A hosting platform typically serves `/_next/static` from a CDN edge that can answer **before** the application runs. If it does, Echo's compiled assets are public on the deployed origin while every local check stays green, and nothing in the repository would notice. `scripts/deployed-smoke.mjs` fetches every asset the page links without credentials and fails if any is served.
+`echo-web-app/src/proxy.ts` gates every path with no exclusions — page, RSC, API, static assets and unknown paths alike — and `scripts/production.test.mjs` proves that against a Node server. A hosting platform typically serves `/_next/static` from a CDN edge that can answer **before** the application runs. If it does, Echo's compiled assets are public on the deployed origin while every local check stays green, and nothing in the repository would notice. `scripts/deployed-smoke.mjs` fetches every asset the page links without credentials and fails if any is served.
 
 It also confirms the things only a real origin can confirm: HTTPS (Basic credentials travel in every request, and `crypto.subtle` — which checksums every recorded chunk — is undefined without a secure context), that wrong credentials are refused rather than merely absent ones, that `/diagnostics/*` does not exist in production even for the owner, that `POST /api/recordings` guards itself independently of the proxy, and that neither the page nor any compiled asset contains the owner password.
 
@@ -181,7 +190,7 @@ REQ-009 makes self-hosted deployment an architectural baseline, so Echo must run
 
 ```sh
 docker build -t echo .
-docker run --rm -p 3000:3000 --env-file apps/web/.env.local echo
+docker run --rm -p 3000:3000 --env-file echo-web-app/.env.local echo
 ```
 
 The image contains no configuration. `ECHO_OWNER_USERNAME`, `ECHO_OWNER_PASSWORD` and the provider variables are read from the environment when the server starts, so one image serves any deployment and the image itself holds no secret. `.dockerignore` keeps every environment file out of the build context, and CI asserts that no `.env*` file exists inside the built image.
@@ -219,7 +228,7 @@ ECHO_OWNER_USERNAME=... ECHO_OWNER_PASSWORD=... \
 
 - ESLint is pinned to 9.39.5 because the current Next React lint plugin crashes under ESLint 10 (`context.getFilename` API removal). npm marks ESLint 9 unsupported; upgrading the compatible plugin/toolchain remains a maintenance requirement. No lint rules are disabled.
 - Provision the owner's username and random password in the server environment and configure HTTPS before hosted use. No real credentials are checked in or required by CI.
-- Recording requires provider configuration. Copy `env.example` to `apps/web/.env.local` and set `TRANSCRIPTION_PROVIDER`/`LLM_PROVIDER` (`openai-compatible` or `fixture`) with the matching `*_BASE_URL`, `*_API_KEY` and `*_MODEL`. Echo validates this at startup and disables recording, naming the missing variables, until it is complete.
+- Recording requires provider configuration. Copy `env.example` to `echo-web-app/.env.local` and set `TRANSCRIPTION_PROVIDER`/`LLM_PROVIDER` (`openai-compatible` or `fixture`) with the matching `*_BASE_URL`, `*_API_KEY` and `*_MODEL`. Echo validates this at startup and disables recording, naming the missing variables, until it is complete.
 - The `openai-compatible` adapter is verified against a stubbed transport, not against a live vendor. A live check is a manual step: configure a real base URL and key, run `npm run dev`, and record a clip.
 - Storage, owner-scoped persisted data, mobile-browser validation, and deployment/recovery remain their later WEB tasks.
 - `agent-loop.json` is present with `"ready": false`; automation remains **disabled**. Do not set it true until its actual check commands and per-test reporting adapters are implemented and independently demonstrated to report failures and individual test outcomes. Current human/CI commands and Node TAP output are not an agent-loop adapter certification.
