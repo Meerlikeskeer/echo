@@ -94,8 +94,8 @@ test("WAV sample rate and duration must match metadata even when checksum matche
   const malformed = new Blob([bytes]);
   manifest.chunks[0] = { ...manifest.chunks[0], checksum: await checksum(malformed) };
   await assert.rejects(readDeviceRecording(pack(manifest, [malformed, audios[1]])), /audio format/);
-  const valid = await fixture(); valid.manifest.chunks[0].endMs += 1;
-  valid.manifest.chunks[1].startMs += 1;
+  const valid = await fixture(); valid.manifest.chunks[0] = { ...valid.manifest.chunks[0], endMs: valid.manifest.chunks[0].endMs + 1 };
+  valid.manifest.chunks[1] = { ...valid.manifest.chunks[1], startMs: valid.manifest.chunks[1].startMs + 1 };
   await assert.rejects(readDeviceRecording(pack(valid.manifest, valid.audios)), /audio format/);
 });
 
@@ -111,7 +111,7 @@ test("failed persistence keeps the prefix, never marks complete, and reimport ca
 test("identity conflicts and full budget are refused before saving any new audio", async () => {
   const { manifest, audios } = await fixture(), recording = await readDeviceRecording(pack(manifest, audios));
   const conflict = memory(); await conflict.offer(recording.chunks[1]);
-  conflict.rows[0].metadata = { ...conflict.rows[0].metadata, checksum: "0".repeat(64) };
+  conflict.rows[0] = { ...conflict.rows[0], metadata: { ...conflict.rows[0].metadata, checksum: "0".repeat(64) } };
   await assert.rejects(saveDeviceRecording(recording, conflict), /conflicts/); assert.equal(conflict.offers, 1);
   const full = memory();
   full.rows.push({ ...recording.chunks[0], metadata: { ...recording.chunks[0].metadata, sessionId: "other" }, audio: { size: AUDIO_BUDGET } as Blob, state: "pending", attempts: 0, nextAttemptAt: 0 });
