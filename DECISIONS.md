@@ -392,3 +392,45 @@ explicit checklist of concrete owner actions needed to complete it. Pending CI,
 unverified hardware, local tool failures and stacked branches alone do not justify
 a draft. This is recorded in AGENTS.md and the PR template, without weakening
 verification or authorizing agents to merge.
+
+## ADR-023 — General-purpose device recording and explicit browser import
+
+**Status:** Accepted for implementation · **Date:** 2026-09-25 · **Task:** WEB-020 · **Extends:** ADR-021
+
+The owner explicitly requested the first usable Echo device firmware, confirmed a
+microSD card is installed, and clarified that sessions mean meetings,
+conversations, lectures and other recordings, not a lecture-specific product.
+This expands the diagnostics-only hardware exception to an offline recording MVP.
+
+Keep the approved PlatformIO/C++/Arduino stack. The board captures 16 kHz mono
+PCM16 audio independently of the browser, saves one-minute WAV containers with
+2 seconds of repeated audio at boundaries, and stops at two hours or on a capture
+or storage fault. Two hours of this uncompressed format fits the existing 256 MiB
+browser audio budget when that budget has sufficient free space. BOOT and the
+local browser control start/stop. GPIO21 remains reserved for SD chip-select.
+
+Completed chunks carry stable session/chunk identities, sample-derived relative
+times and SHA-256 checksums. A completion marker is written only after a clean
+stop and successful file/journal writes. Recovery preserves an interrupted
+session as partial, including its unfinished raw tail on the card. There is no
+clock-derived date claim, deletion, formatting, or claim of a verified independent
+copy. A dedicated capture task and explicit SD/peripheral exclusion isolate
+recording from blocking diagnostics and downloads. Fault detection does not prove
+power-loss durability or microphone quality; physical acceptance remains required.
+
+The device exports one `.echo` file: `ECHO0001`, a little-endian uint32 JSON byte
+length, a version-1 manifest, then ordered WAV bytes. The manifest carries
+`sessionId`, `complete` and standard Echo `AudioChunk` records. The browser checks
+bounds, order, PCM headers, lengths and every checksum before offering any audio
+to its existing durable queue. Reimport preserves identity and existing results;
+partial sessions never acquire completion evidence. Users explicitly import and
+process recordings after switching from device Wi-Fi to their normal network.
+Existing server-side providers generate transcripts and general-purpose notes;
+no provider keys, new backend, public device endpoint or home Wi-Fi provisioning
+is introduced. No native Mac receiver or on-device AI is claimed.
+
+The device UI stays self-contained in flash, extending ADR-021's embedded UI
+exception. The web importer uses the existing React/Tailwind application. Model
+instructions adapt notes to the recording, preserving meeting decisions, owners
+and deadlines only when actually stated, while retaining detailed educational
+notes for educational recordings. The artifact schema stays compatible.
