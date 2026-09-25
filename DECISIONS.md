@@ -336,3 +336,35 @@ Gap descriptions carry chunk bounds only from validated chunk metadata or comple
 Transcription and per-chunk notes deadlines are 90 and 180 seconds, fitting together below the 300-second route allowance. Session guide generation has 240 seconds. Browser requests allow 310 seconds, so the route can return a readable provider timeout first.
 
 Validated guides are stored in a separate browser-local IndexedDB store keyed by session and transcript revision. This introduces no provider or server durability claim, does not migrate or delete audio, and cannot make an older revision appear current. A failed guide write leaves the displayed result downloadable and raises a warning. Real browser recovery and full-lecture acceptance remain separate from synthetic evidence.
+
+
+## ADR-021 — Board-hosted diagnostics for the XIAO ESP32S3 Sense
+
+**Status:** Accepted for implementation · **Date:** 2026-09-25 · **Task:** WEB-019 · **Extends:** ADR-007, ADR-008
+
+**Context:** The owner has received the hardware and explicitly requested a local
+ESP32 console followed later by Echo recording and a Mac receiver. On this date
+the owner chose to keep the firmware in the existing Echo repository. This opens
+a limited hardware bring-up phase alongside the web work, superseding the earlier
+blanket hardware deferral for this diagnostic task. Next.js cannot run on this
+microcontroller; the approved web application stack remains in apps/web.
+
+**Decision:** Store the PlatformIO project in firmware/echo-device. Use C++ and
+the Arduino ESP32 framework delivered by the pinned espressif32 7.1.3 platform.
+Use its bundled drivers and WebServer to serve a small self-contained HTML/JS
+console from device flash. This is an embedded diagnostic surface, not a second
+application backend, web framework, hosting provider, or replacement design system.
+Camera and microphone tests require deliberate activation. The device creates
+a password-protected local Wi-Fi access point; a per-device password is saved in
+NVS and displayed only through the USB serial console for provisioning. Anyone
+with that password is trusted to operate the bench console; no internet exposure
+or production authentication claim is made. Application logs in RAM exclude that
+password and recording contents. Driver/boot/crash output remains on USB.
+
+**Limits:** No Echo API integration, automatic audio retention, battery monitoring,
+Mac app, OTA flashing, arbitrary pin controls or cloud service is introduced. BLE
+is a nonconnectable test beacon, not a paired control/data interface. The SD
+readback test is not durable-copy evidence for Echo's retention rules. GPIO21 is
+reserved for SD chip-select rather than exposed as an LED toggle. Camera preview
+and microphone recording are exercised separately. Build and simulated UI tests
+do not establish physical peripheral function; hardware acceptance remains pending.

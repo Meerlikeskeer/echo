@@ -12,7 +12,7 @@ Users supply provider credentials. Keep transcription, LLM, storage, research, a
 
 Shared documentation, the bounded builder/checker controller, the web shell and the first recording slice are established. WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling; ENG-001 adds the controller described in `AGENT_WORKFLOW.md`, whose automated feature loop remains deliberately disabled. WEB-002 adds the vertical slice: record one 30–60 second clip in the browser, post it to a Route Handler, and get back a transcript and generated notes through swappable provider ports (ADR-009).
 
-Nothing is persisted — a recording exists only for the lifetime of the request that carries it — and there are still no sessions, chunking, offline queue, history, diarization, or hardware. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands. WEB-003 is the next product milestone.
+Nothing is persisted — a recording exists only for the lifetime of the request that carries it — and there are still no sessions, chunking, offline queue, history, diarization, or hardware in that original web milestone. See `TASKS.md` for handoff evidence and `README.md` for exact setup commands. WEB-003 is the next product milestone.
 
 ## Product and UI direction
 
@@ -42,7 +42,9 @@ A future desktop layout may conceptually resemble:
 
 An opened session may eventually expose areas such as `Overview`, `Notes`, `Transcript`, `Tasks`, and `Research`. This is directional guidance, not a commitment to build those screens in any particular task.
 
-## Deferred hardware vision
+## Hardware bring-up and deferred product vision
+
+The owner opened a limited XIAO ESP32S3 Sense diagnostics phase on 2026-09-25 (WEB-019, ADR-021). Its console lives in `firmware/echo-device`; recording/transcription integration and the Mac receiver remain future work.
 
 A future device may record and process independently, then sync notes and pending reminders when the phone is available. BLE is for control; Wi-Fi is for audio/data transfer. Explore up-to-30-ft room capture, contact-phone recording experiments, custom speaker audio, LED and haptic feedback, and eventual speech output. These are investigation targets, not proven capabilities or web acceptance criteria. Hardware feasibility, battery, acoustic performance, consent UX, and platform constraints need later validation.
 
