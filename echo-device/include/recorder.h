@@ -3,7 +3,7 @@
 // Only the capture task touches SD while busy. HTTP/BOOT starts happen on loop().
 #include "recording_format.h"
 static volatile bool capturing=false,stopRequested=false;
-static volatile uint32_t capturedSamples=0,savedChunks=0,micLevel=0;
+static volatile uint32_t capturedSamples=0,savedChunks=0,micLevel=0,stackFree=0;
 static char captureError[120]={0};
 static String activeSession;
 static uint64_t cardUsed=0,cardTotal=0;
@@ -66,6 +66,7 @@ static void captureTask(void *) {
       micLevel=peak;chunkSamples+=bytes/2;capturedSamples+=bytes/2;
       if(chunkSamples==CHUNK) {
         if(!commitChunk(true)){captureFail("Could not commit audio metadata; session is partial.");break;}
+        stackFree=uxTaskGetStackHighWaterMark(nullptr);
         if(capturedSamples>=LIMIT||stopRequested){chunkSamples=0;break;}
         if(available<RESERVE+CHUNK*2){captureFail("Card space reserve reached; recording stopped. No audio was deleted.");chunkSamples=0;break;}
         chunkStart=capturedSamples-OVERLAP;
@@ -97,6 +98,8 @@ static void captureTask(void *) {
     File read=SD.open("/echo/"+activeSession+"/complete");uint32_t check=0;good=good&&read&&read.read((uint8_t*)&check,4)==4&&check==count;read.close();
     if(!good)captureFail("Completion marker could not be verified; inspect the card.");
   }
+  // Measured, not assumed: hashFile puts 2 KiB on this stack above SD and mbedtls.
+  stackFree=uxTaskGetStackHighWaterMark(nullptr);
   cacheCard();capturing=false;vTaskDelete(nullptr);
 }
 static bool validId(const String &id) {if(!id.length()||id.length()>64)return false;for(size_t i=0;i<id.length();i++)if(!isalnum((unsigned char)id[i])&&id[i]!='-')return false;return true;}
@@ -121,11 +124,11 @@ static void startCapture(bool reply=true) {
   SD.mkdir("/echo");char id[48];snprintf(id,sizeof(id),"session-%08lx-%08lx",(unsigned long)esp_random(),(unsigned long)esp_random());activeSession=id;
   if(SD.exists("/echo/"+activeSession)||!SD.mkdir("/echo/"+activeSession)){reject("Cannot create a unique session directory.");return;}
   capturedSamples=0;savedChunks=0;micLevel=0;captureError[0]=0;stopRequested=false;capturing=true;
-  if(xTaskCreatePinnedToCore(captureTask,"echo-capture",8192,nullptr,3,nullptr,1)!=pdPASS){capturing=false;reject("Cannot start recording task.");return;}if(reply)ok("Recording to microSD");
+  if(xTaskCreatePinnedToCore(captureTask,"echo-capture",16384,nullptr,3,nullptr,1)!=pdPASS){capturing=false;reject("Cannot start recording task.");return;}if(reply)ok("Recording to microSD");
 }
 static void recorderRoutes() {
   server.on("/api/recording",HTTP_GET,[]{
-    json("{\"recording\":"+String(capturing?"true":"false")+",\"stopping\":"+String(capturing&&stopRequested?"true":"false")+",\"sessionId\":"+quote(activeSession)+",\"durationMs\":"+String(capturedSamples/16)+",\"chunks\":"+String(savedChunks)+",\"level\":"+String(micLevel)+",\"error\":"+quote(captureError)+",\"sd\":"+String(sdReady?"true":"false")+",\"freeBytes\":"+String((unsigned long long)(cardTotal-cardUsed))+"}");
+    json("{\"recording\":"+String(capturing?"true":"false")+",\"stopping\":"+String(capturing&&stopRequested?"true":"false")+",\"sessionId\":"+quote(activeSession)+",\"durationMs\":"+String(capturedSamples/16)+",\"chunks\":"+String(savedChunks)+",\"level\":"+String(micLevel)+",\"stackFree\":"+String(stackFree)+",\"error\":"+quote(captureError)+",\"sd\":"+String(sdReady?"true":"false")+",\"freeBytes\":"+String((unsigned long long)(cardTotal-cardUsed))+"}");
   });
   server.on("/api/recording/start",HTTP_POST,[]{if(action())startCapture();});
   server.on("/api/recording/stop",HTTP_POST,[]{if(server.header("X-Echo-Action")!="1"){fail("Action header required",403);return;}stopRequested=true;ok("Finishing and verifying your recording");});
