@@ -27,4 +27,4 @@ Statuses here describe required product behavior, not completed implementation. 
 
 ## Deferred device requirements
 
-Independent capture/processing and later phone sync; BLE control; Wi-Fi transfers; investigation of up-to-30-ft room capture and contact-phone recording; custom speaker audio; LED and haptic feedback; eventual speech output. Hardware and native app implementation are deferred. Acoustic distance and contact recording are experiments, not promised performance.
+Independent capture/processing and later phone sync; BLE control; Wi-Fi transfers; investigation of up-to-30-ft room capture and contact-phone recording; custom speaker audio; LED and haptic feedback; eventual speech output. Owner-approved exception (2026-09-25, WEB-019/ADR-021): local XIAO ESP32S3 Sense diagnostics firmware is now in scope. Production hardware recording and native app implementation remain deferred. Acoustic distance and contact recording are experiments, not promised performance.

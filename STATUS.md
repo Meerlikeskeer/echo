@@ -49,6 +49,8 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-019 adds `firmware/echo-device`, a PlatformIO XIAO ESP32S3 Sense diagnostics console (ADR-021). Firmware compilation and simulated UI tests are separate from pending physical acceptance. It does not yet run Echo recording/transcription or connect to a Mac app.
+
 - WEB-018 repairs the reviewed lecture branches: one-minute default containers (30 seconds for unknown bitrate), engine-owned four-hour limit, measured conservative storage headroom, chunk-based gap descriptions, coordinated provider/route/browser deadlines, and revision-bound browser-local study guide persistence/export. The development-only `/diagnostics/lecture` exercises a synthetic 90-minute timeline in native IndexedDB. This is not real lecture or microphone acceptance; see `tasks/WEB-018.md`.
 
 
@@ -83,7 +85,7 @@ that every task must edit.**
 
 ## What does not exist
 
-Overlap stitching, history, speaker labels, research, reminders, background processing, hardware. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
+Overlap stitching, history, speaker labels, research, reminders, background processing, production hardware recording or a native Mac receiver. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 

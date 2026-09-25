@@ -16,6 +16,17 @@ Entries are marked **Approved** (a recorded decision), **Temporary** (deliberate
 
 Do not introduce a second frontend framework.
 
+### Embedded diagnostics (WEB-019)
+
+ADR-021 opens a bounded hardware bring-up phase at the owner's request.
+`firmware/echo-device` is a separate PlatformIO build for the XIAO ESP32S3 Sense:
+C++, the Arduino ESP32 framework from pinned espressif32 7.1.3, bundled peripheral
+drivers, and a small HTML/JavaScript page served from flash. The existing Next.js
+application stack and deployment stay unchanged. The board exposes diagnostics
+only over its own password-protected local Wi-Fi network. Read the firmware README
+for trust boundaries, pin conflicts, limits and the hardware acceptance checklist.
+Echo upload/retention integration and the native Mac receiver remain future work.
+
 ### Styling and UI
 
 | Technology | Responsibility | Status |
@@ -194,7 +205,7 @@ What exists today, after integrating DOC-001, ENG-001 and WEB-001 into `main`:
 - Verification: ESLint, strict TypeScript, unit tests, a real production build, and production HTTP tests, aggregated by `npm run check` and run in GitHub Actions.
 - `scripts/agent_loop.py`: the ENG-001 bounded builder/checker controller, with its own Python tests. Its automated feature loop is deliberately **disabled** (`agent-loop.json` has `"ready": false`) and blocks before spending model tokens.
 
-WEB-003 adds browser-memory sessions and complete playable chunk capture on the feature branch, pending full verification. See its boundaries below. Overlap stitching, incremental processing during capture, persistence, offline queueing, history, diarization, research, reminders, background processing and hardware still do not exist. No database, object storage or production authentication is wired up.
+WEB-003 adds browser-memory sessions and complete playable chunk capture on the feature branch, pending full verification. See its boundaries below. Overlap stitching, incremental processing during capture, persistence, offline queueing, history, diarization, research, reminders, background processing still do not exist in the web application. WEB-019 adds a separate, not yet hardware-verified diagnostic firmware. No database, object storage or production authentication is wired up.
 
 ## Layout (only apps/web is implemented)
 
