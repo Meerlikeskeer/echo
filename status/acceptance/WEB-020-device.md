@@ -60,9 +60,10 @@ This proves the device's export and the web app's importer agree, which has only
 
 1. Rejoin your normal Wi-Fi.
 2. Start the Echo web app and sign in as the owner.
-3. Choose **Import device recording** and select the `.echo` file from Part A.
-4. The session should import with both chunks, then transcribe and produce notes. **Check the transcript actually says what you said.**
-5. **Import the same file a second time.** It must not duplicate the session, and it must keep the results already generated.
+3. In the **Bring in a device recording** panel, choose the `.echo` file from Part A.
+4. It first *checks* the file — every chunk's SHA-256 is verified before anything is imported. You should see the duration, clip count, size and **Stopped cleanly**. Press **Import and transcribe**.
+5. The session should import with both clips, then transcribe and produce notes. **Check the transcript actually says what you said.**
+6. **Import the same file a second time.** It must not duplicate the session, and it must keep the results already generated.
 
 ## Part C — the long session
 
@@ -97,8 +98,9 @@ Fill this in as you go. `not run` is a valid and useful entry.
 | A3 survives the tab closing | | |
 | A4–A5 saved & verified, 2 chunks | | |
 | A6 **voice audible in the WAV** | | |
-| B3–B4 import, transcript correct | | |
-| B5 re-import keeps results | | |
+| B3–B4 file checks, "Stopped cleanly" | | |
+| B5 import, transcript correct | | |
+| B6 re-import keeps results | | |
 | C1 30-minute session | | |
 | C2 BOOT button stops and starts | | |
 | C4 `stackFree` after a long run | | bytes |

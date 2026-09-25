@@ -53,4 +53,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-017](WEB-017.md) Lecture note guide | Implemented and verified by test; a real lecture transcript has never been through it | `feat/WEB-017-lecture-notes` |
 | [WEB-018](WEB-018.md) Lecture reliability review fixes | Implemented; CI and native Chrome recovery verified; physical lecture acceptance and… | `fix/WEB-018-lecture-reliability` |
 | [WEB-019](WEB-019.md) ESP32 local diagnostics console | Imported and build verified; physical acceptance pending | `feat/WEB-019-device-console` |
-| [WEB-020](WEB-020.md) First general-purpose Echo device MVP | In progress — firmware and browser import implementation | `feat/WEB-020-device-mvp` |
+| [WEB-020](WEB-020.md) First general-purpose Echo device MVP | In progress — implemented and check-verified; awaiting physical acceptance | `feat/WEB-020-device-mvp` |
