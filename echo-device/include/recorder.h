@@ -13,8 +13,11 @@ static void cacheCard() { cardUsed=sdReady?SD.usedBytes():0;cardTotal=sdReady?SD
 static String chunkPath(const String &id,uint32_t n) { return "/echo/"+id+"/chunk-"+String(n)+".wav"; }
 static String hashFile(File &f) {
   mbedtls_sha256_context h;mbedtls_sha256_init(&h);mbedtls_sha256_starts_ret(&h,0);
-  uint8_t block[2048],digest[32];size_t remaining=f.size();f.seek(0);
-  while(remaining) {size_t n=f.read(block,min(remaining,sizeof(block)));if(!n){mbedtls_sha256_free(&h);return "";}mbedtls_sha256_update_ret(&h,block,n);remaining-=n;}
+  uint8_t block[2048],digest[32];size_t remaining=f.size();uint32_t blocks=0;f.seek(0);
+  while(remaining) {size_t n=f.read(block,min(remaining,sizeof(block)));if(!n){mbedtls_sha256_free(&h);return "";}mbedtls_sha256_update_ret(&h,block,n);remaining-=n;
+    // Block briefly so lower-priority HTTP/status work runs during long readback.
+    if(++blocks%16==0)vTaskDelay(1);
+  }
   mbedtls_sha256_finish_ret(&h,digest);mbedtls_sha256_free(&h);
   char hex[65];for(int i=0;i<32;i++)snprintf(hex+i*2,3,"%02x",digest[i]);return String(hex);
 }
@@ -74,6 +77,7 @@ static void captureTask(void *) {
       }
     }
   }
+  stopRequested=true; // Includes automatic limit and error finalization, not just a Stop request.
   if(installed){
     i2s_event_t event;while(xQueueReceive(events,&event,0)==pdTRUE)if(event.type==I2S_EVENT_RX_Q_OVF||event.type==I2S_EVENT_DMA_ERROR)captureFail("Microphone data was lost; saved audio is partial.");
     i2s_driver_uninstall(I2S_NUM_0);
@@ -118,6 +122,7 @@ static bool loadRecords(const String &id,ChunkRecord *records,size_t &count,bool
 static void startCapture(bool reply=true) {
   auto reject=[&](const char *why){if(reply)fail(why);else captureFail(why);};
   if(!idleOnly())return;
+  if(restartAt){reject("Device is restarting. Reconnect before recording.");return;}
   if(!sdReady){reject("Insert a FAT32 microSD card and mount it in Diagnostics.");return;}
   cacheCard();if(cardTotal<=cardUsed||cardTotal-cardUsed<RESERVE+CHUNK*2){reject("Not enough free microSD space. Existing recordings are kept.");return;}
   cameraStop();if(bleOn){BLEDevice::getAdvertising()->stop();bleOn=false;}WiFi.scanDelete();scanning=false;

@@ -1,6 +1,6 @@
 # Device acceptance — the first round test of Echo on real hardware
 
-**Who runs this:** the owner, with the XIAO ESP32S3 Sense in hand. No agent can. Flashing needs the USB serial port, and an agent sandbox is denied `/dev/cu.*` — `esptool` fails with `Operation not permitted` before it opens the port. Everything below the *Flash* step needs a microphone, a microSD card and a room with sound in it, none of which a test fixture has.
+**Who runs this:** the owner, with the XIAO ESP32S3 Sense in hand. The earlier agent session could not open the USB serial port: `esptool` returned `Operation not permitted`. The owner requested to upload and test this firmware. Everything below the *Flash* step needs a microphone, a microSD card and a room with sound in it, none of which a test fixture has.
 
 **What has been verified without hardware:** the firmware compiles for `seeed_xiao_esp32s3` (RAM 21.9%, flash 44.6%), and three Node/host suites pass — WAV framing and journal validation, the recording page's logic against a simulated device, and the older diagnostics console smoke test. **None of that proves the microphone records, the card holds, or the audio is audible.** That is what this script is for.
 
@@ -25,7 +25,8 @@ If nothing is listed, try the other USB-C cable first — charge-only cables are
 From the repository root, on the `feat/WEB-020-device-mvp` branch:
 
 ```sh
-cd echo-device && ~/.platformio/penv/bin/pio run -t upload --upload-port /dev/cu.usbmodem101
+cd echo-device
+~/.platformio/penv/bin/pio run -t upload
 ```
 
 `pio` is not on `PATH`; the full path above is the installed PlatformIO 6.2.0. Expect a rebuild of about a minute, then `Writing at 0x...` and `Hash of data verified`.
@@ -35,7 +36,7 @@ cd echo-device && ~/.platformio/penv/bin/pio run -t upload --upload-port /dev/cu
 Then open the serial monitor to read the Wi-Fi credentials, which are printed **only** over USB and never to the web logs:
 
 ```sh
-~/.platformio/penv/bin/pio device monitor -p /dev/cu.usbmodem101 -b 115200
+~/.platformio/penv/bin/pio device monitor -b 115200
 ```
 
 Press RESET. You should see the network name, the password, and `Open http://192.168.4.1`.
@@ -59,10 +60,10 @@ Join the board's Wi-Fi from the Mac, then open `http://192.168.4.1`.
 This proves the device's export and the web app's importer agree, which has only ever been checked by reading both sides.
 
 1. Rejoin your normal Wi-Fi.
-2. Start the Echo web app and sign in as the owner.
+2. Start the Echo web app **from this branch**, or use a deployment that includes WEB-020, and sign in as the owner. Firmware upload does not deploy the web importer.
 3. In the **Bring in a device recording** panel, choose the `.echo` file from Part A.
 4. It first *checks* the file — every chunk's SHA-256 is verified before anything is imported. You should see the duration, clip count, size and **Stopped cleanly**. Press **Import and transcribe**.
-5. The session should import with both clips, then transcribe and produce notes. **Check the transcript actually says what you said.**
+5. The session should import with both clips, then transcribe. Choose **Generate notes** to produce session notes. **Check the transcript actually says what you said.**
 6. **Import the same file a second time.** It must not duplicate the session, and it must keep the results already generated.
 
 ## Part C — the long session
@@ -75,6 +76,21 @@ Only worth running once Part A passes. This is the one the product exists for.
 4. **Check `stackFree` in `http://192.168.4.1/api/recording`** after a long run. It reports the capture task's minimum free stack in bytes, measured rather than assumed. The task is given 16 KiB; `hashFile` alone puts 2 KiB on it above the SD and mbedtls call depth. **If `stackFree` is under about 2048, raise the stack in `recorder.h` before trusting a two-hour session.** This number is the reason the field exists — nobody has ever measured it on this hardware.
 
 ---
+
+## Part D — interruption and safeguards
+
+Use synthetic speech for these tests, never an important recording.
+
+1. Record for over 70 seconds, then press RESET before stopping. Reconnect. The
+   session must be **Partial**, keep at least its first committed chunk, and retain
+   its unfinished WAV on the card. Import the exported prefix; it must remain partial.
+2. While recording, try a camera start or card mount in Diagnostics: it must refuse
+   without interrupting capture.
+3. Save a long recording and keep watching the page: **Saving & verifying** should
+   remain reachable. Export may temporarily occupy the single HTTP server; wait
+   for the download to finish before using controls.
+4. With power off, remove the card and restart: recording must refuse. Reinsert
+   with power off, boot or remount in Diagnostics, and check readiness returns.
 
 ## If something failed
 

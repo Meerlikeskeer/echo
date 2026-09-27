@@ -211,7 +211,7 @@ void routes() {
     esp_camera_fb_return(fb);
   });
   server.on("/api/mic.wav", HTTP_POST, recordMicrophone);
-  server.on("/api/sd/mount", HTTP_POST, [] { if(action()) { mountCard(); if(sdReady) ok("Card mounted"); else fail("Card mount failed"); } });
+  server.on("/api/sd/mount", HTTP_POST, [] { if(action()) { mountCard(); cacheCard(); if(sdReady) ok("Card mounted"); else fail("Card mount failed"); } });
   server.on("/api/sd/files", HTTP_GET, listFiles);
   server.on("/api/sd/test", HTTP_POST, testCard);
   server.on("/api/sd/file", HTTP_GET, [] {
@@ -293,7 +293,7 @@ void setup() {
 void loop() {
   server.handleClient();
   pollRecordButton();
-  if(restartAt && (int32_t)(millis()-restartAt)>=0) ESP.restart();
+  if(restartAt && !capturing && (int32_t)(millis()-restartAt)>=0) ESP.restart();
   static uint32_t heartbeat=0;
   if(millis()-heartbeat>30000) { heartbeat=millis(); logEvent("Heartbeat; free heap="+String(ESP.getFreeHeap())+"; Wi-Fi clients="+String(WiFi.softAPgetStationNum())); }
   delay(2);
