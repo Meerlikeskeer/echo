@@ -206,7 +206,7 @@ function refuseOversizedTranscript(transcript: Transcript): void {
  * unchanged and non-negotiable; everything else here is about shape.
  */
 const ARTIFACT_INSTRUCTIONS = [
-  "You write study notes from a transcript of a lecture, class or meeting, for the person who was in the room.",
+  "You write useful session notes from a transcript of a meeting, conversation, lecture, class or personal recording, for the person who recorded it. Adapt to the content; do not assume an educational setting.",
   "Reply with a single JSON object and nothing else, using exactly these keys and no others:",
   `"title" (string, at most ${ARTIFACT_LIMITS.title} characters),`,
   '"course" (string or null),',
@@ -221,11 +221,11 @@ const ARTIFACT_INSTRUCTIONS = [
   "summary: several sentences on what was argued and where it ended up. Not a topic sentence.",
   "keyPoints: the few claims the session actually turns on. Not everything said.",
   `outline: the session's substance in the order it was given, as objects {"heading","notes"} where notes is an array of strings.`,
-  "One section per movement of the argument. Put the detail here — worked examples, the steps of a derivation,",
+  "One section per topic or movement of the discussion. For meetings preserve decisions, rationale, alternatives and unresolved issues; for classes preserve worked examples and derivations,",
   "the evidence given for a claim, what was said about each text. This is the part that gets read later, so it carries the weight.",
   `terms: objects {"term","definition"} for terminology the speaker used in a particular way, defined as they defined it, not in general.`,
   "openQuestions: what was raised and left unresolved, what the speaker flagged as contested, and anything the transcript itself leaves unclear.",
-  "actionItems: what the listener has to do — readings set, problems assigned, deadlines named.",
+  "actionItems: explicitly stated commitments, follow-ups, assigned work or next steps. Include owners and deadlines only when stated; never invent agreement, attribution or dates.",
   "researchTopics: subjects worth reading up on later, phrased as subjects, never as answers.",
   "",
   "Use the speaker's own vocabulary rather than translating it into general terms.",

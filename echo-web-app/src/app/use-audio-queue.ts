@@ -6,6 +6,8 @@ import { reportFailure } from "../lib/recording/log";
 import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
 import type { PlayableChunk, Session } from "../lib/recording/session";
 
+import { saveDeviceRecording, type DeviceRecording, type ImportProgress } from "../lib/recording/device-import";
+
 export function useAudioQueue(canProcess = true) {
   const store = useRef(new IndexedDBQueue());
   const processingAllowed = useRef(canProcess);
@@ -145,6 +147,19 @@ export function useAudioQueue(canProcess = true) {
       throw cause;
     }
   }, [refresh]);
+  const importDevice = useCallback(async (recording: DeviceRecording, progress: ImportProgress) => {
+    if (!navigator.locks) throw new Error("Use a browser with Web Locks to safely import device recordings.");
+    await navigator.locks.request("echo-device-import", async () => {
+      await navigator.storage?.persist().catch(() => false);
+      try {
+        await saveDeviceRecording(recording, store.current, progress);
+        settled();
+      } finally {
+        await refresh();
+        void sync();
+      }
+    });
+  }, [refresh, settled, sync]);
   const finished = useCallback(() => { void sync(); }, [sync]);
-  return { entries, completions, complete, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
+  return { entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
 }

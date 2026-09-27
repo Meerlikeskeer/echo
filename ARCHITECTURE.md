@@ -16,7 +16,7 @@ Entries are marked **Approved** (a recorded decision), **Temporary** (deliberate
 
 Do not introduce a second frontend framework.
 
-### Embedded diagnostics (WEB-019)
+### Embedded device (WEB-019, WEB-020)
 
 ADR-021 opens a bounded hardware bring-up phase at the owner's request.
 `echo-device` is a separate PlatformIO build for the XIAO ESP32S3 Sense:
@@ -25,7 +25,11 @@ drivers, and a small HTML/JavaScript page served from flash. The existing Next.j
 application stack and deployment stay unchanged. The board exposes diagnostics
 only over its own password-protected local Wi-Fi network. Read the firmware README
 for trust boundaries, pin conflicts, limits and the hardware acceptance checklist.
-Echo upload/retention integration and the native Mac receiver remain future work.
+ADR-023 extends this to general-purpose offline microSD recording and explicit
+`.echo` archive import into the existing browser queue. The device never holds
+provider keys. The importer validates the complete archive before persistence,
+uses stable chunk identities for retries, and records completion only for clean
+device stops. Automatic deletion and the native Mac receiver remain future work.
 
 ### Styling and UI
 

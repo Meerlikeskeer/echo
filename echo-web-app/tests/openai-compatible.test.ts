@@ -306,3 +306,14 @@ test("a provider body interrupted after headers remains retryable, unlike malfor
       (error: unknown) => error instanceof ProviderError && error.code === (name === "SyntaxError" ? "invalid_response" : "timeout") && error.retryable === (name !== "SyntaxError"));
   }
 });
+
+test("device session notes adapt to meetings without inventing owners or deadlines", async () => {
+  const { fetchImpl, calls } = stub(() => jsonResponse({ choices: [{ message: { content: ARTIFACTS_JSON } }] }));
+  await createOpenAiCompatibleNotesProvider({ ...base, fetchImpl }).generateArtifacts(transcript);
+  const system = (JSON.parse(String(calls[0].init.body)) as { messages: { content: string }[] }).messages[0].content;
+  assert.match(system, /meeting, conversation, lecture/);
+  assert.match(system, /do not assume an educational setting/);
+  assert.match(system, /decisions, rationale, alternatives and unresolved issues/);
+  assert.match(system, /owners and deadlines only when stated/);
+  assert.match(system, /never invent agreement, attribution or dates/);
+});

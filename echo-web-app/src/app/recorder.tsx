@@ -14,6 +14,7 @@ import { reportFailure } from "../lib/recording/log";
 import { QuickNotes } from "./quick-notes";
 import { recordingHeadroom } from "../lib/recording/storage-estimate";
 import { MAX_UPLOAD_BYTES, CAPACITY_RESERVE } from "../lib/recording/queue";
+import { DeviceImport } from "./device-import";
 import { useWakeLock } from "./use-wake-lock";
 
 /** Quick Note is still one short clip, and still stops itself. */
@@ -206,8 +207,9 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         <ul className="mt-4 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-900">
           {status.problems.map((problem) => <li key={problem}>{problem}</li>)}
         </ul>
+        <DeviceImport disabled={!queue.ready} processingReady={false} onImport={queue.importDevice} />
         {queue.error ? <p role="alert">{queue.error}</p> : null}
-        {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab visible and your device awake. App switches or a locked screen can interrupt capture. Reloading loses unfinished audio; saved clips recover as a partial session. Use a separate backup recorder for important lectures. Capture stops after four hours or earlier if storage fails.</p> : null}
+        {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab visible and your device awake. App switches or a locked screen can interrupt capture. Reloading loses unfinished audio; saved clips recover as a partial session. Use a separate backup recorder for important sessions. Capture stops after four hours or earlier if storage fails.</p> : null}
       <QuickNotes entries={queue.entries} online={queue.online} />
         <SessionTranscripts entries={sessionEntries.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript }))} completions={sessionCompletions} />
         {chunks.length ? <div className="mt-5 space-y-4"><p>Saved audio remains available while processing is unconfigured. No clips are deleted.</p>
@@ -220,6 +222,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const busy = phase === "starting" || phase === "processing" || queue.working || !queue.ready;
   return (
     <div>
+      <DeviceImport disabled={!queue.ready || phase === "recording" || phase === "starting" || phase === "processing"} processingReady={status.ready} onImport={queue.importDevice} />
       <section aria-labelledby="record-title" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 id="record-title" className="sr-only">Recorder</h2>
         <label className="text-sm text-slate-600">Recording mode
@@ -277,7 +280,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
         <p className="mt-2 text-xs text-slate-500">Chunks overlap so no speech is lost where one recording hands over to the next. Matching segments with verified overlap are merged in the session transcript. Uncertain repetition remains visible, so a longer overlap trades a little repeated text for a smaller chance of losing a word at the seam.</p></> : <p className="mt-2 text-xs text-slate-500">One short clip, saved locally. Offline captures wait for this page to reconnect. Dates and suggestions need your review.</p>}
       </section>
 
-      {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab visible and your device awake. App switches or a locked screen can interrupt capture. Reloading loses unfinished audio; saved clips recover as a partial session. Use a separate backup recorder for important lectures. Capture stops after four hours or earlier if storage fails.</p> : null}
+      {mode === "session" ? <p className="mt-4 text-sm text-slate-600">Keep this tab visible and your device awake. App switches or a locked screen can interrupt capture. Reloading loses unfinished audio; saved clips recover as a partial session. Use a separate backup recorder for important sessions. Capture stops after four hours or earlier if storage fails.</p> : null}
       <QuickNotes entries={queue.entries} online={queue.online} />
       <section className="mt-6 space-y-2 text-sm text-slate-600" aria-label="Local queue" aria-live="polite">
         <p>{queue.ready ? `${queue.entries.length} clips saved on this browser` : "Opening local storage…"} · {queue.entries.filter((entry) => entry.state !== "processed").length} pending processing · {queue.unsaved.length} unsaved · {queue.online ? "Online" : "Offline"}</p>
@@ -331,7 +334,7 @@ function ChunkPlayer({ chunk, saved, disabled, onSave }: { chunk: PlayableChunk;
     <p className="mb-2 text-sm">Session {chunk.metadata.sessionId.slice(0, 8)} · chunk {chunk.metadata.sequence + 1} · {clock(chunk.metadata.startMs)}–{clock(chunk.metadata.endMs)} · overlap {chunk.metadata.overlapMs} ms</p>
     <audio ref={audio} controls className="w-full" />
     <p className="my-2 text-sm">{saved ? "Saved locally" : "Not saved — download before leaving"}</p>
-    <a ref={download} download={`${chunk.metadata.sessionId}-${chunk.metadata.id}.${chunk.audio.type.includes("mp4") ? "m4a" : chunk.audio.type.includes("ogg") ? "ogg" : "webm"}`} className="underline">Download audio</a>
+    <a ref={download} download={`${chunk.metadata.sessionId}-${chunk.metadata.id}.${chunk.audio.type.includes("wav") ? "wav" : chunk.audio.type.includes("mp4") ? "m4a" : chunk.audio.type.includes("ogg") ? "ogg" : "webm"}`} className="underline">Download audio</a>
     {!saved ? <button type="button" disabled={disabled || !chunk.audio.size} onClick={onSave} className="ml-3 rounded border px-3 py-1 disabled:opacity-50">Retry saving</button> : null}
   </div>;
 }

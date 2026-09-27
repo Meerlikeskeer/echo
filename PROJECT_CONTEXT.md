@@ -44,7 +44,10 @@ An opened session may eventually expose areas such as `Overview`, `Notes`, `Tran
 
 ## Hardware bring-up and deferred product vision
 
-The owner opened a limited XIAO ESP32S3 Sense diagnostics phase on 2026-09-25 (WEB-019, ADR-021). Its console lives in `echo-device`; recording/transcription integration and the Mac receiver remain future work.
+The owner opened a limited XIAO ESP32S3 Sense diagnostics phase on 2026-09-25 (WEB-019, ADR-021). Its console lives in `echo-device`. On 2026-09-25 the owner expanded scope to a
+general-purpose recording MVP (WEB-020, ADR-023): meetings, conversations,
+lectures and other sessions recorded to microSD, then explicitly imported into
+Echo for transcript and notes processing. The native Mac receiver remains future work.
 
 A future device may record and process independently, then sync notes and pending reminders when the phone is available. BLE is for control; Wi-Fi is for audio/data transfer. Explore up-to-30-ft room capture, contact-phone recording experiments, custom speaker audio, LED and haptic feedback, and eventual speech output. These are investigation targets, not proven capabilities or web acceptance criteria. Hardware feasibility, battery, acoustic performance, consent UX, and platform constraints need later validation.
 
