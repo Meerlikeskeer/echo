@@ -49,6 +49,11 @@ that every task must edit.**
 
 ## What exists today
 
+- ENG-022 pins Vercel's output directory to `echo-web-app/.next`, repairing the
+  stale `apps/web/.next` lookup observed after ENG-021. The merged WEB-020 importer
+  already supports `.echo` uploads and transcription; making it live still needs
+  a successful explicit deployment. See `tasks/ENG-022.md` for current evidence.
+
 - WEB-020 (ADR-023) adds the first general-purpose XIAO ESP32S3 Sense recording MVP: independent microSD capture, BOOT/browser start-stop, overlapping WAV chunks, a two-hour bound, partial recovery and `.echo` export into the existing web queue for transcripts and session notes. Firmware builds, host/UI tests, web checks and independent source review are complete; physical microphone, power-loss and long-session acceptance remain pending in `status/acceptance/WEB-020-device.md`. Upload instructions are in `echo-device/README.md`. Flashing firmware does not deploy the web importer.
 
 - ENG-021 (ADR-022) organizes the repository into `echo-web-app`, `echo-device`, and a documented `echo-mac-app` placeholder. Root web commands and the `@echo/web` package name stay the same. Earlier evidence uses historical paths. PRs are ready for review by default; drafts require an explicit owner-action checklist.
