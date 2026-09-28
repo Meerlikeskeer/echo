@@ -51,7 +51,7 @@ test("a fully local configuration is disclosed as no external processing", () =>
 
 test("unconfigured providers disable recording and name the missing variables", () => {
   const html = renderToStaticMarkup(<SessionShell status={{ ready: false, problems: ["TRANSCRIPTION_API_KEY is not set."] }} />);
-  assert.match(html, /Transcription is unavailable/);
+  assert.match(html, /Recording is unavailable/);
   assert.match(html, /TRANSCRIPTION_API_KEY is not set\./);
   assert.match(html, /<button[^>]*disabled=""[^>]*>[^]*?Start recording<\/button>/);
   assert.match(html, /Your saved recordings are still here/);

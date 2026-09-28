@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderStatus } from "../lib/providers/status";
-import { DisclosureNotice } from "./recording-result";
+import { DisclosureNotice, RecordingOutcome } from "./recording-result";
 import { captureSession, measureBitrate } from "../lib/recording/capture";
 import { safeChunkMs, type PlayableChunk } from "../lib/recording/session";
 import { describeSecureContextProblem, readEnvironment } from "../lib/recording/secure-context";
@@ -61,6 +61,7 @@ function clock(ms: number): string {
 export function Recorder({ status }: { status: ProviderStatus }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tab, setTab] = useState<"notes" | "transcript" | "audio">("notes");
@@ -196,7 +197,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   useWakeLock(phase === "recording");
 
   const capturing = phase === "recording" || phase === "starting" || phase === "processing";
-  const busy = phase === "starting" || phase === "processing" || !queue.ready;
+  const busy = phase === "starting" || phase === "processing" || importing || !queue.ready;
   const selected = library.find(item => item.id === selectedId);
   const selectedTranscript = selected ? stitchSession({ sessionId: selected.id,
     chunks: selected.results.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript })),
@@ -223,13 +224,13 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       <header className="workspace-topbar"><Button variant="ghost" size="icon" className="mobile-menu" aria-label="Toggle recordings" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><PanelLeft /></Button><span>{selected ? "Your recordings / Echo" : "Your space to listen"}</span><span className="topbar-note"><span className="connection-dot online" /> Browser-local library</span></header>
       <div className="workspace-content">
         {libraryState.error ? <p role="alert" className="echo-alert">{libraryState.error}</p> : null}
-        {!status.ready ? <div className="echo-alert" role="alert"><strong>Transcription is unavailable</strong><p>Your saved recordings are still here. An owner needs to finish the server provider setup.</p><details><summary>Setup details</summary><ul>{status.problems.map(problem => <li key={problem}>{problem}</li>)}</ul></details></div> : null}
+        {!status.ready ? <div className="echo-alert" role="alert"><strong>Recording is unavailable</strong><p>Your saved recordings are still here. An owner needs to finish the server provider setup.</p><details><summary>Setup details</summary><ul>{status.problems.map(problem => <li key={problem}>{problem}</li>)}</ul></details></div> : null}
         {failure ? <div role="alert" className="echo-alert"><strong>{failure.title}</strong><p>{failure.detail}</p>{failure.retryable ? <p>You can try again when ready.</p> : null}</div> : null}
         {queue.error ? <p role="alert" className="echo-alert">{queue.error}</p> : null}
         {queue.space?.nearFull ? <p role="alert" className="echo-alert">Storage is nearly full. Download your audio; Echo never deletes it to make room.</p> : null}
         {!queue.locksAvailable && queue.ready ? <p role="alert" className="echo-alert">Use a current browser with Web Locks to safely save and process recordings.</p> : null}
         {!selected && !capturing ? <>
-          <div className="home-heading"><p className="eyebrow">A LITTLE MORE PRESENT</p><h1>Listen now.<br /><span>Come back to everything.</span></h1><p>A passing thought. A good conversation. An entire lecture.<br className="desktop-break" /> Make room for the moment. Echo keeps the words.</p></div>
+          <div className="home-heading"><p className="eyebrow">A LITTLE MORE PRESENT</p><h1 className="text-4xl">Listen now.<br /><span>Come back to everything.</span></h1><p>A passing thought. A good conversation. An entire lecture.<br className="desktop-break" /> Make room for the moment. Echo keeps the words.</p></div>
         </> : null}
         {!selected || capturing ? <section className={`capture-card ${phase === "recording" ? "is-recording" : ""}`} aria-label="Recording controls">
           <div className="capture-status"><span className="connection-dot online" />{phase === "recording" ? "Recording your Echo" : phase === "starting" ? "Waiting for your microphone" : phase === "processing" ? "Saving the final audio" : "Ready when you are"}</div>
@@ -240,7 +241,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           <p className="capture-footnote">Keep this tab open and your device awake while recording.</p>
         </section> : null}
         {!selected && !capturing ? <>
-          <div className="home-bottom"><div><span className="eyebrow">THOUGHTFULLY ORGANIZED</span><h2>Small thoughts.<br />Long conversations.</h2><p>Finished recordings up to a minute become Quick Notes. Everything longer becomes a Session. You can always change the label.</p></div><div className="import-panel"><DeviceImport disabled={!queue.ready} processingReady={status.ready} onImport={async (recording, progress) => { await queue.importDevice(recording, progress); openRecording(recording.sessionId); }} /></div></div>
+          <div className="home-bottom"><div><span className="eyebrow">THOUGHTFULLY ORGANIZED</span><h2>Small thoughts.<br />Long conversations.</h2><p>Finished recordings up to a minute become Quick Notes. Everything longer becomes a Session. You can always change the label.</p></div><div className="import-panel"><DeviceImport disabled={!queue.ready} processingReady={status.ready} onImport={async (recording, progress) => { setImporting(true); try { await queue.importDevice(recording, progress); openRecording(recording.sessionId); } finally { setImporting(false); } }} /></div></div>
         </> : null}
         {selected && selectedTranscript ? <section className="recording-detail" aria-label="Selected recording">
           <div className="detail-heading"><div className="eyebrow">{selected.kind === "quick-note" ? "QUICK NOTE" : "SESSION"} · {clock(selected.duration)}</div>
@@ -251,7 +252,9 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           </div>
           <div className="detail-tabs" aria-label="Recording views">{(["notes", "transcript", "audio"] as const).map(view => <button key={view} aria-pressed={tab === view} onClick={() => setTab(view)}>{view === "notes" ? <NotebookPen size={16} /> : view === "transcript" ? <AlignLeft size={16} /> : <Headphones size={16} />}{view === "audio" ? "Original audio" : view[0].toUpperCase() + view.slice(1)}</button>)}</div>
           <div className="detail-body">
-            {tab === "notes" ? <><SessionArtifacts key={selected.id} transcript={selectedTranscript} /><QuickNotes entries={selected.results} online={queue.online} /></> : null}
+            <div hidden={tab !== "notes"}><SessionArtifacts key={selected.id} transcript={selectedTranscript} /><QuickNotes entries={selected.results} online={queue.online} />
+              {selected.results.some(entry => entry.result) ? <details className="original-results"><summary>Saved clip notes & processing details</summary><p>Original per-clip results, available even offline. Session notes above combine the whole recording.</p>{selected.results.filter(entry => entry.result).map(entry => <div key={chunkKey(entry)}><p>Clip {entry.metadata.sequence + 1}</p><RecordingOutcome result={entry.result!} /></div>)}</details> : null}
+            </div>
             {tab === "transcript" ? <SessionTranscript transcript={selectedTranscript} showArtifacts={false} /> : null}
             {tab === "audio" ? <div className="audio-library"><h2>Original audio</h2><p>Saved on this browser, with no verified remote backup. Downloads preserve each original clip, including overlap. Nothing is deleted after transcription.</p>{selected.audio.map(chunk => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some(entry => chunkKey(entry) === chunkKey(chunk))} disabled={busy} onSave={() => { void queue.persist(chunk).then(queue.finished).catch(() => {}); }} />)}</div> : null}
           </div>
