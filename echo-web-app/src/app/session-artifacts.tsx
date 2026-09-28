@@ -50,7 +50,7 @@ export function SessionArtifacts({ transcript }: { transcript: RevisionInput }) 
     {empty
       ? <p className="mt-2 text-sm text-slate-500">There is no transcript text to summarize yet.</p>
       : <p className="mt-2 text-xs text-slate-500">
-          Generated on request, from the transcript above. {transcript.status === "final"
+          Generated on request from this recording’s transcript. {transcript.status === "final"
             ? "That transcript is final."
             : "That transcript is still partial, so these notes describe only what has been transcribed so far."}
         </p>}

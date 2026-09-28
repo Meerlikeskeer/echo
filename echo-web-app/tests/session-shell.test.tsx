@@ -16,9 +16,9 @@ const ready: ProviderStatus = {
 
 test("the recording action is the clearest action on the ready screen", () => {
   const html = renderToStaticMarkup(<SessionShell status={ready} />);
-  assert.match(html, /<h1[^>]*>Record a note<\/h1>/);
-  assert.match(html, /aria-labelledby="record-title"/);
-  assert.match(html, /<button[^>]*>Record<\/button>/);
+  assert.match(html, /Listen now/);
+  assert.match(html, /aria-label="Recording controls"/);
+  assert.match(html, /Start recording<\/button>/);
   // WEB-016. The ready screen used to promise a one-minute recording and stop
   // at it. Asserting the absence as well as the presence: the old sentence
   // surviving anywhere on this screen would be a promise the recorder no
@@ -51,9 +51,10 @@ test("a fully local configuration is disclosed as no external processing", () =>
 
 test("unconfigured providers disable recording and name the missing variables", () => {
   const html = renderToStaticMarkup(<SessionShell status={{ ready: false, problems: ["TRANSCRIPTION_API_KEY is not set."] }} />);
-  assert.match(html, /Recording is unavailable/);
+  assert.match(html, /Transcription is unavailable/);
   assert.match(html, /TRANSCRIPTION_API_KEY is not set\./);
-  assert.doesNotMatch(html, /<button/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>[^]*?Start recording<\/button>/);
+  assert.match(html, /Your saved recordings are still here/);
 });
 
 test("transcript and model text are escaped when rendered", () => {

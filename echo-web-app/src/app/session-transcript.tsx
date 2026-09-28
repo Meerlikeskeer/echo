@@ -13,7 +13,7 @@ const clock = (ms: number) => {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 };
 
-export function SessionTranscript({ transcript }: { transcript: StitchedTranscript }) {
+export function SessionTranscript({ transcript, showArtifacts = true }: { transcript: StitchedTranscript; showArtifacts?: boolean }) {
   // The heading names the section, so repeating it in an aria-label would only
   // duplicate it. useId keeps the reference unique when several sessions render
   // together; a session identifier could repeat or be invalid.
@@ -51,7 +51,7 @@ export function SessionTranscript({ transcript }: { transcript: StitchedTranscri
     {/* WEB-007. Inside the transcript section on purpose: the artifacts are
         generated from exactly the transcript rendered above, and the revision
         rule means they are only ever valid against it. */}
-    <SessionArtifacts transcript={transcript} />
+    {showArtifacts ? <SessionArtifacts transcript={transcript} /> : null}
   </section>;
 }
 

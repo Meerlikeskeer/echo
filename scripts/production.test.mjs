@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const username = "synthetic-owner";
 const password = "synthetic-production-password-123456789";
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const PAGE_MARKER = /Record a note/;
+const PAGE_MARKER = /Start new Echo/;
 const PRIVATE_PATHS = ["/diagnostics/lecture", "/diagnostics/queue", "/diagnostics/capture", "/", "/api/recordings", "/api/sessions", "/api/sessions/artifacts", "/_next/static/missing.js", "/?_rsc=probe"];
 
 // Every provider variable is blanked explicitly so a developer's real
