@@ -74,7 +74,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const [failure, setFailure] = useState<Failure | null>(null);
   const queue = useAudioQueue(status.ready);
   const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
-  const ids = [...new Set([...chunks.map(chunk => chunk.metadata.sessionId), ...queue.completions.map(item => item.sessionId), ...(recorder ? [recorder.session.id] : [])])].sort();
+  const ids = [...new Set([...chunks.map(chunk => chunk.metadata.sessionId), ...queue.completions.filter(item => item && typeof item.sessionId === "string").map(item => item.sessionId), ...(recorder ? [recorder.session.id] : [])])].sort();
   const libraryState = useLibrary(ids);
   const library = ids.map(id => libraryRecording(id, chunks, queue.entries, queue.completions, libraryState.preferences[id]));
   // Chunks committed for the recording in progress, so a long session shows
@@ -201,7 +201,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const selected = library.find(item => item.id === selectedId);
   const selectedTranscript = selected ? stitchSession({ sessionId: selected.id,
     chunks: selected.results.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript })),
-    completion: queue.completions.find(item => item.sessionId === selected.id) ?? null }) : null;
+    completion: queue.completions.filter(item => item?.sessionId === selected.id).length > 1 ? { sessionId: selected.id, chunks: [] } : queue.completions.find(item => item?.sessionId === selected.id) ?? null }) : null;
   function openRecording(id: string | null) { setSelectedId(id); setMobileOpen(false); setTab("notes"); }
   return <div className="echo-workspace">
     <a className="skip-link" href="#echo-main">Skip to recording</a>

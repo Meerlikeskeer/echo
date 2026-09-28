@@ -28,13 +28,14 @@ export function savePreference(storage: Pick<Storage, "getItem" | "setItem">, id
 export function libraryRecording(id: string, chunks: readonly PlayableChunk[], entries: readonly QueueEntry[], completions: readonly Completion[], preference: LibraryPreference = {}) {
   const audio = chunks.filter(chunk => chunk.metadata.sessionId === id).sort((a,b) => a.metadata.sequence - b.metadata.sequence);
   const results = entries.filter(entry => entry.metadata.sessionId === id).sort((a,b) => a.metadata.sequence - b.metadata.sequence);
-  const manifests = completions.filter(item => item.sessionId === id);
+  const manifests = completions.filter(item => item?.sessionId === id);
   const manifest = manifests.length === 1 && isCompletion(manifests[0]) ? manifests[0] : null;
   const complete = !!manifest && manifest.chunks.length === audio.length && manifest.chunks.every((chunk, index) => sameMetadata(chunk, audio[index].metadata));
   const duration = Math.max(0, ...audio.map(chunk => chunk.metadata.endMs), ...(manifest?.chunks.map(chunk => chunk.endMs) ?? []));
   const automatic: EchoKind = complete && duration > 0 && duration <= QUICK_ECHO_MS ? "quick-note" : "session";
   const text = results.map(entry => entry.result?.transcript.text ?? "").join(" ").replace(/\s+/g, " ").trim();
-  const title = preference.title || (text ? text.split(/[.!?]/)[0].slice(0, 64).trim() : `Untitled Echo · ${id.slice(-6)}`);
+  const suggested = text.split(/[.!?]/).find(part => part.trim())?.trim().slice(0, 64);
+  const title = preference.title || suggested || `Untitled Echo · ${id.slice(-6)}`;
   return { id, audio, results, duration, complete, automatic, kind: preference.kind ?? automatic, title,
     pending: results.filter(entry => entry.state !== "processed").length,
     blocked: results.some(entry => entry.state === "blocked"),

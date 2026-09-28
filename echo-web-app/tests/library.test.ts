@@ -64,3 +64,11 @@ test("library keeps pending, blocked and unsaved audio distinct", () => {
   assert.equal(libraryRecording("session-a",[row],[],[]).unsaved,true);
   assert.equal(item.title,"An idea for tomorrow");
 });
+
+test("malformed completion recovery cannot crash history or confirm capture", () => {
+  const row=clip();
+  const broken=[null,{sessionId:"session-a",chunks:null}] as unknown as import("../src/lib/recording/session-completion").Completion[];
+  assert.equal(libraryRecording("session-a",[row],[row],broken).complete,false);
+  row.result!.transcript.text="...";
+  assert.match(libraryRecording("session-a",[row],[row],broken).title,/Untitled Echo/);
+});
