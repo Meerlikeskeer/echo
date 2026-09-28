@@ -69,6 +69,6 @@ test("malformed completion recovery cannot crash history or confirm capture", ()
   const row=clip();
   const broken=[null,{sessionId:"session-a",chunks:null}] as unknown as import("../src/lib/recording/session-completion").Completion[];
   assert.equal(libraryRecording("session-a",[row],[row],broken).complete,false);
-  row.result!.transcript.text="...";
+  row.result = { ...row.result!, transcript: { ...row.result!.transcript, text: "..." } };
   assert.match(libraryRecording("session-a",[row],[row],broken).title,/Untitled Echo/);
 });
