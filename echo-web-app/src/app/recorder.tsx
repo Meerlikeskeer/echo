@@ -241,7 +241,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           <p className="capture-footnote">Keep this tab open and your device awake while recording.</p>
         </section> : null}
         {!selected && !capturing ? <>
-          <div className="home-bottom"><div><span className="eyebrow">THOUGHTFULLY ORGANIZED</span><h2>Small thoughts.<br />Long conversations.</h2><p>Finished recordings up to a minute become Quick Notes. Everything longer becomes a Session. You can always change the label.</p></div><div className="import-panel"><DeviceImport disabled={!queue.ready} processingReady={status.ready} onImport={async (recording, progress) => { setImporting(true); try { await queue.importDevice(recording, progress); openRecording(recording.sessionId); } finally { setImporting(false); } }} /></div></div>
+          <div className="home-bottom"><div><span className="eyebrow">THOUGHTFULLY ORGANIZED</span><h2>Small thoughts.<br /> Long conversations.</h2><p>Finished recordings up to a minute become Quick Notes. Everything longer becomes a Session. You can always change the label.</p></div><div className="import-panel"><DeviceImport disabled={!queue.ready} processingReady={status.ready} onImport={async (recording, progress) => { setImporting(true); try { await queue.importDevice(recording, progress); openRecording(recording.sessionId); } finally { setImporting(false); } }} /></div></div>
         </> : null}
         {selected && selectedTranscript ? <section className="recording-detail" aria-label="Selected recording">
           <div className="detail-heading"><div className="eyebrow">{selected.kind === "quick-note" ? "QUICK NOTE" : "SESSION"} · {clock(selected.duration)}</div>

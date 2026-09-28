@@ -43,7 +43,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-006](WEB-006.md) Transcript stitching | Implemented and verified by test; the IndexedDB v1→v2 migration and completion recovery… | `feat/WEB-006-transcript-stitching` |
 | [WEB-007](WEB-007.md) Structured artifacts | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-007-structured-artifacts` |
 | [WEB-008](WEB-008.md) Quick Note mode | Implemented and verified locally; live-provider latency and device acceptance pending | `feat/WEB-008-quick-note` |
-| [WEB-009](WEB-009.md) Session history | Todo | — |
+| [WEB-009](WEB-009.md) Recording workspace and session history | Implemented; final verification and browser acceptance in progress | `feat/WEB-009-recording-workspace` |
 | [WEB-010](WEB-010.md) Guarded audio retention | Todo | — |
 | [WEB-011](WEB-011.md) Settings and privacy hardening | Todo | — |
 | [WEB-012](WEB-012.md) Private deployment and recovery validation | Todo | — |

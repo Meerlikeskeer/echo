@@ -36,8 +36,8 @@ device stops. Automatic deletion and the native Mac receiver remain future work.
 | Technology | Responsibility | Status |
 | --- | --- | --- |
 | Tailwind CSS (v4 via PostCSS) | Styling system | Approved |
-| shadcn/ui | Base UI component primitives: buttons, dialogs, dropdowns, tabs, forms, cards, tooltips, sheets, command/search, progress, skeletons, notifications | Approved (ADR-008); **not yet installed** |
-| Lucide | Icons, where icons are required | Approved (ADR-008); **not yet installed** |
+| shadcn/ui | Base UI component primitives: buttons, dialogs, dropdowns, tabs, forms, cards, tooltips, sheets, command/search, progress, skeletons, notifications | Approved (ADR-008); Button and icons installed in WEB-009 |
+| Lucide | Icons, where icons are required | Approved (ADR-008); Button and icons installed in WEB-009 |
 
 shadcn/ui is the approved base component system and enters the repository when a task first needs its primitives. Echo builds its own visual identity from these primitives rather than adopting default shadcn example layouts or generic AI-SaaS dashboard patterns; the product UI direction lives in `PROJECT_CONTEXT.md`. Do not add a second design system without an explicit approved decision.
 
@@ -341,3 +341,19 @@ The stitcher attaches optional chunk bounds to gaps using validated metadata or 
 `request-policy.ts` coordinates deadlines: transcription 90 s plus chunk notes 180 s fit under the recordings route’s 300 s; session artifacts 240 s fit under their route’s 300 s. Both browser deadlines are 310 s. A provider body abort is retryable just like an abort before response headers.
 
 `ArtifactStore` uses a separate browser-local IndexedDB database (`echo-session-guides-v1`), keyed by session and exact transcript revision. It does not migrate or delete audio. Restored guides are validated before rendering; a different revision is not restored as current. The React hook prevents concurrent generation, avoids overwriting a generated answer with a late storage read, resumes its generation counter from restored data, and keeps a failed save visible with a download option. This is browser-local convenience, not a server backup. The development-only `/diagnostics/lecture` uses separate synthetic storage for native recovery evidence and can mount the actual notes UI against fixture providers.
+
+## WEB-009 recording workspace boundaries
+
+ADR-024 defines automatic duration-based organization and browser-local name/type
+preferences. `library.ts` groups queue audio and completion records by stable
+session identity, validates clean completion against saved metadata, and derives
+labels without mutating processing metadata. `use-library.ts` persists validated
+presentation preferences separately from audio and listens for cross-tab changes.
+The recorder remains mounted across navigation; starting, recording and finalizing
+lock library navigation, and import saving prevents a concurrent capture start.
+Session notes remain mounted across Notes/Transcript/Audio view switches so changing
+views does not cancel generation. Historical per-clip results stay available.
+
+shadcn/ui Button and Lucide now supply workspace controls/icons; their small runtime
+helpers are dependencies of the approved component system. This remains a single-owner,
+browser-local library with no remote audio copy or cloud history service.
