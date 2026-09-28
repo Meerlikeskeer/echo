@@ -434,3 +434,36 @@ exception. The web importer uses the existing React/Tailwind application. Model
 instructions adapt notes to the recording, preserving meeting decisions, owners
 and deadlines only when actually stated, while retaining detailed educational
 notes for educational recordings. The artifact schema stays compatible.
+
+## ADR-024 — A browser-local recording workspace with deterministic organization
+
+**Status:** Accepted for implementation · **Date:** 2026-09-27 · **Task:** WEB-009
+
+The owner requested a sidebar of named recordings, renaming, a Start new Echo
+home screen resembling the device console, and deterministic Quick Note versus
+Session organization. WEB-009 now includes this workspace, superseding the need
+to choose a capture mode before recording. All new captures use the existing
+bounded, overlapping session engine and incremental transcription queue.
+
+A recording with matching clean completion evidence and a timeline of at most
+60,000 ms is automatically a Quick Note. Longer or unconfirmed recordings are
+Sessions. Duration is the timeline end, never summed overlapping clip durations.
+This is an organization rule, not a semantic prediction of lecture versus meeting.
+The owner may override it or return to Automatic. The label never changes audio,
+chunk identities, processing results, completion evidence, or deletion eligibility.
+Legacy Quick Note classifications remain readable. New captures use the existing
+general-purpose notes pipeline; the category does not schedule tasks or reminders.
+
+Names default to a bounded opening transcript phrase, then a session-ID fallback.
+Manual names and category overrides persist under one localStorage key per session
+(`echo-library-v1/`). Values are validated; storage failures remain visible and do
+not claim success. This small presentation store does not migrate the audio queue
+or artifact database. The existing single-owner gate is unchanged; history belongs
+to this browser/origin, not a cloud account, and is not a verified audio backup.
+
+The workspace uses the approved shadcn/ui Button primitive with Radix Slot,
+class-variance-authority, clsx and tailwind-merge, plus approved Lucide icons.
+Echo's existing React/Tailwind app owns layout and behavior. No new backend,
+authentication system or hosting service is introduced. Provider disclosures and
+storage limitations remain accessible; original audio and per-clip results remain
+available within the selected recording. Notes generation stays explicitly requested.

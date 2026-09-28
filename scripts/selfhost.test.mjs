@@ -31,7 +31,7 @@ import { assembleStandalone, paths } from "./selfhost-assemble.mjs";
 const username = "synthetic-owner";
 const password = "synthetic-selfhost-password-123456789";
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const PAGE_MARKER = /Record a note/;
+const PAGE_MARKER = /Echo private workspace/;
 
 // Blanked explicitly so a developer's real echo-web-app/.env.local can never
 // configure a server under test and no test can reach a real vendor.

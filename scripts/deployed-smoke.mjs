@@ -58,7 +58,7 @@ if (base.protocol !== "https:" && !loopback) {
 
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 const owner = { authorization };
-const PAGE_MARKER = /Record a note/;
+const PAGE_MARKER = /Echo private workspace/;
 const leaked = new RegExp(password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 const notes = [];
 

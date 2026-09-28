@@ -49,10 +49,18 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-009 (ADR-024) provides the recording workspace: searchable sidebar, persistent
+  names, selected-session notes/transcript/audio views and a single recording action.
+  Complete recordings up to one minute are organized as Quick Notes, longer or
+  unconfirmed recordings as Sessions; manual overrides do not alter audio or
+  processing evidence. History remains browser-local and names use a separate small
+  presentation store. See `tasks/WEB-009.md` for verification and deployment limits.
+
 - ENG-022 pins Vercel's output directory to `echo-web-app/.next`, repairing the
   stale `apps/web/.next` lookup observed after ENG-021. The merged WEB-020 importer
-  already supports `.echo` uploads and transcription; making it live still needs
-  a successful explicit deployment. See `tasks/ENG-022.md` for current evidence.
+  already supports `.echo` uploads and transcription. The owner reported the Vercel
+  flow working on 2026-09-27; this is owner-reported acceptance, not a new automated
+  deployed-origin smoke run. See `tasks/ENG-022.md` for the repair evidence.
 
 - WEB-020 (ADR-023) adds the first general-purpose XIAO ESP32S3 Sense recording MVP: independent microSD capture, BOOT/browser start-stop, overlapping WAV chunks, a two-hour bound, partial recovery and `.echo` export into the existing web queue for transcripts and session notes. Firmware builds, host/UI tests, web checks and independent source review are complete; physical microphone, power-loss and long-session acceptance remain pending in `status/acceptance/WEB-020-device.md`. Upload instructions are in `echo-device/README.md`. Flashing firmware does not deploy the web importer.
 
@@ -94,7 +102,7 @@ that every task must edit.**
 
 ## What does not exist
 
-Overlap stitching, history, speaker labels, research, reminders, background processing, physically verified production hardware recording or a native Mac receiver. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
+Speaker labels, research, reminders, background processing, physically verified production hardware recording or a native Mac receiver. No database, server-side file storage, or real user accounts — and therefore no job ledger that survives a cold start, which is what exactly-once chunk processing would need (ADR-016).
 
 **What WEB-004 does and does not promise.** Audio is saved in *this browser*, not on a server: site data can be evicted or cleared, private browsing is temporary, and an abrupt termination can still lose the container that was mid-recording. A closed or suspended page cannot upload, and exactly-once remote provider processing after a lost HTTP response needs later server work — retries never duplicate a local chunk or result, but a provider may see the same audio twice.
 
