@@ -54,7 +54,10 @@ that every task must edit.**
   Complete recordings up to one minute are organized as Quick Notes, longer or
   unconfirmed recordings as Sessions; manual overrides do not alter audio or
   processing evidence. History remains browser-local and names use a separate small
-  presentation store. See `tasks/WEB-009.md` for verification and deployment limits.
+  presentation store. PR #46 is owner-merged and Vercel's Production alias is
+  confirmed at merged main `a7ccfba`. Hosted saved-recording navigation and reload
+  recovery were exercised; fresh import/rename-save and full authenticated alias
+  smoke remain pending. See `tasks/WEB-009.md` for the exact evidence and limits.
 
 - ENG-022 pins Vercel's output directory to `echo-web-app/.next`, repairing the
   stale `apps/web/.next` lookup observed after ENG-021. The merged WEB-020 importer
