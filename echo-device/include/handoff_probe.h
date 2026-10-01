@@ -56,7 +56,7 @@ static void probeRoutes() {
   server.on("/api/probe/ble/start", HTTP_POST, [] {
     if(!action()) return;
     if(probeEnabled) { ok("BLE probe already enabled"); return; }
-    if(!bleReady) { BLEDevice::init("Echo-Handoff-Probe"); bleReady=true; }
+    if(!initializeBle("Echo-Handoff-Probe")) return;
     BLEAdvertising *adv=BLEDevice::getAdvertising(); adv->stop(); bleOn=false;
     if(!probeServer) {
       probeServer=BLEDevice::createServer(); probeServer->setCallbacks(new ProbeServerCallbacks());

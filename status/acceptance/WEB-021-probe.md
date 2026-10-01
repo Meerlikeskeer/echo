@@ -10,3 +10,13 @@ All results below: **not run**. Compilation and simulated UI results are separat
 6. Try a wrong Wi-Fi password while idle: expect a visible timeout after 20 seconds and working access-point recovery. Interrupt a transfer by disconnecting Mac Wi-Fi: expect FAIL, never PASS. Reconnect and retry. Disconnect shared Wi-Fi explicitly; reconnect to device AP. Disable BLE. Reboot and confirm shared Wi-Fi and BLE are off and no probe results imply persistence.
 
 Record board/firmware commit, power source, Mac/phone OS, BLE client, network type, distance, each measured outcome, recording playback and any USB reset/crash evidence. Do not include credentials or recording content. Raw audio stays on SD. Next decision: select connection/receiver design from evidence; actual completed-chunk sync and durable receipt need a separate implementation task.
+
+## Owner observations and WEB-022 retest
+
+Owner reports AP synthetic transfers passing repeatedly. Enabling BLE caused an
+abort in `coex_core_enable` during `BLEDevice::init`, followed by Crash/panic reboot.
+WEB-022 corrects disabled Wi-Fi modem sleep, matching Espressif issue #9595.
+After reflashing, monitor USB while enabling BLE: confirm no abort, no uptime reset,
+working ping/pong, disconnect/reconnect, repeated transfers, and a 90-second capture
+with clean playback. Disable probe and exercise the diagnostics beacon as well.
+These retest results are **not run**; the fix's build evidence does not prove them.
