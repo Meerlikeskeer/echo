@@ -1,4 +1,5 @@
 "use client";
+import { reserveSessionNumber } from "../lib/recording/session-name";
 import { useEffect, useState } from "react";
 import { readPreference, savePreference, type LibraryPreference } from "../lib/recording/library";
 
@@ -10,7 +11,13 @@ export function useLibrary(ids: readonly string[]) {
     let cancelled = false;
     function load() {
       try {
-        const next = Object.fromEntries((JSON.parse(key) as string[]).map(id => [id, readPreference(localStorage, id)]));
+        const next = Object.fromEntries((JSON.parse(key) as string[]).map(id => {
+          let preference = readPreference(localStorage, id);
+          if (!/^session-(\d{13}|undated)-\d+-/.test(id) && !preference.legacyNumber) {
+            preference = savePreference(localStorage, id, { legacyNumber: reserveSessionNumber(localStorage) });
+          }
+          return [id, preference];
+        }));
         if (!cancelled) { setPreferences(next); setError(""); }
       } catch { if (!cancelled) setError("Recording names could not be loaded. Audio is unaffected. Check browser storage access."); }
     }

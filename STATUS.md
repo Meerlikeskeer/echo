@@ -53,6 +53,8 @@ On 2026-09-30 the owner recorded three follow-ups and resumed them on 2026-10-01
 
 ## What exists today
 
+- WEB-031 (ADR-030) replaces automatic library names with recording date/time and local session numbers on web/device; manual names remain. The device learns time from its local browser and keeps it while powered. Historical/unsynchronized dates are unavailable. Deployment, flashing and physical clock acceptance remain separate; see `tasks/WEB-031.md`.
+
 - WEB-030 (ADR-029/RET-007) adds exact-session-confirmed manual SD erasure with permanent-loss/sole-copy warning, active-capture guard, bounded known-file deletion and partial-failure recovery. Cancelling either confirmation preserves all files. Automatic retention is unchanged; firmware/host/UI tests are distinct from pending physical erase acceptance. See `tasks/WEB-030.md`.
 
 - WEB-029 groups transcripts into readable passages/paragraphs with hover/focus/tap playback of original timed source audio and collapsed chunk details. Synthetic mapping tests pass; browser playback/hosted acceptance remains pending in `tasks/WEB-029.md`.

@@ -8,6 +8,8 @@ static volatile bool capturing=false,stopRequested=false;
 static volatile uint32_t capturedSamples=0,savedChunks=0,micLevel=0,stackFree=0;
 static char captureError[120]={0};
 static String activeSession;
+// Clock is learned from a local browser, never guessed after a reboot.
+static uint64_t clockEpochMs=0,clockUptimeMs=0;
 static ChunkRecord transferRecords[130];
 static size_t transferCount=0;
 static bool transferComplete=false;
@@ -144,13 +146,31 @@ static void startCapture(bool reply=true) {
   if(!sdReady){reject("Insert a FAT32 microSD card and mount it in Diagnostics.");return;}
   cacheCard();if(cardTotal<=cardUsed||cardTotal-cardUsed<RESERVE+CHUNK*2){reject("Not enough free microSD space. Existing recordings are kept.");return;}
   cameraStop();if(bleOn){BLEDevice::getAdvertising()->stop();bleOn=false;}WiFi.scanDelete();scanning=false;
-  SD.mkdir("/echo");char id[48];snprintf(id,sizeof(id),"session-%08lx-%08lx",(unsigned long)esp_random(),(unsigned long)esp_random());activeSession=id;
+  SD.mkdir("/echo");
+  Preferences names;
+  if(!names.begin("echo-names",false)){reject("Session counter unavailable; recording was not started.");return;}
+  uint32_t previous=names.getUInt("number",0);
+  if(previous==UINT32_MAX||names.putUInt("number",previous+1)!=sizeof(uint32_t)||names.getUInt("number",0)!=previous+1){names.end();reject("Session counter could not be saved.");return;}
+  names.end();
+  uint64_t nowMs=(uint64_t)(esp_timer_get_time()/1000);
+  String date=clockEpochMs?String((unsigned long long)(clockEpochMs+nowMs-clockUptimeMs)):"undated";
+  char random[9];snprintf(random,sizeof(random),"%08lx",(unsigned long)esp_random());
+  activeSession="session-"+date+"-"+String(previous+1)+"-"+random;
   if(SD.exists("/echo/"+activeSession)||!SD.mkdir("/echo/"+activeSession)){reject("Cannot create a unique session directory.");return;}
   portENTER_CRITICAL(&transferMux);transferCount=0;transferComplete=false;portEXIT_CRITICAL(&transferMux);
   capturedSamples=0;savedChunks=0;micLevel=0;captureError[0]=0;stopRequested=false;capturing=true;
   if(xTaskCreatePinnedToCore(captureTask,"echo-capture",16384,nullptr,3,nullptr,1)!=pdPASS){capturing=false;reject("Cannot start recording task.");return;}if(reply)ok("Recording to microSD");
 }
 static void recorderRoutes() {
+  server.on("/api/clock",HTTP_POST,[]{
+    if(!action())return;
+    String value=server.arg("epochMs");
+    if(value.length()!=13){fail("Invalid browser clock");return;}
+    for(size_t i=0;i<value.length();i++)if(!isdigit((unsigned char)value[i])){fail("Invalid browser clock");return;}
+    uint64_t epoch=strtoull(value.c_str(),nullptr,10);
+    if(epoch<1577836800000ULL||epoch>4102444800000ULL){fail("Invalid browser clock");return;}
+    clockEpochMs=epoch;clockUptimeMs=(uint64_t)(esp_timer_get_time()/1000);ok("Clock synchronized");
+  });
   server.on("/api/recording",HTTP_GET,[]{
     json("{\"recording\":"+String(capturing?"true":"false")+",\"stopping\":"+String(capturing&&stopRequested?"true":"false")+",\"sessionId\":"+quote(activeSession)+",\"durationMs\":"+String(capturedSamples/16)+",\"chunks\":"+String(savedChunks)+",\"level\":"+String(micLevel)+",\"stackFree\":"+String(stackFree)+",\"error\":"+quote(captureError)+",\"sd\":"+String(sdReady?"true":"false")+",\"freeBytes\":"+String((unsigned long long)(cardTotal-cardUsed))+"}");
   });
