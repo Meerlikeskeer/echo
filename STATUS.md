@@ -49,7 +49,7 @@ that every task must edit.**
 
 ## Deferred owner follow-ups
 
-On 2026-09-30 the owner recorded three follow-ups and resumed them on 2026-10-01: deliberate past device-session deletion, generated titles, and deeper natural notes. Original feedback: [`tasks/DOC-006.md`](tasks/DOC-006.md). WEB-027 implements persistent generated titles without overwriting manual names. WEB-028 improves grounded detailed notes guidance and presentation; live model quality remains acceptance. Device-session deletion is separate work. Mention outstanding acceptance in future status reviews.
+On 2026-09-30 the owner recorded three follow-ups and resumed them on 2026-10-01: deliberate past device-session deletion, generated titles, and deeper natural notes. Original feedback: [`tasks/DOC-006.md`](tasks/DOC-006.md). WEB-027 implements persistent generated titles without overwriting manual names. WEB-028 improves grounded detailed notes guidance and presentation; live model quality remains acceptance. WEB-030 adds deliberate warned device-session erasure; WEB-029 adds paragraph transcript/playback and DOC-007 plans hosted detection. Live notes quality, native/hosted playback and physical erase acceptance remain outstanding; mention those in future status reviews.
 
 ## What exists today
 
