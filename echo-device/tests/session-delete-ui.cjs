@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const page=fs.readFileSync(__dirname+'/../include/recording_page.h','utf8');
+function element(){return {textContent:'',children:[],style:{},classList:{toggle(){}},replaceChildren(){this.children=[]},append(...items){this.children.push(...items)},setAttribute(){}}}
+const elements={};for(const [,id] of page.matchAll(/id="([^"]+)"/g))elements[id]=element();elements.meter.children=Array.from({length:15},element);
+let allow=false,typed='session-test',warning='',active=false,fail=false;const requests=[];
+const context={document:{getElementById:id=>elements[id],createElement:element},confirm(message){warning=message;return allow},prompt(){return typed},fetch:async(path,options)=>{requests.push([path,options]);return {ok:!(fail&&path.includes('/delete')),json:async()=>path==='/api/recording'?{recording:active,sd:true,freeBytes:1000,durationMs:0}:path==='/api/sessions'?{sessions:[{id:'session-test',chunks:1,durationMs:10,complete:false}]}:{error:'Deletion stopped partway; remaining files retained'}}},AbortController,setTimeout(){},clearTimeout(){},console};vm.createContext(context);vm.runInContext(page.match(/<script>([\s\S]*?)<\/script>/)[1],context);
+(async()=>{await new Promise(r=>setImmediate(r));const erase=()=>elements.sessions.children[0].children[1].children.at(-1);
+await erase().onclick();assert(warning.includes('only copy'));assert(!requests.some(([p])=>p.includes('/delete')));
+allow=true;typed='wrong';await erase().onclick();assert(!requests.some(([p])=>p.includes('/delete')));
+typed='session-test';fail=true;await erase().onclick();const sent=requests.find(([p])=>p.includes('/delete'));assert(sent[0].includes('confirm=session-test'));assert(sent[0].includes('acknowledge=erase-device-originals'));assert.equal(sent[1].headers['X-Echo-Action'],'1');assert(elements.notice.textContent.includes('partway'));
+const count=requests.filter(([p])=>p.includes('/delete')).length;await vm.runInContext('status.recording=true',context);await erase().onclick();assert.equal(requests.filter(([p])=>p.includes('/delete')).length,count);console.log('PASS: sole-copy warning, cancel, wrong confirmation, acknowledged request, partial error, active lock');})().catch(e=>{console.error(e);process.exitCode=1});
