@@ -115,14 +115,15 @@ export async function runWorker(output: string, origin: string, done: () => bool
   try {
     for (;;) {
       const receiverDone = done();
-      let settled = true, allFinal = true;
+      let settled = true, allFinal = true, observed = false;
       for (const name of await readdir(output)) {
         if (name !== selected() || !/^[A-Za-z0-9-]{1,64}$/.test(name) || !await optional(join(output, name, 'receipt.json'))) continue;
         const result = await processFolder(join(output, name), send);
+        observed = true;
         if (!result.exhausted) settled = false;
         if (result.status !== 'final') allFinal = false;
       }
-      if (receiverDone && settled) return allFinal;
+      if (receiverDone && settled) return observed && allFinal;
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   } finally { const { unlink } = await import('node:fs/promises'); await unlink(join(output, '.transcription-lock')); }

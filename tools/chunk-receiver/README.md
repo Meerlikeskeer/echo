@@ -136,3 +136,7 @@ session to recover. Fatal local journal/conflict/configuration errors stop the
 worker safely and let reception finish; inspect private files/configuration and
 rerun. No live provider, playback, restart or long-session physical acceptance is
 implied by synthetic tests.
+
+Device `COMPLETE` refers to audio receipt/export, not transcription. The launcher
+separately prints Transcription FINAL or PARTIAL; partial/exhausted processing
+returns a nonzero exit status. Keep both the raw WAVs and processing journal.
