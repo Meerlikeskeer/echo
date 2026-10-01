@@ -1,0 +1,9 @@
+.pio/
+.vscode/
+.DS_Store
+starter-backup-*/
+*.wav
+*.jpg
+*.log
+.env
+.env.*

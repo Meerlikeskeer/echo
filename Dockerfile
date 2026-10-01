@@ -9,7 +9,7 @@
 #
 # Build and run from the repository root:
 #   docker build -t echo .
-#   docker run --rm -p 3000:3000 --env-file apps/web/.env.local echo
+#   docker run --rm -p 3000:3000 --env-file echo-web-app/.env.local echo
 
 # Pinned to the version in .nvmrc. package.json requires >=22 <23.
 FROM node:22.23.2-alpine AS build
@@ -17,7 +17,7 @@ WORKDIR /repo
 
 # Dependencies first so a source-only change does not reinstall them.
 COPY package.json package-lock.json ./
-COPY apps/web/package.json ./apps/web/package.json
+COPY echo-web-app/package.json ./echo-web-app/package.json
 RUN npm ci
 
 COPY . .
@@ -43,10 +43,10 @@ ENV HOSTNAME=0.0.0.0
 # The standalone bundle carries its own traced node_modules, so the runtime
 # stage installs nothing and ships no package manager state.
 RUN addgroup -S echo && adduser -S echo -G echo
-COPY --from=build --chown=echo:echo /repo/apps/web/.next/standalone/ ./
+COPY --from=build --chown=echo:echo /repo/echo-web-app/.next/standalone/ ./
 USER echo
 
 EXPOSE 3000
 # Mirrors the workspace layout, because outputFileTracingRoot is the repository
-# root (apps/web/next.config.ts explains why it has to be).
-CMD ["node", "apps/web/server.js"]
+# root (echo-web-app/next.config.ts explains why it has to be).
+CMD ["node", "echo-web-app/server.js"]

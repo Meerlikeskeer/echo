@@ -291,15 +291,25 @@ Render one derived session transcript with partial/final status and readable gap
 
 **Tradeoff:** Conservative alignment can leave repeated words visible when timestamps are too coarse to prove duplication. Preserving speech is preferable to silently deleting it. Recovered pre-manifest sessions cannot be retrospectively called complete. Native IndexedDB migration and capture lifecycle verification remain separate evidence from pure domain and rendering tests.
 
-## ADR-018 — Foreground lecture recording trial (WEB-016)
+## ADR-018 — A session records until the owner stops it, at a bitrate Echo chooses
 
-**Status:** Accepted for implementation · **Date:** 2026-09-09
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-016 · **Refines:** ADR-012, ADR-017
 
-**Context:** The owner requests lecture and meeting trials beyond the one-minute prototype, with slightly longer overlap. Existing incremental upload and browser-local storage can carry a longer session without a new service.
+**Context:** Echo stopped every recording after one minute, and three separate limits enforced it: a timer in the recorder, a 60-second ceiling in `validateCaptureOptions`, and a 120-second span ceiling in `isAudioChunk`, which is also the upload boundary's validator. The product is a note taker for lectures and meetings, so a one-minute recording is not a smaller version of the thing — it is a different thing. Two limits made a longer recording unsafe rather than merely unavailable. Browsers pick their own Opus bitrate when none is requested, and Safari 26.4 was measured at 204 kbps; at that rate a five-minute chunk is 7.6 MB against a 4 MB upload limit, and the 64 MiB local audio budget holds about forty minutes.
 
-**Decision:** Session mode uses 60-second complete containers, 3-second default / 5-second optional overlap, a requested 32 kbit/s bitrate and a two-hour deadline owned by the capture engine. Quick Note remains unchanged. Keep measured-byte storage guards and all retention restrictions; the browser may choose a different bitrate or run out of capacity earlier. State the open-tab/device-awake requirement and the absence of full-lecture study guides in the UI.
+**Decision:** A session records until the owner stops it, bounded only by a four-hour runaway limit. Chunks are five minutes with five seconds of overlap. Echo requests 32 kbps Opus rather than accepting the browser's default, reads back the rate the recorder says it will use, and shortens the chunk when that rate would put it over the upload limit. A chunk larger than the upload limit is refused in the browser with its own reason instead of retried over the network. The local audio budget rises to 256 MiB, so the binding constraint becomes the browser's own quota. The screen wake lock is held while a session records, as one more defence and never as something correctness rests on.
 
-**Verification boundary:** Simulated clocks establish control flow and ordering, not physical browser endurance, audio fidelity, remote durability or two-hour availability. Those require browser acceptance before a reliability claim. Whole-transcript note generation is a separate task; increasing capture duration does not remove its current input limitation.
+**Tradeoff:** Five-minute chunks mean a chunk lost to a refused upload costs five minutes rather than one, and the first transcript now appears five minutes in rather than one. Five seconds of overlap will usually appear twice in the stitched transcript, because ADR-017's deduplication needs identical segment timing and two separate transcription calls rarely produce it — visible repetition over dropped speech, as ADR-017 chose. 32 kbps is speech-transparent and not music-transparent; Echo is a note taker. The wake lock is unavailable in some browsers and refused in a background tab, so a long recording still depends on the tab staying open.
+
+## ADR-019 — Session notes are a lecture guide, and an over-long transcript is refused rather than truncated
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-017 · **Refines:** ADR-009, ADR-017
+
+**Context:** The session artifact schema was a meeting summary — title, summary, key points, action items, research topics — and a lecture flattened into it loses the argument, the terminology as the speaker uses it, and what was left unresolved. Two separate bounds also made a lecture impossible rather than merely poorly served: `isRevisionInput` refused a transcript over 24,000 characters with `400 bad_request`, and both generators truncated with `slice(0, MAX_TRANSCRIPT_CHARS)` and reported nothing, so notes could describe the first third of a session with no sign the rest existed. The stitched transcript's gaps reached the endpoint and were dropped before generating.
+
+**Decision:** `SessionArtifacts` gains a course or subject identified only from the recording itself and null otherwise, an outline of sections carrying the session's substance in order, terminology defined as the speaker defined it, and open questions. Nested objects are validated as strictly as the flat fields, unknown keys included. The transcript bound rises to a session-sized one and **the port refuses past it** rather than truncating: Echo sends the whole transcript and lets the configured model refuse what it cannot take, because a refusal is visible and a truncation is not. Gaps and partial status are stated to the generator, before the transcript, as Echo's own words about Echo's own data. Both route handlers declare `maxDuration` rather than inheriting a platform default.
+
+**Tradeoff:** A larger transcript costs more per generation and takes longer, and a model with a small context window now fails loudly on a long session where it used to succeed on a third of one — which is the point, and is why the notes model's context window becomes a real configuration constraint (`env.example` says so). A richer schema is more for a provider to get wrong, so one malformed section costs the whole set of notes; the validator's problem list keeps naming fields and reasons and never values. The vendor remains undecided (ADR-009): nothing here names one in code.
 
 ## Open decisions
 
@@ -314,3 +324,158 @@ Echo has deliberately **not** chosen the following. Do not silently pick one; ma
 - **Production authentication:** undecided. The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final authentication architecture.
 
 Also select supported mobile browsers/codecs, chunk/overlap durations, the retention warning grace period and pressure threshold, and research scope during their implementation tasks. Record measurements before promising latency or capture range.
+
+## ADR-020 — Conservative lecture recovery and guide persistence
+
+**Status:** Accepted for implementation · **Date:** 2026-09-10 · **Task:** WEB-018 · **Refines:** ADR-018, ADR-019
+
+The owner requested repair of the reviewed lecture reliability defects. Default session containers are one minute, with thirty-second containers when bitrate is unknown, to reduce the normal unsaved tail. The four-hour runaway deadline belongs to the capture engine. An impossible reported bitrate is refused; reported rates never guarantee encoded size. Storage headroom uses actual saved bytes per recording time, overlap, unfinished audio and a reserve. Browser suspension can still defer capture timers, so foreground operation and backup recording remain required for acceptance.
+
+Gap descriptions carry chunk bounds only from validated chunk metadata or completion manifests; bounds identify affected chunks, not exact missing speech within overlaps. Missing transcription is distinguished from absent local audio. Both gap timing and the text sent to generation participate in transcript revision identity.
+
+Transcription and per-chunk notes deadlines are 90 and 180 seconds, fitting together below the 300-second route allowance. Session guide generation has 240 seconds. Browser requests allow 310 seconds, so the route can return a readable provider timeout first.
+
+Validated guides are stored in a separate browser-local IndexedDB store keyed by session and transcript revision. This introduces no provider or server durability claim, does not migrate or delete audio, and cannot make an older revision appear current. A failed guide write leaves the displayed result downloadable and raises a warning. Real browser recovery and full-lecture acceptance remain separate from synthetic evidence.
+
+
+## ADR-021 — Board-hosted diagnostics for the XIAO ESP32S3 Sense
+
+**Status:** Accepted for implementation · **Date:** 2026-09-25 · **Task:** WEB-019 · **Extends:** ADR-007, ADR-008
+
+**Context:** The owner has received the hardware and explicitly requested a local
+ESP32 console followed later by Echo recording and a Mac receiver. On this date
+the owner chose to keep the firmware in the existing Echo repository. This opens
+a limited hardware bring-up phase alongside the web work, superseding the earlier
+blanket hardware deferral for this diagnostic task. Next.js cannot run on this
+microcontroller; the approved web application stack remains in apps/web.
+
+**Decision:** Store the PlatformIO project in firmware/echo-device. Use C++ and
+the Arduino ESP32 framework delivered by the pinned espressif32 7.1.3 platform.
+Use its bundled drivers and WebServer to serve a small self-contained HTML/JS
+console from device flash. This is an embedded diagnostic surface, not a second
+application backend, web framework, hosting provider, or replacement design system.
+Camera and microphone tests require deliberate activation. The device creates
+a password-protected local Wi-Fi access point; a per-device password is saved in
+NVS and displayed only through the USB serial console for provisioning. Anyone
+with that password is trusted to operate the bench console; no internet exposure
+or production authentication claim is made. Application logs in RAM exclude that
+password and recording contents. Driver/boot/crash output remains on USB.
+
+**Limits:** No Echo API integration, automatic audio retention, battery monitoring,
+Mac app, OTA flashing, arbitrary pin controls or cloud service is introduced. BLE
+is a nonconnectable test beacon, not a paired control/data interface. The SD
+readback test is not durable-copy evidence for Echo's retention rules. GPIO21 is
+reserved for SD chip-select rather than exposed as an LED toggle. Camera preview
+and microphone recording are exercised separately. Build and simulated UI tests
+do not establish physical peripheral function; hardware acceptance remains pending.
+
+
+## ADR-022 — Three application folders under Echo
+
+**Status:** Accepted · **Date:** 2026-09-25 · **Task:** ENG-021 · **Refines:** ADR-007, ADR-010, ADR-021
+
+The owner requested one `echo` root with `echo-web-app`, `echo-mac-app`, and
+`echo-device`. Move `apps/web` to `echo-web-app` and `firmware/echo-device` to
+`echo-device`; reserve `echo-mac-app` with a README because no Mac implementation
+exists yet. Keep shared scripts, controller tests, project documents and the npm
+lockfile at the root. Keep `@echo/web` as the package name and all existing runtime
+boundaries. Update web tracing depth, standalone paths, Docker assembly, npm
+workspace metadata, adapter paths, tests and current instructions together.
+
+Historical task records and earlier ADRs retain the paths used when their evidence
+was collected; this ADR is their current-path translation. No secrets, captured
+media, generated outputs or local dependencies are moved. Existing deployments
+are not changed by this source reorganization.
+
+The owner also requires ready-for-review PRs by default. A draft requires an
+explicit checklist of concrete owner actions needed to complete it. Pending CI,
+unverified hardware, local tool failures and stacked branches alone do not justify
+a draft. This is recorded in AGENTS.md and the PR template, without weakening
+verification or authorizing agents to merge.
+
+## ADR-023 — General-purpose device recording and explicit browser import
+
+**Status:** Accepted for implementation · **Date:** 2026-09-25 · **Task:** WEB-020 · **Extends:** ADR-021
+
+The owner explicitly requested the first usable Echo device firmware, confirmed a
+microSD card is installed, and clarified that sessions mean meetings,
+conversations, lectures and other recordings, not a lecture-specific product.
+This expands the diagnostics-only hardware exception to an offline recording MVP.
+
+Keep the approved PlatformIO/C++/Arduino stack. The board captures 16 kHz mono
+PCM16 audio independently of the browser, saves one-minute WAV containers with
+2 seconds of repeated audio at boundaries, and stops at two hours or on a capture
+or storage fault. Two hours of this uncompressed format fits the existing 256 MiB
+browser audio budget when that budget has sufficient free space. BOOT and the
+local browser control start/stop. GPIO21 remains reserved for SD chip-select.
+
+Completed chunks carry stable session/chunk identities, sample-derived relative
+times and SHA-256 checksums. A completion marker is written only after a clean
+stop and successful file/journal writes. Recovery preserves an interrupted
+session as partial, including its unfinished raw tail on the card. There is no
+clock-derived date claim, deletion, formatting, or claim of a verified independent
+copy. A dedicated capture task and explicit SD/peripheral exclusion isolate
+recording from blocking diagnostics and downloads. Fault detection does not prove
+power-loss durability or microphone quality; physical acceptance remains required.
+
+The device exports one `.echo` file: `ECHO0001`, a little-endian uint32 JSON byte
+length, a version-1 manifest, then ordered WAV bytes. The manifest carries
+`sessionId`, `complete` and standard Echo `AudioChunk` records. The browser checks
+bounds, order, PCM headers, lengths and every checksum before offering any audio
+to its existing durable queue. Reimport preserves identity and existing results;
+partial sessions never acquire completion evidence. Users explicitly import and
+process recordings after switching from device Wi-Fi to their normal network.
+Existing server-side providers generate transcripts and general-purpose notes;
+no provider keys, new backend, public device endpoint or home Wi-Fi provisioning
+is introduced. No native Mac receiver or on-device AI is claimed.
+
+The device UI stays self-contained in flash, extending ADR-021's embedded UI
+exception. The web importer uses the existing React/Tailwind application. Model
+instructions adapt notes to the recording, preserving meeting decisions, owners
+and deadlines only when actually stated, while retaining detailed educational
+notes for educational recordings. The artifact schema stays compatible.
+
+## ADR-024 — A browser-local recording workspace with deterministic organization
+
+**Status:** Accepted for implementation · **Date:** 2026-09-27 · **Task:** WEB-009
+
+The owner requested a sidebar of named recordings, renaming, a Start new Echo
+home screen resembling the device console, and deterministic Quick Note versus
+Session organization. WEB-009 now includes this workspace, superseding the need
+to choose a capture mode before recording. All new captures use the existing
+bounded, overlapping session engine and incremental transcription queue.
+
+A recording with matching clean completion evidence and a timeline of at most
+60,000 ms is automatically a Quick Note. Longer or unconfirmed recordings are
+Sessions. Duration is the timeline end, never summed overlapping clip durations.
+This is an organization rule, not a semantic prediction of lecture versus meeting.
+The owner may override it or return to Automatic. The label never changes audio,
+chunk identities, processing results, completion evidence, or deletion eligibility.
+Legacy Quick Note classifications remain readable. New captures use the existing
+general-purpose notes pipeline; the category does not schedule tasks or reminders.
+
+Names default to a bounded opening transcript phrase, then a session-ID fallback.
+Manual names and category overrides persist under one localStorage key per session
+(`echo-library-v1/`). Values are validated; storage failures remain visible and do
+not claim success. This small presentation store does not migrate the audio queue
+or artifact database. The existing single-owner gate is unchanged; history belongs
+to this browser/origin, not a cloud account, and is not a verified audio backup.
+
+The workspace uses the approved shadcn/ui Button primitive with Radix Slot,
+class-variance-authority, clsx and tailwind-merge, plus approved Lucide icons.
+Echo's existing React/Tailwind app owns layout and behavior. No new backend,
+authentication system or hosting service is introduced. Provider disclosures and
+storage limitations remain accessible; original audio and per-clip results remain
+available within the selected recording. Notes generation stays explicitly requested.
+
+## ADR-025 — Separate experimental wireless handoff probe
+
+**Status:** Accepted for implementation · **Date:** 2026-09-30 · **Task:** WEB-021 · **Extends:** ADR-021, ADR-023
+
+The owner requested a separate probe section to investigate BLE control and Wi-Fi data transfer before automatic handoff. Serve `/probe` from the existing device WebServer, with a connectable, unpaired GATT service limited to literal ping/pong. It cannot control capture or transmit credentials/audio. Explicit HTTP actions enable/disable it while idle. Existing diagnostics beacon is unavailable while the probe is enabled.
+
+Allow explicit temporary station connection while keeping the protected device access point. Credentials are sent over local HTTP, held by the Wi-Fi driver in RAM, never logged or written to flash, and cleared on disconnect/reboot. Disable automatic reconnection and bound connection attempts to 20 seconds. The owner must use a trusted personal network: every client on that network can reach the existing bench console, including recordings. This intentionally expands ADR-021's access-point-only trust boundary for the experiment; it is not production provisioning/authentication. No campus/enterprise login support or internet reachability claim.
+
+A fixed 64 KiB generated payload checks transport bytes and measures browser elapsed time, with bounded server/client stalls. It does not touch SD and may run during capture, so physical acceptance can compare BLE/Wi-Fi coexistence and recording stability. It does not prove completed-chunk availability, background handoff, durable receipt or deletion eligibility. Native receiver and production connection/security choices remain open.
+
+The ESP32-S3 shares one radio between BLE and Wi-Fi ([Espressif coexistence documentation](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32s3/api-guides/coexist.html)). The local HTTP page uses an external GATT client for BLE because browser Bluetooth requires a secure context ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)). Physical evidence, rather than compilation, determines feasibility.

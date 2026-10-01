@@ -5,7 +5,7 @@
 // what a hosting platform puts in front of them. This script checks the thing
 // the owner actually browses to, over its real certificate.
 //
-// The check that justifies this file: apps/web/src/proxy.ts gates every path
+// The check that justifies this file: echo-web-app/src/proxy.ts gates every path
 // with no exclusions, and scripts/production.test.mjs proves that against a
 // Node server. A hosting platform commonly serves /_next/static from a CDN edge
 // that answers *before* the application runs. If it does, compiled assets are
@@ -58,7 +58,7 @@ if (base.protocol !== "https:" && !loopback) {
 
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 const owner = { authorization };
-const PAGE_MARKER = /Record a note/;
+const PAGE_MARKER = /Echo private workspace/;
 const leaked = new RegExp(password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 const notes = [];
 

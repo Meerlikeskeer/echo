@@ -19,13 +19,13 @@ const repositoryRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "
 
 export const paths = {
   repositoryRoot,
-  standalone: path.join(repositoryRoot, "apps/web/.next/standalone"),
+  standalone: path.join(repositoryRoot, "echo-web-app/.next/standalone"),
   /** Mirrors the workspace layout because outputFileTracingRoot is the repository root. */
-  server: path.join(repositoryRoot, "apps/web/.next/standalone/apps/web/server.js"),
-  staticSource: path.join(repositoryRoot, "apps/web/.next/static"),
-  staticTarget: path.join(repositoryRoot, "apps/web/.next/standalone/apps/web/.next/static"),
-  publicSource: path.join(repositoryRoot, "apps/web/public"),
-  publicTarget: path.join(repositoryRoot, "apps/web/.next/standalone/apps/web/public"),
+  server: path.join(repositoryRoot, "echo-web-app/.next/standalone/echo-web-app/server.js"),
+  staticSource: path.join(repositoryRoot, "echo-web-app/.next/static"),
+  staticTarget: path.join(repositoryRoot, "echo-web-app/.next/standalone/echo-web-app/.next/static"),
+  publicSource: path.join(repositoryRoot, "echo-web-app/public"),
+  publicTarget: path.join(repositoryRoot, "echo-web-app/.next/standalone/echo-web-app/public"),
 };
 
 const exists = async (target) => {
@@ -45,13 +45,13 @@ const exists = async (target) => {
 export async function assembleStandalone() {
   if (!(await exists(paths.server))) {
     throw new Error(
-      "No standalone server at apps/web/.next/standalone/apps/web/server.js. " +
-        "Run `npm run build` first, and check that apps/web/next.config.ts still sets " +
+      "No standalone server at echo-web-app/.next/standalone/echo-web-app/server.js. " +
+        "Run `npm run build` first, and check that echo-web-app/next.config.ts still sets " +
         "`output: \"standalone\"` and `outputFileTracingRoot` to the repository root.",
     );
   }
   if (!(await exists(paths.staticSource))) {
-    throw new Error("No apps/web/.next/static to copy. The build did not complete.");
+    throw new Error("No echo-web-app/.next/static to copy. The build did not complete.");
   }
 
   await cp(paths.staticSource, paths.staticTarget, { recursive: true });

@@ -31,9 +31,9 @@ import { assembleStandalone, paths } from "./selfhost-assemble.mjs";
 const username = "synthetic-owner";
 const password = "synthetic-selfhost-password-123456789";
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const PAGE_MARKER = /Record a note/;
+const PAGE_MARKER = /Echo private workspace/;
 
-// Blanked explicitly so a developer's real apps/web/.env.local can never
+// Blanked explicitly so a developer's real echo-web-app/.env.local can never
 // configure a server under test and no test can reach a real vendor.
 const BLANK_PROVIDERS = {
   TRANSCRIPTION_PROVIDER: "", TRANSCRIPTION_BASE_URL: "", TRANSCRIPTION_API_KEY: "", TRANSCRIPTION_MODEL: "",
@@ -55,7 +55,7 @@ async function freePort() {
  *
  * With `relocate`, the bundle is first copied to a directory outside the
  * repository and started with a minimal environment, which is what the container
- * actually does (`COPY .next/standalone/ /app` then `node apps/web/server.js`).
+ * actually does (`COPY .next/standalone/ /app` then `node echo-web-app/server.js`).
  * That distinction matters: started in place, the bundle sits inside the
  * repository, so Node's module resolution can walk up into the workspace
  * node_modules and hide a dependency the trace failed to include. Relocated, it
@@ -74,7 +74,7 @@ async function withStandaloneServer({ configured, relocate = false }, run) {
     await cp(paths.standalone, appRoot, { recursive: true });
     // Mirrors the Dockerfile's WORKDIR and CMD rather than an absolute path.
     cwd = appRoot;
-    command = "apps/web/server.js";
+    command = "echo-web-app/server.js";
     // Deliberately not `...process.env`: nothing inherited, so the bundle cannot
     // borrow anything from the developer's shell that a container would not have.
     env = { PATH: process.env.PATH, HOME: process.env.HOME };
@@ -159,7 +159,7 @@ test("the bundle runs relocated outside the repository, the way the container do
   await withStandaloneServer({ configured: true, relocate: true }, async (base, appRoot) => {
     const topLevel = await readdir(appRoot);
     assert.ok(topLevel.includes("node_modules"), "the bundle must carry its own traced dependencies");
-    assert.ok(topLevel.includes("apps"), "the workspace layout the CMD path depends on is missing");
+    assert.ok(topLevel.includes("echo-web-app"), "the workspace layout the CMD path depends on is missing");
 
     // An .env file reaching the image would ship a credential inside it. The
     // container job asserts this against the real image; this covers the bundle.

@@ -28,7 +28,7 @@ if (!username || !password) {
 }
 
 const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const PAGE_MARKER = /Record a note/;
+const PAGE_MARKER = /Echo private workspace/;
 
 async function waitForContainer() {
   for (let attempt = 0; attempt < 150; attempt++) {

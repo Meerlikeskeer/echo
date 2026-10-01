@@ -37,6 +37,13 @@ forward, and write `not run` for anything you did not execute.
 has to do by hand, anything covered only by a substitute. A substitute is not
 verification. If everything ran, write "nothing outstanding". -->
 
+## Owner actions required to leave draft
+
+<!-- Ready for review is the default. Write "None — ready for review" unless
+this PR must be a draft because specific owner actions block completion. For
+each draft blocker, give an actionable checkbox and the evidence that resolves it.
+Pending CI or unexecuted checks alone are not a reason for a draft. -->
+
 ## Risk and reversibility
 
 - [ ] No credential appears in source, tests, logs, fixtures or `NEXT_PUBLIC_*`.

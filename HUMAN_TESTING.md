@@ -49,10 +49,10 @@ Short version of the setup, with the full detail in that document:
 ```sh
 cd ~/Documents/GitHub/echo
 npm ci
-cp env.example apps/web/.env.local
+cp env.example echo-web-app/.env.local
 ```
 
-Set `ECHO_OWNER_USERNAME` and `ECHO_OWNER_PASSWORD` in `apps/web/.env.local`.
+Set `ECHO_OWNER_USERNAME` and `ECHO_OWNER_PASSWORD` in `echo-web-app/.env.local`.
 Parts B and C also need the `TRANSCRIPTION_*` and `LLM_*` groups; `npm run doctor`
 checks them without touching provider code. Then:
 

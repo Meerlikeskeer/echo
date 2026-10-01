@@ -14,6 +14,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [DOC-001](DOC-001.md) Shared repository foundation | Done | — |
 | [DOC-004](DOC-004.md) Record the first full pass of the deployed check | Done | `docs/DOC-004-deployed-check-passes` |
 | [DOC-005](DOC-005.md) The living documents still said nothing was deployed | Done | `docs/DOC-005-deployed-doc-drift` |
+| [DOC-006](DOC-006.md) Record owner product follow-ups for future status reviews | Documentation complete; product follow-ups deferred by owner | `docs/DOC-006-owner-followups` |
 | [ENG-001](ENG-001.md) Bounded builder/checker workflow | Done | — |
 | [ENG-002](ENG-002.md) Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
 | [ENG-003](ENG-003.md) Shared status file and reading map | Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 | — |
@@ -32,6 +33,8 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-018](ENG-018.md) `npm run check` could not pass in a worktree, because a test asserted a folder… | Implemented and verified; awaiting owner review | `eng/ENG-018-worktree-verification` |
 | [ENG-019](ENG-019.md) Stop the process from generating merge conflicts and locking agents out | Implemented and verified; awaiting owner review | `eng/ENG-019-conflict-free-task-records` |
 | [ENG-020](ENG-020.md) Apply the auto-merge workflow ENG-016 specified | Workflow applied and pushed; three owner-side settings remain | `eng/ENG-020-apply-auto-merge` |
+| [ENG-021](ENG-021.md) Organize the repository by application | Done — reorganized; web and container CI verified; awaiting owner merge | `refactor/ENG-021-repository-layout` |
+| [ENG-022](ENG-022.md) Repair Vercel output path for device import deployment | Configuration repaired; full web CI passed; deployment and live import acceptance blocked… | `fix/ENG-022-vercel-output-path` |
 | [INT-001](INT-001.md) Branch integration and architecture documentation | Done | — |
 | [WEB-001](WEB-001.md) Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | [WEB-002](WEB-002.md) Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
@@ -41,11 +44,18 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-006](WEB-006.md) Transcript stitching | Implemented and verified by test; the IndexedDB v1→v2 migration and completion recovery… | `feat/WEB-006-transcript-stitching` |
 | [WEB-007](WEB-007.md) Structured artifacts | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-007-structured-artifacts` |
 | [WEB-008](WEB-008.md) Quick Note mode | Implemented and verified locally; live-provider latency and device acceptance pending | `feat/WEB-008-quick-note` |
-| [WEB-009](WEB-009.md) Session history | Todo | — |
+| [WEB-009](WEB-009.md) Recording workspace and session history | Merged and deployed; browser acceptance and measured floor update pending | `fix/WEB-009-deployment-acceptance` |
 | [WEB-010](WEB-010.md) Guarded audio retention | Todo | — |
 | [WEB-011](WEB-011.md) Settings and privacy hardening | Todo | — |
 | [WEB-012](WEB-012.md) Private deployment and recovery validation | Todo | — |
 | [WEB-013](WEB-013.md) Opt-in research | Todo | — |
 | [WEB-014](WEB-014.md) Confirmed reminder/calendar export | Todo | — |
 | [WEB-015](WEB-015.md) The recorder discards every error and its warning outlives the failure | Implemented and verified by test; awaiting owner review | `feat/WEB-015-recorder-error-reporting` |
-| [WEB-016](WEB-016.md) Lecture-length recording | Implemented; production verification and browser acceptance blocked | `feat/WEB-016-lecture-recording` |
+| [WEB-016](WEB-016.md) Lecture-length sessions | Implemented and verified by test; browser acceptance on a real long recording outstanding | `feat/WEB-016-long-sessions` |
+| [WEB-017](WEB-017.md) Lecture note guide | Implemented and verified by test; a real lecture transcript has never been through it | `feat/WEB-017-lecture-notes` |
+| [WEB-018](WEB-018.md) Lecture reliability review fixes | Implemented; CI and native Chrome recovery verified; physical lecture acceptance and… | `fix/WEB-018-lecture-reliability` |
+| [WEB-019](WEB-019.md) ESP32 local diagnostics console | Imported and build verified; physical acceptance pending | `feat/WEB-019-device-console` |
+| [WEB-020](WEB-020.md) First general-purpose Echo device MVP | Implementation complete — verified and independently reviewed; physical acceptance pending | `feat/WEB-020-device-mvp` |
+| [WEB-021](WEB-021.md) Separate Bluetooth and Wi-Fi handoff probe | Implementation complete; firmware and targeted tests passed; physical acceptance pending | `feat/WEB-021-handoff-probe` |
+| [WEB-022](WEB-022.md) Repair Bluetooth/Wi-Fi coexistence crash | Fix implemented and firmware build verified; physical retest pending | `fix/WEB-022-ble-coexistence` |
+| [WEB-023](WEB-023.md) Accept already-enabled Wi-Fi modem sleep | Fix implemented; firmware build and targeted tests passed; physical retest pending | `fix/WEB-023-ble-sleep-verification` |

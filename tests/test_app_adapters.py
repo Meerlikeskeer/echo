@@ -75,7 +75,7 @@ class AdapterAcceptance(unittest.TestCase):
                 if adapter == 'run-app-tests.py':
                     self.assertTrue(any('tsx' in str(arg) for arg in argv))
                     selected = {Path(arg).resolve() for arg in argv if str(arg).endswith(('.test.ts', '.test.tsx'))}
-                    expected = set((ROOT / 'apps/web/tests').glob('*.test.ts')) | set((ROOT / 'apps/web/tests').glob('*.test.tsx'))
+                    expected = set((ROOT / 'echo-web-app/tests').glob('*.test.ts')) | set((ROOT / 'echo-web-app/tests').glob('*.test.tsx'))
                     self.assertEqual(selected, expected)
                 else:
                     self.assertTrue(any(str(arg).endswith('scripts/production.test.mjs') for arg in argv))

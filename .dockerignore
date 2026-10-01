@@ -7,17 +7,20 @@
 .claude
 
 node_modules
-apps/web/node_modules
+echo-web-app/node_modules
 .next
-apps/web/.next
+echo-web-app/.next
 out
 dist
 build
 coverage
 *.tsbuildinfo
 
-# Never send local credentials into a build context. .env.example is the only
-# environment file in the repository and the image does not need it.
+# The web image does not need firmware, device builds or the native app folder.
+/echo-device/
+/echo-mac-app/
+
+# Never send local credentials into a build context.
 .env
 .env.*
 *.pem
