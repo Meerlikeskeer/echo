@@ -47,6 +47,10 @@ It is not reproduced here. It used to be, and every task that changed a status h
 so any two open branches conflicted on it (**ENG-019**). The rule that replaced it is short: **no file
 that every task must edit.**
 
+## Deferred owner follow-ups
+
+On 2026-09-30 the owner asked to keep three items for a later product session: delete past device sessions deliberately; fix web titles staying on transcript previews rather than adopting generated notes titles; improve vague, unnatural notes and the notes page's depth. **Mention these in future Echo status reviews.** Details, reproduction limits and retention constraints: [`tasks/DOC-006.md`](tasks/DOC-006.md). All three are deferred, not implemented.
+
 ## What exists today
 
 - WEB-023 corrects WEB-022’s false refusal when Arduino reports an unchanged sleep setting. BLE startup now applies and verifies the driver power-save state; build and regression checks pass, physical retest pending in `tasks/WEB-023.md`.
