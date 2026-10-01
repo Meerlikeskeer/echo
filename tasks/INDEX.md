@@ -55,3 +55,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-018](WEB-018.md) Lecture reliability review fixes | Implemented; CI and native Chrome recovery verified; physical lecture acceptance and… | `fix/WEB-018-lecture-reliability` |
 | [WEB-019](WEB-019.md) ESP32 local diagnostics console | Imported and build verified; physical acceptance pending | `feat/WEB-019-device-console` |
 | [WEB-020](WEB-020.md) First general-purpose Echo device MVP | Implementation complete — verified and independently reviewed; physical acceptance pending | `feat/WEB-020-device-mvp` |
+| [WEB-021](WEB-021.md) Separate Bluetooth and Wi-Fi handoff probe | Implementation in progress; physical acceptance pending | `feat/WEB-021-handoff-probe` |

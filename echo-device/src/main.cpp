@@ -11,6 +11,7 @@
 #include <esp_timer.h>
 #include "console_page.h"
 #include "recording_page.h"
+#include "probe_page.h"
 
 // XIAO ESP32S3 Sense only. GPIO21 is SD CS and must not be toggled as an LED.
 WebServer server(80);
@@ -170,7 +171,10 @@ void recordMicrophone() {
 }
 #include "recorder.h"
 
+ #include "handoff_probe.h"
+
 void routes() {
+  probeRoutes();
   recorderRoutes();
   const char *headers[] = {"X-Echo-Action"}; server.collectHeaders(headers, 1);
   server.on("/", HTTP_GET, [] {
@@ -251,6 +255,7 @@ void routes() {
   });
   server.on("/api/ble", HTTP_POST, [] {
     if(!action()) return;
+    if(probeEnabled) { fail("Stop the handoff BLE probe first",409); return; }
     if(!bleReady) { BLEDevice::init("Echo-Diagnostics"); bleReady = true; }
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     if(bleOn) adv->stop();
@@ -291,6 +296,7 @@ void setup() {
   logEvent("Web console ready; camera, microphone and BLE are off");
 }
 void loop() {
+  probePoll();
   server.handleClient();
   pollRecordButton();
   if(restartAt && !capturing && (int32_t)(millis()-restartAt)>=0) ESP.restart();

@@ -49,6 +49,9 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-021 (ADR-025) adds a separate board-hosted `/probe` for explicit BLE ping/pong, temporary trusted shared Wi-Fi and synthetic transfer integrity/timing. No automatic audio handoff is implemented. Firmware/UI evidence and physical acceptance limits are in `tasks/WEB-021.md` and `status/acceptance/WEB-021-probe.md`. Shared-network clients can access the bench console; use a trusted personal network.
+
+
 - WEB-009 (ADR-024) provides the recording workspace: searchable sidebar, persistent
   names, selected-session notes/transcript/audio views and a single recording action.
   Complete recordings up to one minute are organized as Quick Notes, longer or
