@@ -109,18 +109,20 @@ export async function runWorker(output: string, origin: string, done: () => bool
       throw Error('Processing request failed');
     }
     const body = await response.json();
-    if (!body.chunk || !sameMetadata(c, body.chunk)) throw new NonRetryable('Response identity conflict');
+    if (body.processingMode !== 'transcription-only' || body.notes !== undefined || !body.chunk || !sameMetadata(c, body.chunk)) throw new NonRetryable('Response identity conflict');
     return body.transcript;
   };
   try {
     for (;;) {
-      let settled = true;
+      const receiverDone = done();
+      let settled = true, allFinal = true;
       for (const name of await readdir(output)) {
         if (name !== selected() || !/^[A-Za-z0-9-]{1,64}$/.test(name) || !await optional(join(output, name, 'receipt.json'))) continue;
         const result = await processFolder(join(output, name), send);
         if (!result.exhausted) settled = false;
+        if (result.status !== 'final') allFinal = false;
       }
-      if (done() && settled) break;
+      if (receiverDone && settled) return allFinal;
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   } finally { const { unlink } = await import('node:fs/promises'); await unlink(join(output, '.transcription-lock')); }

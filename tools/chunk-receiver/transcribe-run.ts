@@ -26,6 +26,6 @@ child.on('exit', c => { code = c ?? 1; done = true; });
 child.on('error', () => { done = true; });
 process.on('SIGINT', () => { child.kill('SIGINT'); process.exit(130); });
 process.on('SIGTERM', () => { child.kill('SIGTERM'); process.exit(143); });
-runWorker(output, origin, () => done, () => selected).then(() => { process.exitCode = code; }).catch(() => {
+runWorker(output, origin, () => done, () => selected).then(final => { console.log(final ? 'Transcription FINAL: all expected chunks processed.' : 'Transcription PARTIAL: inspect transcript.txt and processing.json.'); process.exitCode = code || (final ? 0 : 1); }).catch(() => {
   console.error('Transcription stopped safely; audio retained. Check configuration, spool conflicts or processing lock.'); process.exitCode = 1;
 });

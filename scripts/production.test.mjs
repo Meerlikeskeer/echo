@@ -351,7 +351,7 @@ test("transcription-only mode omits notes and has its own authenticated replay i
       return fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body });
     };
     const first = await post("transcription-only"); assert.equal(first.status, 200);
-    const result = await first.json(); assert.equal(result.notes, undefined); assert.equal(result.replayed, false);
+    const result = await first.json(); assert.equal(result.processingMode, "transcription-only"); assert.equal(result.notes, undefined); assert.equal(result.replayed, false);
     assert.deepEqual(result.disclosures.map(d => d.port), ["transcription"]);
     assert.equal((await (await post("transcription-only")).json()).replayed, true);
     const ordinary = await (await post()).json(); assert.equal(ordinary.replayed, false); assert.ok(ordinary.notes);

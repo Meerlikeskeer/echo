@@ -96,7 +96,7 @@ export async function POST(request: Request): Promise<Response> {
       if (!transcript.text.trim()) throw new ProviderError("transcription", "no_speech");
       return { transcript, disclosures: [providers.transcription.disclosure] };
     };
-    if (!chunk) return json(200, await process(0));
+    if (!chunk) return json(200, { ...await process(0), ...(transcriptionOnly ? { processingMode: "transcription-only" } : {}) });
     const identity = chunk;
     // Built only from metadata already checked byte-for-byte against the upload
     // above, and only after the owner gate — an unauthenticated caller can
@@ -109,7 +109,7 @@ export async function POST(request: Request): Promise<Response> {
     // cost no provider call. An answer that is silently identical is one nobody
     // can verify, so it is stated in the body and in a header.
     const replayed = outcome !== "claim";
-    return json(200, { ...result, replayed }, { "x-echo-replayed": String(replayed) });
+    return json(200, { ...result, replayed, ...(transcriptionOnly ? { processingMode: "transcription-only" } : {}) }, { "x-echo-replayed": String(replayed) });
   } catch (error) {
     const { status, body } = describeFailure(error);
     // Safe fields only — never a response body, credential, audio or transcript.
