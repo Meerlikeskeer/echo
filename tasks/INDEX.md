@@ -68,3 +68,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-028](WEB-028.md) Detailed natural session notes | Implemented; synthetic checks passed; live notes quality acceptance pending | `feat/WEB-028-grounded-detailed-notes` |
 | [WEB-029](WEB-029.md) Paragraph transcript and passage audio | Implemented; synthetic passage tests passed; native playback/hover acceptance pending | `feat/WEB-029-transcript-passage-playback` |
 | [WEB-030](WEB-030.md) Deliberate device-session deletion | Implemented; firmware and host/UI verification passed; physical erase/power-loss… | `feat/WEB-030-deliberate-device-deletion` |
+| [WEB-031](WEB-031.md) Date, time and session number names | Implemented; independent review complete; full local checks blocked; physical/browser… | `feat/WEB-031-date-time-session-names` |

@@ -1,19 +1,21 @@
+import { sessionName } from "./session-name";
 import type { QueueEntry } from "./queue";
 import type { PlayableChunk } from "./session";
 import { isCompletion, sameMetadata, type Completion } from "./session-completion";
 
 export type EchoKind = "quick-note" | "session";
-export interface LibraryPreference { title?: string; generatedTitle?: string; kind?: EchoKind }
+export interface LibraryPreference { legacyNumber?: number; title?: string; generatedTitle?: string; kind?: EchoKind }
 export const QUICK_ECHO_MS = 60_000;
 const prefix = "echo-library-v1/";
 
 export function validatePreference(value: unknown): LibraryPreference {
   if (!value || typeof value !== "object") throw new Error("Saved recording preferences could not be read.");
   const row = value as LibraryPreference;
-  if ((row.title !== undefined && (typeof row.title !== "string" || !row.title.trim() || row.title.length > 100)) ||
+  if ((row.legacyNumber !== undefined && (!Number.isSafeInteger(row.legacyNumber) || row.legacyNumber < 1)) ||
+    (row.title !== undefined && (typeof row.title !== "string" || !row.title.trim() || row.title.length > 100)) ||
     (row.generatedTitle !== undefined && (typeof row.generatedTitle !== "string" || !row.generatedTitle.trim() || row.generatedTitle.length > 100)) ||
     (row.kind !== undefined && row.kind !== "quick-note" && row.kind !== "session")) throw new Error("Saved recording preferences could not be read.");
-  return { ...(row.title ? { title: row.title.trim() } : {}), ...(row.generatedTitle ? { generatedTitle: row.generatedTitle.trim() } : {}), ...(row.kind ? { kind: row.kind } : {}) };
+  return { ...(row.legacyNumber ? { legacyNumber: row.legacyNumber } : {}), ...(row.title ? { title: row.title.trim() } : {}), ...(row.generatedTitle ? { generatedTitle: row.generatedTitle.trim() } : {}), ...(row.kind ? { kind: row.kind } : {}) };
 }
 export function readPreference(storage: Pick<Storage, "getItem">, id: string): LibraryPreference {
   const value = storage.getItem(prefix + id);
@@ -34,9 +36,7 @@ export function libraryRecording(id: string, chunks: readonly PlayableChunk[], e
   const complete = !!manifest && manifest.chunks.length === audio.length && manifest.chunks.every((chunk, index) => sameMetadata(chunk, audio[index].metadata));
   const duration = Math.max(0, ...audio.map(chunk => chunk.metadata.endMs), ...(manifest?.chunks.map(chunk => chunk.endMs) ?? []));
   const automatic: EchoKind = complete && duration > 0 && duration <= QUICK_ECHO_MS ? "quick-note" : "session";
-  const text = results.map(entry => entry.result?.transcript.text ?? "").join(" ").replace(/\s+/g, " ").trim();
-  const suggested = text.split(/[.!?]/).find(part => part.trim())?.trim().slice(0, 64);
-  const title = preference.title || preference.generatedTitle || suggested || `Untitled Echo · ${id.slice(-6)}`;
+  const title = preference.title || sessionName(id, preference.legacyNumber);
   return { id, audio, results, duration, complete, automatic, kind: preference.kind ?? automatic, title,
     pending: results.filter(entry => entry.state !== "processed").length,
     blocked: results.some(entry => entry.state === "blocked"),

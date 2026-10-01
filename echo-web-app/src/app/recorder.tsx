@@ -20,6 +20,7 @@ import { useWakeLock } from "./use-wake-lock";
 import { Button } from "../components/ui/button";
 import { Plus, Search, LockKeyhole, StickyNote, AudioLines, PanelLeft, Mic, Square, NotebookPen, AlignLeft, Headphones, RefreshCw, Pencil } from "lucide-react";
 import { libraryRecording, type EchoKind } from "../lib/recording/library";
+import { reserveBrowserSessionNumber } from "../lib/recording/session-name";
 import { useLibrary } from "./use-library";
 import { stitchSession } from "../lib/recording/stitching";
 import { SessionArtifacts } from "./session-artifacts";
@@ -158,8 +159,10 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     let active: ReturnType<typeof captureSession>;
     try {
+      const sessionNumber = await reserveBrowserSessionNumber();
+      if (attempt !== generation.current) { stream.getTracks().forEach(track => track.stop()); return; }
       active = captureSession(stream,
-        { chunkMs: sessionChunkMs, overlapMs: sessionOverlapMs, audioBitsPerSecond: AUDIO_BITS_PER_SECOND },
+        { chunkMs: sessionChunkMs, overlapMs: sessionOverlapMs, audioBitsPerSecond: AUDIO_BITS_PER_SECOND, sessionNumber },
         undefined, queue.persist);
     } catch (cause) {
       reportFailure("starting the audio recorder", cause);

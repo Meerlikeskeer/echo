@@ -62,7 +62,7 @@ test("library keeps pending, blocked and unsaved audio distinct", () => {
   const item=libraryRecording("session-a",[row],[row],[]);
   assert.equal(item.pending,1); assert.equal(item.blocked,true); assert.equal(item.unsaved,false);
   assert.equal(libraryRecording("session-a",[row],[],[]).unsaved,true);
-  assert.equal(item.title,"An idea for tomorrow");
+  assert.equal(item.title,"Date unavailable · Legacy session");
 });
 
 test("malformed completion recovery cannot crash history or confirm capture", () => {
@@ -70,15 +70,15 @@ test("malformed completion recovery cannot crash history or confirm capture", ()
   const broken=[null,{sessionId:"session-a",chunks:null}] as unknown as import("../src/lib/recording/session-completion").Completion[];
   assert.equal(libraryRecording("session-a",[row],[row],broken).complete,false);
   row.result = { ...row.result!, transcript: { ...row.result!.transcript, text: "..." } };
-  assert.match(libraryRecording("session-a",[row],[row],broken).title,/Untitled Echo/);
+  assert.match(libraryRecording("session-a",[row],[row],broken).title,/Date unavailable/);
 });
 
-test('generated names persist separately and never replace an owner rename', () => {
+test('generated notes titles persist but the chronological name wins unless manually renamed', () => {
  const values = new Map<string,string>();
  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string,value: string) => { values.set(key,value); } };
  savePreference(storage,'session-title',{generatedTitle:'Momentum and impulse'});
  assert.equal(readPreference(storage,'session-title').generatedTitle,'Momentum and impulse');
- assert.equal(libraryRecording('session-title',[],[],[],readPreference(storage,'session-title')).title,'Momentum and impulse');
+ assert.equal(libraryRecording('session-title',[],[],[],readPreference(storage,'session-title')).title,'Date unavailable · Legacy session');
  savePreference(storage,'session-title',{title:'My lecture'});
  savePreference(storage,'session-title',{generatedTitle:'New generated name'});
  assert.equal(readPreference(storage,'session-title').title,'My lecture');

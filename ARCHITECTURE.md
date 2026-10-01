@@ -356,6 +356,14 @@ The stitcher attaches optional chunk bounds to gaps using validated metadata or 
 
 ## WEB-009 recording workspace boundaries
 
+WEB-031 (ADR-030) uses capture date/time and a local reserved session number for
+default names, preserving manual renames. New capture IDs encode epoch milliseconds
+(or `undated`), sequence and a collision-resistant suffix within the existing
+archive identity grammar. Device IDs survive transfer/import without schema changes.
+The recording page sends browser epoch time through an action-header-protected
+idle-only endpoint. The board advances that clock from its monotonic timer;
+reboot requires synchronization again. Historical dates remain unavailable.
+
 ADR-024 defines automatic duration-based organization and browser-local name/type
 preferences. `library.ts` groups queue audio and completion records by stable
 session identity, validates clean completion against saved metadata, and derives

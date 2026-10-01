@@ -159,3 +159,14 @@ whole operation before erasure. If a card write/remove fails, the UI reports a
 partial deletion and remaining files stay for deliberate retry/card-reader
 recovery; do not assume everything disappeared. No device was flashed by the
 implementation task. Physical erase/retry/power-loss acceptance remains pending.
+
+### Recording names and clock (WEB-031)
+
+Open the local recording page while idle to sync your laptop/phone clock to Echo.
+It syncs again before a browser-started recording. Echo keeps time after disconnect
+while powered; after a reboot open the page again before using BOOT. New names use
+capture date/time and a device session number, preserved in `.echo` imports. Display
+time uses the viewing browser's timezone. Unsynchronized recordings and old random
+sessions show Date unavailable; old device rows have a legacy view number.
+Numbers persist on the board, can skip after failed starts and reset if NVS is erased.
+Reflash to install this feature; this task does not flash or deploy.

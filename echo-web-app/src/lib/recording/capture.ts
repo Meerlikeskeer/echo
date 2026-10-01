@@ -56,7 +56,9 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
     cancel: (timer) => clearTimeout(timer),
   };
   const origin = io.now();
-  const session: Session = { id: crypto.randomUUID(), startedAt: Date.now(), endedAt: null, captureStatus: "recording" };
+  const startedAt = Date.now();
+  const number = options.sessionNumber ?? 1;
+  const session: Session = { id: `session-${startedAt}-${number}-${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`, startedAt, endedAt: null, captureStatus: "recording" };
   const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; stopping: boolean; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout>; ready?: Promise<PlayableChunk> }[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let stopped = false;
