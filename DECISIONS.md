@@ -467,3 +467,15 @@ Echo's existing React/Tailwind app owns layout and behavior. No new backend,
 authentication system or hosting service is introduced. Provider disclosures and
 storage limitations remain accessible; original audio and per-clip results remain
 available within the selected recording. Notes generation stays explicitly requested.
+
+## ADR-025 — Separate experimental wireless handoff probe
+
+**Status:** Accepted for implementation · **Date:** 2026-09-30 · **Task:** WEB-021 · **Extends:** ADR-021, ADR-023
+
+The owner requested a separate probe section to investigate BLE control and Wi-Fi data transfer before automatic handoff. Serve `/probe` from the existing device WebServer, with a connectable, unpaired GATT service limited to literal ping/pong. It cannot control capture or transmit credentials/audio. Explicit HTTP actions enable/disable it while idle. Existing diagnostics beacon is unavailable while the probe is enabled.
+
+Allow explicit temporary station connection while keeping the protected device access point. Credentials are sent over local HTTP, held by the Wi-Fi driver in RAM, never logged or written to flash, and cleared on disconnect/reboot. Disable automatic reconnection and bound connection attempts to 20 seconds. The owner must use a trusted personal network: every client on that network can reach the existing bench console, including recordings. This intentionally expands ADR-021's access-point-only trust boundary for the experiment; it is not production provisioning/authentication. No campus/enterprise login support or internet reachability claim.
+
+A fixed 64 KiB generated payload checks transport bytes and measures browser elapsed time, with bounded server/client stalls. It does not touch SD and may run during capture, so physical acceptance can compare BLE/Wi-Fi coexistence and recording stability. It does not prove completed-chunk availability, background handoff, durable receipt or deletion eligibility. Native receiver and production connection/security choices remain open.
+
+The ESP32-S3 shares one radio between BLE and Wi-Fi ([Espressif coexistence documentation](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32s3/api-guides/coexist.html)). The local HTTP page uses an external GATT client for BLE because browser Bluetooth requires a secure context ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)). Physical evidence, rather than compilation, determines feasibility.

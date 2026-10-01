@@ -109,3 +109,19 @@ power-loss or long-session reliability. Those remain owner acceptance.
 - https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/
 - https://wiki.seeedstudio.com/xiao_esp32s3_sense_mic/
 - https://wiki.seeedstudio.com/xiao_esp32s3_sense_filesystem/
+
+## Wireless handoff probe
+
+The separate **Handoff probe** link opens `/probe`, alongside recording and diagnostics.
+It provides an explicitly enabled BLE ping/pong service, temporary shared-network
+Wi-Fi connection and a verified 64 KiB synthetic transfer with timing. Use a BLE
+GATT client for ping/pong; the device's HTTP page cannot invoke browser Bluetooth.
+Use only a trusted personal 2.4 GHz network: its clients can reach the whole device
+console and recordings. Network credentials travel over local HTTP and are not
+saved to flash or logs. Connect/disconnect and BLE enable/disable require idle
+capture; synthetic transfers can run during recording. A channel change can
+briefly interrupt the access-point page. No internet, automatic sync or durable
+copy claim follows from a PASS.
+
+Follow [the physical probe checklist](../status/acceptance/WEB-021-probe.md).
+Upload firmware to see this section; deploying the web app does not update the board.

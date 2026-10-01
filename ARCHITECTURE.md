@@ -357,3 +357,7 @@ views does not cancel generation. Historical per-clip results stay available.
 shadcn/ui Button and Lucide now supply workspace controls/icons; their small runtime
 helpers are dependencies of the approved component system. This remains a single-owner,
 browser-local library with no remote audio copy or cloud history service.
+
+### WEB-021 wireless probe boundaries
+
+ADR-025 adds the board-hosted `/probe` experimental section. Explicit idle-only actions enable a ping-only connectable BLE service and temporarily join a trusted shared network; the access point stays available. The station network's clients gain access to the bench console, including recordings, so this is an opt-in trust boundary expansion, not production authentication. Credentials are not persisted or logged. A fixed synthetic HTTP payload measures integrity and elapsed time without SD access, including during capture. Neither a successful transfer nor BLE ping certifies audio sync, durable receipt or automatic handoff. Physical results belong to `status/acceptance/WEB-021-probe.md`.
