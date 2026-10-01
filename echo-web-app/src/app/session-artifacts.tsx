@@ -16,7 +16,7 @@ function Items({ heading, items, empty }: { heading: string; items: readonly str
   return <div className="mt-4">
     <h4 className="text-sm font-semibold text-slate-900">{heading}</h4>
     {items.length
-      ? <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">{items.map((item, index) => <li key={index}>{item}</li>)}</ul>
+      ? <ul className="mt-2 list-disc space-y-3 pl-5 text-base leading-7 text-slate-700">{items.map((item, index) => <li key={index}>{item}</li>)}</ul>
       : <p className="mt-1 text-sm text-slate-500">{empty}</p>}
   </div>;
 }
@@ -67,15 +67,14 @@ export function SessionArtifacts({ transcript, onTitle }: { transcript: Revision
     </p> : null}
 
     {record ? <div className="mt-4">
-      <h4 className="text-sm font-semibold text-slate-900">Title</h4>
-      <p className="mt-1 text-sm leading-6 text-slate-700">{record.artifacts.title}</p>
+      <h4 className="text-2xl font-semibold tracking-tight text-slate-900">{record.artifacts.title}</h4>
       {/* WEB-017. Shown only when the recording identified itself. An absent
           course is not rendered as "Unknown": a label with nothing behind it
           invites the reader to supply a guess Echo refused to make. */}
       {record.artifacts.course
         ? <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{record.artifacts.course}</p>
         : null}
-      <h4 className="mt-4 text-sm font-semibold text-slate-900">Summary</h4>
+      <h4 className="mt-5 text-sm font-semibold text-slate-900">Overview</h4>
       <p className="mt-1 text-sm leading-6 text-slate-700">{record.artifacts.summary}</p>
       <Items heading="Key points" items={record.artifacts.keyPoints} empty="No key points were identified." />
 
@@ -85,10 +84,10 @@ export function SessionArtifacts({ transcript, onTitle }: { transcript: Revision
       <div className="mt-5">
         <h4 className="text-sm font-semibold text-slate-900">Notes</h4>
         {record.artifacts.outline.length
-          ? <div className="mt-2 space-y-4">
+          ? <div className="mt-3 space-y-7">
               {record.artifacts.outline.map((section, index) => <div key={index}>
-                <h5 className="text-sm font-medium text-slate-900">{section.heading}</h5>
-                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                <h5 className="text-lg font-medium text-slate-900">{section.heading}</h5>
+                <ul className="mt-2 list-disc space-y-3 pl-5 text-base leading-7 text-slate-700">
                   {section.notes.map((note, noteIndex) => <li key={noteIndex}>{note}</li>)}
                 </ul>
               </div>)}
