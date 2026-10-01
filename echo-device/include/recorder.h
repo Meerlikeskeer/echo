@@ -4,6 +4,7 @@
 #include "card_lock.h"
 #include "recording_format.h"
 #include "session_delete.h"
+#include "session_clock.h"
 static volatile bool capturing=false,stopRequested=false;
 static volatile uint32_t capturedSamples=0,savedChunks=0,micLevel=0,stackFree=0;
 static char captureError[120]={0};
@@ -153,7 +154,8 @@ static void startCapture(bool reply=true) {
   if(previous==UINT32_MAX||names.putUInt("number",previous+1)!=sizeof(uint32_t)||names.getUInt("number",0)!=previous+1){names.end();reject("Session counter could not be saved.");return;}
   names.end();
   uint64_t nowMs=(uint64_t)(esp_timer_get_time()/1000);
-  String date=clockEpochMs?String((unsigned long long)(clockEpochMs+nowMs-clockUptimeMs)):"undated";
+  uint64_t epoch=recordingEpoch(clockEpochMs,clockUptimeMs,nowMs);
+  String date=epoch?String((unsigned long long)epoch):"undated";
   char random[9];snprintf(random,sizeof(random),"%08lx",(unsigned long)esp_random());
   activeSession="session-"+date+"-"+String(previous+1)+"-"+random;
   if(SD.exists("/echo/"+activeSession)||!SD.mkdir("/echo/"+activeSession)){reject("Cannot create a unique session directory.");return;}
@@ -165,10 +167,8 @@ static void recorderRoutes() {
   server.on("/api/clock",HTTP_POST,[]{
     if(!action())return;
     String value=server.arg("epochMs");
-    if(value.length()!=13){fail("Invalid browser clock");return;}
-    for(size_t i=0;i<value.length();i++)if(!isdigit((unsigned char)value[i])){fail("Invalid browser clock");return;}
-    uint64_t epoch=strtoull(value.c_str(),nullptr,10);
-    if(epoch<1577836800000ULL||epoch>4102444800000ULL){fail("Invalid browser clock");return;}
+    uint64_t epoch=browserEpoch(value.c_str(),value.length());
+    if(!epoch){fail("Invalid browser clock");return;}
     clockEpochMs=epoch;clockUptimeMs=(uint64_t)(esp_timer_get_time()/1000);ok("Clock synchronized");
   });
   server.on("/api/recording",HTTP_GET,[]{

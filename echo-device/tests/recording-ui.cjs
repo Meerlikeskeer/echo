@@ -5,6 +5,10 @@ const elements={};for(const [,id] of page.matchAll(/id="([^"]+)"/g))elements[id]
 let state={recording:false,stopping:false,sd:true,durationMs:0,chunks:0,level:0,freeBytes:1000000000,error:''},offline=false;const calls=[];
 const context={document:{getElementById:id=>elements[id],createElement:element},fetch:async(path,options)=>{calls.push([path,options]);if(offline)throw Error('offline');return {ok:true,json:async()=>path==='/api/recording'?state:path==='/api/sessions'?{sessions:[{id:'session-test',durationMs:62000,chunks:2,complete:false}]}:{message:'ok'}}},AbortController,setTimeout(){},clearTimeout(){},console};vm.createContext(context);vm.runInContext(page.match(/<script>([\s\S]*?)<\/script>/)[1],context);
 (async()=>{await new Promise(r=>setImmediate(r));assert.equal(elements.state.textContent,'Ready when you are');assert.equal(elements.toggle.disabled,false);assert.equal(elements.sessions.children.length,1);assert(elements.sessions.children[0].children[0].children[1].textContent.includes('Partial'));
+assert(vm.runInContext("sessionName('session-1790888400000-12-abcdef01',1)",context).includes('2026'));
+assert(vm.runInContext("sessionName('session-undated-12-abcdef01',1)",context).endsWith('Session 12'));
+assert.equal(vm.runInContext("sessionName('session-old',3)",context),'Date unavailable · Legacy session 3');
+assert(calls.some(([p,o])=>p.startsWith('/api/clock?epochMs=')&&o.headers['X-Echo-Action']==='1'));
 await elements.toggle.onclick();assert(calls.some(([p,o])=>p==='/api/recording/start'&&o.headers['X-Echo-Action']==='1'));
 state={...state,recording:true,durationMs:62000,level:4000};await vm.runInContext('poll()',context);assert.equal(elements.timer.textContent,'01:02');assert.equal(elements.toggle.textContent,'■  Stop & save');assert.equal(elements.refresh.disabled,true);assert(elements.sessions.textContent.includes('being saved'));
 await elements.toggle.onclick();assert(calls.some(([p])=>p==='/api/recording/stop'));
