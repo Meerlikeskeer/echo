@@ -53,6 +53,9 @@ On 2026-09-30 the owner asked to keep three items for a later product session: d
 
 ## What exists today
 
+- WEB-025 (ADR-027) adds bounded committed-chunk HTTP transfer during device capture and a temporary Mac receiver with verified local receipts/restart recovery and final `.echo` assembly. SD originals remain; automatic transcription and network joining are not implemented. Physical transfer acceptance: `status/acceptance/WEB-025-transfer.md`; exact verification: `tasks/WEB-025.md`.
+
+
 - WEB-024 (ADR-026) adds a temporary Mac radio-test launcher under `tools/radio-test`: bounded concurrent BLE pings and byte-verified synthetic Wi-Fi transfers with local JSON reports. It does not implement the Mac receiver or assess audio; physical acceptance remains pending in `tasks/WEB-024.md`.
 
 
