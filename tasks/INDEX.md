@@ -61,4 +61,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-023](WEB-023.md) Accept already-enabled Wi-Fi modem sleep | Fix implemented; firmware build and targeted tests passed; physical retest pending | `fix/WEB-023-ble-sleep-verification` |
 | [WEB-024](WEB-024.md) Automated Mac BLE/Wi-Fi coexistence test | Implemented; compiled and self-tests passed; physical run pending | `feat/WEB-024-mac-radio-test` |
 | [WEB-025](WEB-025.md) Verified completed-chunk transfer to Mac during capture | Implemented; firmware/receiver builds and behavioral tests passed; physical acceptance… | `feat/WEB-025-completed-chunk-transfer` |
-| [WEB-028](WEB-028.md) Detailed natural session notes | In progress | `feat/WEB-028-grounded-detailed-notes` |
+| [WEB-028](WEB-028.md) Detailed natural session notes | Implemented; synthetic checks passed; live notes quality acceptance pending | `feat/WEB-028-grounded-detailed-notes` |
