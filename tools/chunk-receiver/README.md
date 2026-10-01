@@ -9,7 +9,7 @@ for you; import the final `.echo` archive into the existing web app afterward.
 
 1. Upload this branch's updated `echo-device` firmware. Close Serial Monitor before
    Upload, then reopen it if you want crash/fault diagnostics.
-2. Join Echo device Wi-Fi and open its recording page at `http://192.168.4.1`.
+2. Join Echo device Wi-Fi, open `http://192.168.4.1` and start a **three-minute recording** deliberately before launching the receiver.
 3. In a Mac Terminal, from the repository root, run:
 
    ```sh
@@ -18,9 +18,7 @@ for you; import the final `.echo` archive into the existing web app afterward.
 
    Press Return for the device address. For shared Wi-Fi, enter its station IP.
    Default inbox is **Desktop/Echo-received**. Swift command-line tools are required.
-4. Start a **three-minute recording** deliberately on the device page. The receiver
-   can start before capture and waits/retries if there is no active session yet;
-   start capture promptly, or start it before launching the tool. You should see
+4. Keep recording. You should see
    **Saved and verified chunk 0** after the first minute, while recording is still
    active. Later full chunks contain two seconds of overlap.
 5. Stop recording on the device page and leave it powered while verification finishes.
@@ -55,7 +53,9 @@ idle, then specify its exact ID (also the inbox subfolder name):
 Default run bound is 30 minutes; configurable 30–7200 seconds. Ctrl+C ends the
 process; the current in-memory partial download is not a receipt and is refetched
 on restart. A partial/interrupted device session never gets a complete archive.
-The default retries before capture are short; if they expire, rerun after starting.
+Start capture before launching: the default session is the device’s most recently
+started session, which may be an older completed recording if capture has not begun.
+Alternatively choose an exact saved session with --session.
 Only private IPv4 addresses are accepted. No redirects, credentials or public
 endpoints. Use the trusted device AP/personal shared network from ADR-025.
 
