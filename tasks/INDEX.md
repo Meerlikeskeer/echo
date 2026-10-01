@@ -15,6 +15,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [DOC-004](DOC-004.md) Record the first full pass of the deployed check | Done | `docs/DOC-004-deployed-check-passes` |
 | [DOC-005](DOC-005.md) The living documents still said nothing was deployed | Done | `docs/DOC-005-deployed-doc-drift` |
 | [DOC-006](DOC-006.md) Record owner product follow-ups for future status reviews | Documentation complete; product follow-ups deferred by owner | `docs/DOC-006-owner-followups` |
+| [DOC-007](DOC-007.md) Hosted Echo device detection plan | In progress | `docs/DOC-007-hosted-device-detection` |
 | [ENG-001](ENG-001.md) Bounded builder/checker workflow | Done | — |
 | [ENG-002](ENG-002.md) Self-host parity verification | Implemented and verified, except the container build itself | `eng/ENG-002-self-host-parity` |
 | [ENG-003](ENG-003.md) Shared status file and reading map | Done — implemented on `feat/WEB-002-recording-slice` alongside WEB-002 | — |
