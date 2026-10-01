@@ -31,6 +31,8 @@ provider keys. The importer validates the complete archive before persistence,
 uses stable chunk identities for retries, and records completion only for clean
 device stops. Automatic deletion and the native Mac receiver remain future work.
 
+ADR-029 adds deliberate per-session SD erasure from the device console, requiring exact identity and sole-copy acknowledgement. Active capture refuses it; known-file preflight, partial-failure reporting and idempotent retry remain separate from automatic retention. No remote copies are deleted.
+
 ### Temporary radio diagnostic (WEB-024)
 
 ADR-026 permits a standalone macOS Swift CLI using bundled CoreBluetooth/Foundation under `tools/radio-test`. It tests only the existing synthetic probe and saves local reports. This is not the native receiver or a production framework decision; `echo-mac-app` remains a placeholder.

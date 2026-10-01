@@ -63,4 +63,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-024](WEB-024.md) Automated Mac BLE/Wi-Fi coexistence test | Implemented; compiled and self-tests passed; physical run pending | `feat/WEB-024-mac-radio-test` |
 | [WEB-025](WEB-025.md) Verified completed-chunk transfer to Mac during capture | Implemented; firmware/receiver builds and behavioral tests passed; physical acceptance… | `feat/WEB-025-completed-chunk-transfer` |
 | [WEB-026](WEB-026.md) Opt-in receiver transcription | Implementation complete; synthetic verification passed with local filesystem blockers in… | `feat/WEB-026-receiver-transcription` |
-| [WEB-030](WEB-030.md) Deliberate device-session deletion | In progress | `feat/WEB-030-deliberate-device-deletion` |
+| [WEB-030](WEB-030.md) Deliberate device-session deletion | Implemented; firmware and host/UI verification passed; physical erase/power-loss… | `feat/WEB-030-deliberate-device-deletion` |
