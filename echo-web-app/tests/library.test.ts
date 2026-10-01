@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { libraryRecording, readPreference, savePreference } from "../src/lib/recording/library";
+import { libraryRecording, readPreference, savePreference, validatePreference } from "../src/lib/recording/library";
 import type { QueueEntry } from "../src/lib/recording/queue";
 
 function clip(endMs = 60_000): QueueEntry {
@@ -71,4 +71,17 @@ test("malformed completion recovery cannot crash history or confirm capture", ()
   assert.equal(libraryRecording("session-a",[row],[row],broken).complete,false);
   row.result = { ...row.result!, transcript: { ...row.result!.transcript, text: "..." } };
   assert.match(libraryRecording("session-a",[row],[row],broken).title,/Untitled Echo/);
+});
+
+test('generated names persist separately and never replace an owner rename', () => {
+ const values = new Map<string,string>();
+ const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string,value: string) => { values.set(key,value); } };
+ savePreference(storage,'session-title',{generatedTitle:'Momentum and impulse'});
+ assert.equal(readPreference(storage,'session-title').generatedTitle,'Momentum and impulse');
+ assert.equal(libraryRecording('session-title',[],[],[],readPreference(storage,'session-title')).title,'Momentum and impulse');
+ savePreference(storage,'session-title',{title:'My lecture'});
+ savePreference(storage,'session-title',{generatedTitle:'New generated name'});
+ assert.equal(readPreference(storage,'session-title').title,'My lecture');
+ assert.equal(libraryRecording('session-title',[],[],[],readPreference(storage,'session-title')).title,'My lecture');
+ assert.throws(()=>validatePreference({generatedTitle:' '}));
 });
