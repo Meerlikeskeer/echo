@@ -47,6 +47,10 @@ It is not reproduced here. It used to be, and every task that changed a status h
 so any two open branches conflicted on it (**ENG-019**). The rule that replaced it is short: **no file
 that every task must edit.**
 
+## Deferred owner follow-ups
+
+On 2026-09-30 the owner asked to keep three items for a later product session: delete past device sessions deliberately; fix web titles staying on transcript previews rather than adopting generated notes titles; improve vague, unnatural notes and the notes page's depth. **Mention these in future Echo status reviews.** Details, reproduction limits and retention constraints: [`tasks/DOC-006.md`](tasks/DOC-006.md). All three are deferred, not implemented.
+
 ## What exists today
 
 - WEB-024 (ADR-026) adds a temporary Mac radio-test launcher under `tools/radio-test`: bounded concurrent BLE pings and byte-verified synthetic Wi-Fi transfers with local JSON reports. It does not implement the Mac receiver or assess audio; physical acceptance remains pending in `tasks/WEB-024.md`.
