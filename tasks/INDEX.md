@@ -35,6 +35,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-020](ENG-020.md) Apply the auto-merge workflow ENG-016 specified | Workflow applied and pushed; three owner-side settings remain | `eng/ENG-020-apply-auto-merge` |
 | [ENG-021](ENG-021.md) Organize the repository by application | Done — reorganized; web and container CI verified; awaiting owner merge | `refactor/ENG-021-repository-layout` |
 | [ENG-022](ENG-022.md) Repair Vercel output path for device import deployment | Configuration repaired; full web CI passed; deployment and live import acceptance blocked… | `fix/ENG-022-vercel-output-path` |
+| [ENG-023](ENG-023.md) Check-gated auto-merge for ready task PRs | Implemented; YAML validation passed; local full verification blocked by filesystem/Python… | `eng/ENG-023-feature-auto-merge` |
 | [INT-001](INT-001.md) Branch integration and architecture documentation | Done | — |
 | [WEB-001](WEB-001.md) Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | [WEB-002](WEB-002.md) Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
@@ -61,4 +62,6 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-023](WEB-023.md) Accept already-enabled Wi-Fi modem sleep | Fix implemented; firmware build and targeted tests passed; physical retest pending | `fix/WEB-023-ble-sleep-verification` |
 | [WEB-024](WEB-024.md) Automated Mac BLE/Wi-Fi coexistence test | Implemented; compiled and self-tests passed; physical run pending | `feat/WEB-024-mac-radio-test` |
 | [WEB-025](WEB-025.md) Verified completed-chunk transfer to Mac during capture | Implemented; firmware/receiver builds and behavioral tests passed; physical acceptance… | `feat/WEB-025-completed-chunk-transfer` |
+| [WEB-026](WEB-026.md) Opt-in receiver transcription | Implementation complete; synthetic verification passed with local filesystem blockers in… | `feat/WEB-026-receiver-transcription` |
+| [WEB-027](WEB-027.md) Generated recording titles | Implemented; synthetic tests passed; local full checks blocked; browser acceptance pending | `fix/WEB-027-generated-recording-titles` |
 | [WEB-028](WEB-028.md) Detailed natural session notes | Implemented; synthetic checks passed; live notes quality acceptance pending | `feat/WEB-028-grounded-detailed-notes` |

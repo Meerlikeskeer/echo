@@ -1,6 +1,6 @@
 import { requireOwnerAccess } from "../../../lib/owner-access";
 import { providerSetup } from "../../../lib/providers/registry";
-import { processRecording, type RecordingResult } from "../../../lib/recording/pipeline";
+import { processRecording, validateClip, type RecordingResult } from "../../../lib/recording/pipeline";
 import { describeFailure, type RecordingErrorBody } from "../../../lib/recording/http";
 import { ProviderError } from "../../../lib/providers/errors";
 import type { AudioClip } from "../../../lib/providers/types";
@@ -23,7 +23,8 @@ const json = (status: number, body: unknown, extra: Record<string, string> = {})
 
 /** The response body a chunk upload produced, stored whole so a retry of the
  *  same chunk identity gets back the same answer rather than a second opinion. */
-type ChunkResponse = RecordingResult & { readonly chunk: AudioChunk };
+type TranscriptionResult = Pick<RecordingResult, "transcript" | "disclosures">;
+type ChunkResponse = (RecordingResult | TranscriptionResult) & { readonly chunk: AudioChunk };
 
 // Module scope on purpose: this is the state that survives between requests in
 // one process, and there is deliberately no other. ADR-016 is explicit that a
@@ -55,8 +56,12 @@ export async function POST(request: Request): Promise<Response> {
 
   let clip: AudioClip;
   let chunk: AudioChunk | undefined;
+  let transcriptionOnly = false;
   try {
     const form = await request.formData();
+    const mode = form.get("mode");
+    if (mode !== null && mode !== "transcription-only") throw new Error("Invalid mode");
+    transcriptionOnly = mode === "transcription-only";
     const audio = form.get("audio");
     if (typeof audio === "string" || audio === null) {
       return fail(400, { code: "bad_request", port: null, message: "The request did not include an audio recording.", retryable: false });
@@ -84,20 +89,27 @@ export async function POST(request: Request): Promise<Response> {
     // A request carrying no chunk metadata is the WEB-002 single-clip path. It
     // has no identity to key on, so it is not ledgered and is left exactly as it
     // was.
-    if (!chunk) return json(200, await processRecording(clip, providers, { sessionOffsetMs: 0 }));
+    const process = async (offset: number, quickNote = false) => {
+      if (!transcriptionOnly) return processRecording(clip, providers, { sessionOffsetMs: offset, quickNote });
+      validateClip(clip, providers.transcription);
+      const transcript = await providers.transcription.transcribe(clip, { sessionOffsetMs: offset });
+      if (!transcript.text.trim()) throw new ProviderError("transcription", "no_speech");
+      return { transcript, disclosures: [providers.transcription.disclosure] };
+    };
+    if (!chunk) return json(200, { ...await process(0), ...(transcriptionOnly ? { processingMode: "transcription-only" } : {}) });
     const identity = chunk;
     // Built only from metadata already checked byte-for-byte against the upload
     // above, and only after the owner gate — an unauthenticated caller can
     // neither read this nor put anything in it.
-    const { result, outcome } = await ledger.run({ sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum, ...(identity.quickNote ? { mode: "quick-note" as const } : {}) }, async () => ({
-      ...await processRecording(clip, providers, { sessionOffsetMs: identity.startMs, quickNote: !!identity.quickNote }),
+    const { result, outcome } = await ledger.run({ sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum, ...(transcriptionOnly ? { mode: "transcription-only" as const } : identity.quickNote ? { mode: "quick-note" as const } : {}) }, async () => ({
+      ...await process(identity.startMs, !!identity.quickNote),
       chunk: identity,
     }));
     // A join and a replay both mean the same thing to the caller: this answer
     // cost no provider call. An answer that is silently identical is one nobody
     // can verify, so it is stated in the body and in a header.
     const replayed = outcome !== "claim";
-    return json(200, { ...result, replayed }, { "x-echo-replayed": String(replayed) });
+    return json(200, { ...result, replayed, ...(transcriptionOnly ? { processingMode: "transcription-only" } : {}) }, { "x-echo-replayed": String(replayed) });
   } catch (error) {
     const { status, body } = describeFailure(error);
     // Safe fields only — never a response body, credential, audio or transcript.

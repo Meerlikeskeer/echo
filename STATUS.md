@@ -49,11 +49,13 @@ that every task must edit.**
 
 ## Deferred owner follow-ups
 
-On 2026-09-30 the owner asked to keep three items for a later product session: delete past device sessions deliberately; fix web titles staying on transcript previews rather than adopting generated notes titles; improve vague, unnatural notes and the notes page's depth. **Mention these in future Echo status reviews.** Details, reproduction limits and retention constraints: [`tasks/DOC-006.md`](tasks/DOC-006.md). The owner resumed all three on 2026-10-01. WEB-028 improves detailed grounded notes guidance and layout; real model quality remains acceptance. Titles and device deletion are separate follow-ups.
+On 2026-09-30 the owner recorded three follow-ups and resumed them on 2026-10-01: deliberate past device-session deletion, generated titles, and deeper natural notes. Original feedback: [`tasks/DOC-006.md`](tasks/DOC-006.md). WEB-027 implements persistent generated titles without overwriting manual names. WEB-028 improves grounded detailed notes guidance and presentation; live model quality remains acceptance. Device-session deletion is separate work. Mention outstanding acceptance in future status reviews.
 
 ## What exists today
 
-- WEB-025 (ADR-027) adds bounded committed-chunk HTTP transfer during device capture and a temporary Mac receiver with verified local receipts/restart recovery and final `.echo` assembly. SD originals remain; automatic transcription and network joining are not implemented. Physical transfer acceptance: `status/acceptance/WEB-025-transfer.md`; exact verification: `tasks/WEB-025.md`.
+- WEB-026 (ADR-028) adds opt-in receiver transcription through the authenticated web endpoint, independently of chunk receipt, with local persisted bounded attempts/results and existing conservative stitching. No live provider or physical acceptance is claimed; see `tasks/WEB-026.md`.
+
+- WEB-025 (ADR-027) adds bounded committed-chunk HTTP transfer during device capture and a temporary Mac receiver with verified local receipts/restart recovery and final `.echo` assembly. SD originals remain; WEB-026 adds opt-in transcription. Network joining is not implemented. Physical transfer acceptance: `status/acceptance/WEB-025-transfer.md`; exact verification: `tasks/WEB-025.md`.
 
 
 - WEB-024 (ADR-026) adds a temporary Mac radio-test launcher under `tools/radio-test`: bounded concurrent BLE pings and byte-verified synthetic Wi-Fi transfers with local JSON reports. It does not implement the Mac receiver or assess audio; physical acceptance remains pending in `tasks/WEB-024.md`.
@@ -129,6 +131,8 @@ Speaker labels, research, reminders, background processing, physically verified 
 **No network access to a local Echo, by decision (ADR-013).** `dev` and `start` bind `127.0.0.1` and no script binds any other interface, so a locally run Echo is reachable only from the machine running it. Re-adding a non-loopback bind reverses an accepted decision and needs its own ADR. Mobile acceptance is no longer blocked by this — it goes against the deployed origin.
 
 ## Standing facts and hard-won lessons
+
+- ENG-023 records the owner’s 2026-10-01 authorization for check-gated squash auto-merge of ready task PRs, including features. Drafts remain excluded; no direct pushes, self-approval, protection bypass or automatic deployment. Pending physical acceptance remains explicit.
 
 Cheaper here than in a search, and each one cost something to learn.
 
