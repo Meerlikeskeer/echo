@@ -53,7 +53,7 @@ On 2026-09-30 the owner recorded three follow-ups and resumed them on 2026-10-01
 
 ## What exists today
 
-- WEB-030 (ADR-029/RET-007) adds exact-session-confirmed manual SD erasure with permanent-loss/sole-copy warning, active-capture guard, bounded known-file deletion and partial-failure recovery. Automatic retention is unchanged; firmware/host/UI tests are distinct from pending physical erase acceptance. See `tasks/WEB-030.md`.
+- WEB-030 (ADR-029/RET-007) adds exact-session-confirmed manual SD erasure with permanent-loss/sole-copy warning, active-capture guard, bounded known-file deletion and partial-failure recovery. Cancelling either confirmation preserves all files. Automatic retention is unchanged; firmware/host/UI tests are distinct from pending physical erase acceptance. See `tasks/WEB-030.md`.
 
 - WEB-029 groups transcripts into readable passages/paragraphs with hover/focus/tap playback of original timed source audio and collapsed chunk details. Synthetic mapping tests pass; browser playback/hosted acceptance remains pending in `tasks/WEB-029.md`.
 
