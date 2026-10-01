@@ -53,6 +53,8 @@ On 2026-09-30 the owner recorded three follow-ups and resumed them on 2026-10-01
 
 ## What exists today
 
+- WEB-029 groups transcripts into readable passages/paragraphs with hover/focus/tap playback of original timed source audio and collapsed chunk details. Synthetic mapping tests pass; browser playback/hosted acceptance remains pending in `tasks/WEB-029.md`.
+
 - WEB-026 (ADR-028) adds opt-in receiver transcription through the authenticated web endpoint, independently of chunk receipt, with local persisted bounded attempts/results and existing conservative stitching. No live provider or physical acceptance is claimed; see `tasks/WEB-026.md`.
 
 - WEB-025 (ADR-027) adds bounded committed-chunk HTTP transfer during device capture and a temporary Mac receiver with verified local receipts/restart recovery and final `.echo` assembly. SD originals remain; WEB-026 adds opt-in transcription. Network joining is not implemented. Physical transfer acceptance: `status/acceptance/WEB-025-transfer.md`; exact verification: `tasks/WEB-025.md`.
