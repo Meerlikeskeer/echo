@@ -10,6 +10,10 @@ on:
       - 'eng/**'
       - 'docs/**'
       - 'int/**'
+      - 'fix/**'
+      - 'refactor/**'
+  pull_request:
+    types: [ready_for_review]
 
 permissions:
   # ENG-016. `contents` rises from read to write because enabling auto-merge
@@ -19,11 +23,12 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: open-pr-${{ github.ref }}
+  group: open-pr-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: false
 
 jobs:
   open-pull-request:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -32,7 +37,7 @@ jobs:
       - name: Open a pull request if one is not already open
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ github.ref_name }}
+          BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
         run: |
           open=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
           if [ "$open" != "0" ]; then
@@ -55,17 +60,13 @@ jobs:
             --title "$(git log -1 --pretty=%s)" \
             --body-file "$RUNNER_TEMP/pr-body.md"
 
-      # ENG-016, applied by ENG-020. Auto-merge skips no check. It presses the
-      # merge button the moment every required check is green, and never presses
-      # it otherwise. Scoped to eng/ and docs/ because those change tooling and
-      # prose; a feat/ branch changes what the owner sees in the app, and
-      # several are gated on browser acceptance no check can perform, so those
-      # stay one deliberate click on "Enable auto-merge".
-      - name: Let eng/ and docs/ branches merge themselves once green
-        if: startsWith(github.ref_name, 'eng/') || startsWith(github.ref_name, 'docs/')
+      # ENG-023: owner authorizes auto-merge for ready task PRs, including
+      # feature work. GitHub still enforces required checks/reviews; drafts
+      # remain opt-outs. No direct pushes, approvals or protection bypass.
+      - name: Enable squash auto-merge for ready task pull requests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ github.ref_name }}
+          BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
         run: |
           state=$(gh pr view "$BRANCH" --json isDraft,autoMergeRequest \
             --jq '(.isDraft|tostring) + " " + ((.autoMergeRequest != null)|tostring)')

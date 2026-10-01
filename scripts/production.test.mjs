@@ -341,3 +341,20 @@ test("a repeated chunk upload replays the first answer instead of transcribing t
     assert.equal("chunk" in body, false);
   });
 });
+
+test("transcription-only mode omits notes and has its own authenticated replay identity", { timeout: 30000 }, async () => {
+  await withServer({ configured: true, providers: FIXTURE_PROVIDERS }, async base => {
+    const metadata = { sessionId: "transcribe-session", id: "transcribe-clip", sequence: 0, startMs: 0, endMs: 41000, overlapMs: 0, mimeType: "audio/webm;codecs=opus", size: 2048, checksum: createHash("sha256").update(new Uint8Array(2048)).digest("hex") };
+    const post = async mode => {
+      const body = syntheticClip(); body.set("chunk", JSON.stringify(metadata));
+      if (mode) body.set("mode", mode);
+      return fetch(`${base}/api/recordings`, { method: "POST", headers: { authorization }, body });
+    };
+    const first = await post("transcription-only"); assert.equal(first.status, 200);
+    const result = await first.json(); assert.equal(result.processingMode, "transcription-only"); assert.equal(result.notes, undefined); assert.equal(result.replayed, false);
+    assert.deepEqual(result.disclosures.map(d => d.port), ["transcription"]);
+    assert.equal((await (await post("transcription-only")).json()).replayed, true);
+    const ordinary = await (await post()).json(); assert.equal(ordinary.replayed, false); assert.ok(ordinary.notes);
+    assert.equal((await post("unknown")).status, 400);
+  });
+});
