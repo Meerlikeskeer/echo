@@ -3,6 +3,7 @@
 // Capture and bounded committed-chunk reads serialize every shared SD operation.
 #include "card_lock.h"
 #include "recording_format.h"
+#include "session_delete.h"
 static volatile bool capturing=false,stopRequested=false;
 static volatile uint32_t capturedSamples=0,savedChunks=0,micLevel=0,stackFree=0;
 static char captureError[120]={0};
@@ -161,6 +162,24 @@ static void recorderRoutes() {
     File root=SD.open("/echo");File dir=root.openNextFile();String out="{\"sessions\":[";int shown=0;bool truncated=false;
     while(dir){String id=dir.name();id=id.substring(id.lastIndexOf('/')+1);bool isdir=dir.isDirectory();dir.close();if(isdir&&validId(id)){if(shown==80){truncated=true;break;}size_t count;bool complete;loadRecords(id,records,count,complete);if(shown++)out+=',';out+="{\"id\":"+quote(id)+",\"complete\":"+(complete?"true":"false")+",\"chunks\":"+String(count)+",\"durationMs\":"+String(count?records[count-1].endMs:0)+"}";}dir=root.openNextFile();}
     dir.close();root.close();free(records);json(out+"],\"truncated\":"+(truncated?"true":"false")+"}");
+  });
+  server.on("/api/session/delete",HTTP_POST,[]{
+    String id=server.arg("id");
+    if(!manualDeleteAuthorized(capturing,server.header("X-Echo-Action")=="1",id.c_str(),server.arg("confirm").c_str(),server.arg("acknowledge")=="erase-device-originals")){fail("Stop recording and explicitly confirm the exact session and loss of device originals",409);return;}
+    if(!sdReady){fail("Card unavailable",503);return;}
+    CardGuard card(pdMS_TO_TICKS(100));if(!card.locked()){fail("Card busy; retry",503);return;}
+    String path="/echo/"+id;
+    if(!SD.exists(path)){Serial.printf("[echo] manual erase session=%s result=already-absent\n",id.c_str());ok("Session already absent");return;}
+    File dir=SD.open(path);if(!dir||!dir.isDirectory()){dir.close();fail("Invalid session directory",409);return;}
+    // Preflight all contents before removing anything; no recursion or unknown files.
+    File file=dir.openNextFile();size_t count=0;bool safe=true;
+    while(file){String name=file.name();name=name.substring(name.lastIndexOf('/')+1);if(file.isDirectory()||!erasableSessionFile(name.c_str())||++count>132)safe=false;file.close();if(!safe)break;file=dir.openNextFile();}
+    file.close();dir.close();if(!safe){fail("Unexpected session contents; nothing erased. Use a card reader",409);return;}
+    bool good=eraseSessionFiles([&](const char *name){String item=path+"/"+name;return !SD.exists(item)||SD.remove(item);},[&](){return SD.rmdir(path);});
+    if(id==activeSession){portENTER_CRITICAL(&transferMux);transferCount=0;transferComplete=false;portEXIT_CRITICAL(&transferMux);activeSession="";savedChunks=0;capturedSamples=0;}
+    cacheCard();Serial.printf("[echo] manual erase session=%s result=%s\n",id.c_str(),good?"erased":"partial");
+    if(!good){fail("Deletion stopped partway. Remaining files retained; deliberately retry this session or use a card reader",500);return;}
+    ok("Device session erased; copies elsewhere were not changed");
   });
   server.on("/api/session/export",HTTP_GET,[]{
     if(!idleOnly())return;String id=server.arg("id");ChunkRecord *r=(ChunkRecord*)malloc(sizeof(ChunkRecord)*130);if(!r){fail("Not enough memory for export");return;}
