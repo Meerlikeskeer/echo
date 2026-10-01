@@ -170,3 +170,7 @@ time uses the viewing browser's timezone. Unsynchronized recordings and old rand
 sessions show Date unavailable; old device rows have a legacy view number.
 Numbers persist on the board, can skip after failed starts and reset if NVS is erased.
 Reflash to install this feature; this task does not flash or deploy.
+
+### Download progress (WEB-032)
+
+The recording page shows preparation, then received MB and percentage when the device supplies a length. It pauses polling during export because the device serves that request synchronously. No first data for three minutes, or no further data for one minute, stops with a visible stalled-transfer message. A failed archive download restarts from the beginning; the Mac receiver can reuse verified chunks. Received bytes are handed to browser Downloads; check that file and import it before treating it as a verified copy. The browser buffers the archive in memory, so long recordings need sufficient browser memory. SD originals remain. No additional microphone code is authorized until the owner explicitly says so; hardware is currently unsoldered.
