@@ -171,7 +171,7 @@ void recordMicrophone() {
 }
 #include "recorder.h"
 
- #include "handoff_probe.h"
+#include "handoff_probe.h"
 
 void routes() {
   probeRoutes();
@@ -261,7 +261,7 @@ void routes() {
     if(bleOn) adv->stop();
     else {
       BLEAdvertisementData data; data.setName("Echo-Diagnostics"); data.setFlags(0x06);
-      adv->setAdvertisementType(ADV_TYPE_NONCONN_IND); adv->setAdvertisementData(data); adv->start();
+      adv->setScanResponse(false); adv->setAdvertisementType(ADV_TYPE_NONCONN_IND); adv->setAdvertisementData(data); adv->start();
     }
     bleOn = !bleOn; logEvent(bleOn ? "BLE beacon started" : "BLE beacon stopped");
     ok(bleOn ? "BLE beacon on" : "BLE beacon off");
