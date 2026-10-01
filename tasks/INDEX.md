@@ -64,3 +64,5 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-025](WEB-025.md) Verified completed-chunk transfer to Mac during capture | Implemented; firmware/receiver builds and behavioral tests passed; physical acceptance… | `feat/WEB-025-completed-chunk-transfer` |
 | [WEB-026](WEB-026.md) Opt-in receiver transcription | Implementation complete; synthetic verification passed with local filesystem blockers in… | `feat/WEB-026-receiver-transcription` |
 | [WEB-030](WEB-030.md) Deliberate device-session deletion | Implemented; firmware and host/UI verification passed; physical erase/power-loss… | `feat/WEB-030-deliberate-device-deletion` |
+| [WEB-027](WEB-027.md) Generated recording titles | Implemented; synthetic tests passed; local full checks blocked; browser acceptance pending | `fix/WEB-027-generated-recording-titles` |
+| [WEB-028](WEB-028.md) Detailed natural session notes | Implemented; synthetic checks passed; live notes quality acceptance pending | `feat/WEB-028-grounded-detailed-notes` |
