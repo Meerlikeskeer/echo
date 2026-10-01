@@ -39,6 +39,8 @@ ADR-026 permits a standalone macOS Swift CLI using bundled CoreBluetooth/Foundat
 
 ADR-027 permits bounded HTTP slice downloads of committed chunks during capture, with a shared SD mutex and RAM-published committed-prefix metadata. Temporary Swift/Foundation tooling in `tools/chunk-receiver` durably verifies a local spool and builds the existing `.echo` archive only with explicit device completion evidence. No SD deletion, cloud storage, production Mac framework, automatic network joining or transcription path is selected. Real-transfer physical acceptance remains separate from synthetic radio passes.
 
+ADR-028 adds an opt-in independent TypeScript worker over verified local receipts. It calls the authenticated recording endpoint in transcription-only mode, persists bounded retry state and timed results locally, and reuses the domain stitcher. Provider keys remain server-side; final text requires explicit clean completion and all expected transcripts.
+
 ### Styling and UI
 
 | Technology | Responsibility | Status |

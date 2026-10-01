@@ -8,7 +8,7 @@
  * be treated as untrusted content.
  */
 
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import type { RevisionInput } from "../lib/recording/artifacts";
 import { useSessionArtifacts } from "./use-session-artifacts";
 
@@ -21,11 +21,14 @@ function Items({ heading, items, empty }: { heading: string; items: readonly str
   </div>;
 }
 
-export function SessionArtifacts({ transcript }: { transcript: RevisionInput }) {
+export function SessionArtifacts({ transcript, onTitle }: { transcript: RevisionInput; onTitle?: (title: string) => void }) {
   const headingId = useId();
   const artifacts = useSessionArtifacts(transcript);
   const empty = !transcript.text.trim();
   const record = artifacts.record;
+
+  const currentTitle = record && artifacts.revision && !artifacts.stale ? record.artifacts.title : null;
+  useEffect(() => { if (currentTitle) onTitle?.(currentTitle); }, [currentTitle, onTitle]);
 
   return <section className="mt-6 border-t border-slate-200 pt-6" aria-labelledby={headingId}>
     <div className="flex flex-wrap items-center justify-between gap-3">

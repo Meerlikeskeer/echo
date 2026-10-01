@@ -252,7 +252,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
           </div>
           <div className="detail-tabs" aria-label="Recording views">{(["notes", "transcript", "audio"] as const).map(view => <button key={view} aria-pressed={tab === view} onClick={() => setTab(view)}>{view === "notes" ? <NotebookPen size={16} /> : view === "transcript" ? <AlignLeft size={16} /> : <Headphones size={16} />}{view === "audio" ? "Original audio" : view[0].toUpperCase() + view.slice(1)}</button>)}</div>
           <div className="detail-body">
-            <div hidden={tab !== "notes"}><SessionArtifacts key={selected.id} transcript={selectedTranscript} /><QuickNotes entries={selected.results} online={queue.online} />
+            <div hidden={tab !== "notes"}><SessionArtifacts key={selected.id} transcript={selectedTranscript} onTitle={title => { const generatedTitle = title.trim().slice(0, 100); if (generatedTitle && libraryState.preferences[selected.id]?.generatedTitle !== generatedTitle) libraryState.save(selected.id, { generatedTitle }); }} /><QuickNotes entries={selected.results} online={queue.online} />
               {selected.results.some(entry => entry.result) ? <details className="original-results"><summary>Saved clip notes & processing details</summary><p>Original per-clip results, available even offline. Session notes above combine the whole recording.</p>{selected.results.filter(entry => entry.result).map(entry => <div key={chunkKey(entry)}><p>Clip {entry.metadata.sequence + 1}</p><RecordingOutcome result={entry.result!} /></div>)}</details> : null}
             </div>
             {tab === "transcript" ? <SessionTranscript transcript={selectedTranscript} showArtifacts={false} audio={selected.audio} /> : null}
