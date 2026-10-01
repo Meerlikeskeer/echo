@@ -46,7 +46,7 @@ export async function processFolder(folder: string, send: (c: AudioChunk, audio:
     const stitched = stitchSession({ sessionId: r.sessionId, chunks: journal.jobs.map(j => ({ metadata: j.metadata, transcript: j.state === 'done' ? j.transcript : undefined })), completion: r.complete ? { sessionId: r.sessionId, chunks: r.chunks } : null });
     if (stitched.gaps.some(g => g.reason === 'invalid-input')) throw Error('Invalid persisted transcript');
     await publish(join(folder, 'transcript.json'), JSON.stringify(stitched));
-    await publish(join(folder, 'transcript.txt'), `${stitched.status.toUpperCase()}\n${stitched.gaps.map(g => `[${g.reason}: ${g.sequence ?? 'session'}]`).join('\n')}\n${stitched.text}\n`);
+    await publish(join(folder, 'transcript.txt'), `${stitched.status.toUpperCase()}\n${stitched.gaps.map(g => `[${g.reason}: ${g.sequence ?? 'session'}]`).join('\n')}\n${journal.jobs.filter(j => j.state === 'failed' || j.attempts >= 4 && j.state !== 'done').map(j => `[failed-transcript: ${j.metadata.sequence}]`).join('\n')}\n${stitched.text}\n`);
     return stitched.status;
   };
   // Publish partial evidence before any slow request. Never infer device completion.
