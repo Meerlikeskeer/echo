@@ -5,6 +5,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include <BLEDevice.h>
+#include <esp_bt_main.h>
 #include <driver/i2s.h>
 #include <esp_camera.h>
 #include <esp_system.h>
@@ -171,6 +172,7 @@ void recordMicrophone() {
 }
 #include "recorder.h"
 
+#include "ble_radio.h"
 #include "handoff_probe.h"
 
 void routes() {
@@ -256,7 +258,7 @@ void routes() {
   server.on("/api/ble", HTTP_POST, [] {
     if(!action()) return;
     if(probeEnabled) { fail("Stop the handoff BLE probe first",409); return; }
-    if(!bleReady) { BLEDevice::init("Echo-Diagnostics"); bleReady = true; }
+    if(!initializeBle("Echo-Diagnostics")) return;
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     if(bleOn) adv->stop();
     else {
@@ -287,7 +289,8 @@ void setup() {
   prefs.end();
   uint64_t mac = ESP.getEfuseMac(); char suffix[8]; snprintf(suffix,sizeof(suffix),"%04X",(unsigned int)(mac>>32));
   ssid = String("Echo-Device-")+suffix;
-  WiFi.setSleep(false);
+  // BLE/Wi-Fi coexistence requires modem sleep in the bundled ESP-IDF.
+  WiFi.setSleep(true);
   if(!WiFi.softAP(ssid.c_str(),password.c_str(),1,false,2)) { logEvent("FATAL: Wi-Fi access point failed"); return; }
   // Password deliberately appears only on the local USB console, not web logs.
   Serial.printf("\nWi-Fi network: %s\nWi-Fi password: %s\nOpen http://192.168.4.1\n\n",ssid.c_str(),password.c_str());

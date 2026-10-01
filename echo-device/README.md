@@ -125,3 +125,13 @@ copy claim follows from a PASS.
 
 Follow [the physical probe checklist](../status/acceptance/WEB-021-probe.md).
 Upload firmware to see this section; deploying the web app does not update the board.
+
+### Bluetooth coexistence retest (WEB-022)
+
+The original probe could reboot in `coex_core_enable` because firmware disabled
+Wi-Fi modem sleep before starting BLE. The repair keeps modem sleep enabled and
+checks it before both Bluetooth entry points. Reflash the updated firmware; a web
+page reload alone does not install this fix. With USB Monitor open, enable the
+probe once, confirm no panic/reboot and stable uptime, then verify ping/pong and
+repeat Wi-Fi transfers. Also test the diagnostics beacon after disabling the probe.
+Shared-network and recording coexistence remain physical acceptance work.
