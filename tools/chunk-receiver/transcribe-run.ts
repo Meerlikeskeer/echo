@@ -14,7 +14,8 @@ const index = args.indexOf('--output'); if (index >= 0) output = args[index+1];
 let done = false, code = 1;
 let selected: string | undefined;
 let buffered = '';
-const child = spawn(binary, args, { stdio: ['inherit', 'pipe', 'inherit'] });
+const childEnv = { ...process.env }; delete childEnv.ECHO_OWNER_USERNAME; delete childEnv.ECHO_OWNER_PASSWORD;
+const child = spawn(binary, args, { stdio: ['inherit', 'pipe', 'inherit'], env: childEnv });
 child.stdout.on('data', data => {
   process.stdout.write(data);
   buffered += data.toString();
@@ -23,8 +24,8 @@ child.stdout.on('data', data => {
 });
 child.on('exit', c => { code = c ?? 1; done = true; });
 child.on('error', () => { done = true; });
-process.on('SIGINT', () => { child.kill('SIGINT'); done = true; });
-process.on('SIGTERM', () => { child.kill('SIGTERM'); done = true; });
+process.on('SIGINT', () => { child.kill('SIGINT'); process.exit(130); });
+process.on('SIGTERM', () => { child.kill('SIGTERM'); process.exit(143); });
 runWorker(output, origin, () => done, () => selected).then(() => { process.exitCode = code; }).catch(() => {
-  child.kill('SIGTERM'); console.error('Transcription stopped safely; audio retained. Check configuration, spool conflicts or processing lock.'); process.exitCode = 1;
+  console.error('Transcription stopped safely; audio retained. Check configuration, spool conflicts or processing lock.'); process.exitCode = 1;
 });

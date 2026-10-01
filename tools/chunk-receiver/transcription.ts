@@ -6,6 +6,7 @@ import { sameMetadata } from '../../echo-web-app/src/lib/recording/session-compl
 import { stitchSession } from '../../echo-web-app/src/lib/recording/stitching';
 import type { Transcript } from '../../echo-web-app/src/lib/providers/types';
 
+export class NonRetryable extends Error {}
 export interface Receipt { version: number; sessionId: string; complete: boolean; chunks: AudioChunk[] }
 interface Job { metadata: AudioChunk; attempts: number; nextAt: number; state: 'pending' | 'requesting' | 'failed' | 'done'; transcript?: Transcript }
 interface Journal { version: 1; jobs: Job[]; receipt: Receipt }
@@ -61,7 +62,8 @@ export async function processFolder(folder: string, send: (c: AudioChunk, audio:
     if (now < job.nextAt) continue;
     job.state = 'requesting'; job.attempts++; job.nextAt = now + Math.min(60000, 2000 * 2 ** job.attempts); await save();
     let transcript: Transcript;
-    try { transcript = await send(job.metadata, audio); } catch {
+    try { transcript = await send(job.metadata, audio); } catch (error) {
+      if (error instanceof NonRetryable) job.attempts = 4;
       job.state = job.attempts >= 4 ? 'failed' : 'pending'; await save(); continue;
     }
     const validation = stitchSession({ sessionId: r.sessionId, chunks: [{ metadata: job.metadata, transcript }], completion: null });
@@ -102,9 +104,12 @@ export async function runWorker(output: string, origin: string, done: () => bool
     form.set('mode', 'transcription-only'); form.set('chunk', JSON.stringify(c)); form.set('durationMs', String(c.endMs-c.startMs));
     form.set('audio', new Blob([new Uint8Array(audio)], { type: c.mimeType }), 'chunk.wav');
     const response = await fetch(url, { method: 'POST', body: form, redirect: 'error', signal: AbortSignal.timeout(310000), headers: { authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` } });
-    if (!response.ok) throw Error('Processing request failed');
+    if (!response.ok) {
+      if ([400,401,403,413,422].includes(response.status)) throw new NonRetryable('Request refused');
+      throw Error('Processing request failed');
+    }
     const body = await response.json();
-    if (!body.chunk || !sameMetadata(c, body.chunk)) throw Error('Response identity conflict');
+    if (!body.chunk || !sameMetadata(c, body.chunk)) throw new NonRetryable('Response identity conflict');
     return body.transcript;
   };
   try {

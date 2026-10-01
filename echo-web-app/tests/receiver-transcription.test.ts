@@ -20,9 +20,10 @@ async function fixture() {
 test('slow processing cannot hold receipt publication; ordering and overlap reuse domain semantics', async () => {
  const f = await fixture(); let release!: () => void;
  const gate = new Promise<void>(r => { release = r; }); let calls = 0;
- const processing = processFolder(f.folder, async () => { calls++; if (calls === 1) await gate; return f.transcript; });
+ let entered!: () => void; const started = new Promise<void>(r => { entered = r; });
+ const processing = processFolder(f.folder, async () => { calls++; if (calls === 1) { entered(); await gate; }; return f.transcript; });
  // Receipt can independently advance while the provider request is unresolved.
- f.receipt.complete = true; await f.save(); release(); await processing;
+ await started; f.receipt.complete = true; await f.save(); release(); await processing;
  await processFolder(f.folder, async () => { throw Error('must reuse'); });
  const out = JSON.parse(await readFile(join(f.folder, 'transcript.json'), 'utf8'));
  assert.equal(out.status, 'final'); assert.equal(out.text, 'overlap'); assert.equal(out.sources.length, 2); assert.equal(calls, 2);

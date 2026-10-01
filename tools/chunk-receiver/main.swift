@@ -127,7 +127,7 @@ while ProcessInfo.processInfo.systemUptime-started<maxSeconds {
    }
    received.append(c)
    let prefix=Manifest(version:1,sessionId:m.sessionId,complete:false,chunks:received)
-   if previous?.complete != true {try durable(try encode(prefix),manifestFile);previous=prefix}
+   if previous?.complete != true && received.count >= (previous?.chunks.count ?? 0) {try durable(try encode(prefix),manifestFile);previous=prefix}
   }
   let local=Manifest(version:1,sessionId:m.sessionId,complete:m.complete,chunks:received)
   try durable(try encode(local),manifestFile);previous=local;errors=0
