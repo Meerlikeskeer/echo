@@ -144,3 +144,18 @@ and [physical acceptance](../status/acceptance/WEB-025-transfer.md). Only journa
 closed WAVs are exposed; SD access is serialized with capture and unlocked before
 network sends. Existing full exports/diagnostics remain idle-only. No original is
 deleted and no copy is assumed safe from an HTTP response alone.
+
+### Deliberately delete a saved device session (WEB-030)
+
+While idle, each session offers **Delete from device**. The first confirmation
+warns that SD originals—including an unfinished tail—will be erased permanently,
+possibly the only raw copy. Then type the exact session ID. Cancel is always safe.
+Downloading does not prove a surviving backup; check a separate copy yourself if
+you want to retain the recording. This feature is manual erasure only, never
+retention/near-full automatic cleanup. Mac/browser copies are not changed.
+
+Capture or finishing blocks deletion. Unknown files/subdirectories refuse the
+whole operation before erasure. If a card write/remove fails, the UI reports a
+partial deletion and remaining files stay for deliberate retry/card-reader
+recovery; do not assume everything disappeared. No device was flashed by the
+implementation task. Physical erase/retry/power-loss acceptance remains pending.
