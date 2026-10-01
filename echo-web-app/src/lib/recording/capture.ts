@@ -1,4 +1,3 @@
-import { reserveSessionNumber } from "./session-name";
 import { MAX_SESSION_MS, checksum, validateCaptureOptions, validateChunkOrder, type CaptureOptions, type PlayableChunk, type Session } from "./session";
 
 export const PREFERRED_MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
@@ -58,7 +57,7 @@ export function captureSession(stream: MediaStream, options: CaptureOptions, run
   };
   const origin = io.now();
   const startedAt = Date.now();
-  const number = typeof localStorage !== "undefined" ? reserveSessionNumber(localStorage) : 1;
+  const number = options.sessionNumber ?? 1;
   const session: Session = { id: `session-${startedAt}-${number}-${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`, startedAt, endedAt: null, captureStatus: "recording" };
   const entries: { recorder: RecorderLike; id: string; startMs: number; endMs: number; stopping: boolean; done: Promise<Blob>; settle: (audio: Blob) => void; timeout?: ReturnType<typeof setTimeout>; ready?: Promise<PlayableChunk> }[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();

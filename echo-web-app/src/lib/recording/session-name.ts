@@ -1,4 +1,8 @@
 const counterKey = "echo-session-number-v1";
+export async function reserveBrowserSessionNumber(): Promise<number> {
+  if (!navigator.locks) throw new Error("This browser cannot safely reserve session numbers.");
+  return navigator.locks.request(counterKey, () => reserveSessionNumber(localStorage));
+}
 export function reserveSessionNumber(storage: Pick<Storage, "getItem" | "setItem">): number {
   const previous = Number(storage.getItem(counterKey) ?? "0");
   if (!Number.isSafeInteger(previous) || previous < 0 || previous >= 0xffffffff) throw new Error("Session numbering could not be read.");

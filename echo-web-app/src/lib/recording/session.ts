@@ -23,6 +23,7 @@ export interface AudioChunk {
 
 export interface PlayableChunk { readonly metadata: AudioChunk; readonly audio: Blob }
 export interface CaptureOptions {
+  readonly sessionNumber?: number;
   readonly chunkMs: number;
   readonly overlapMs: number;
   readonly quickNote?: boolean;
@@ -42,7 +43,8 @@ export const MAX_SESSION_MS = 4 * 60 * 60 * 1000;
 export const MAX_CHUNK_MS = 600_000;
 
 export function validateCaptureOptions(options: CaptureOptions): void {
-  if (!Number.isSafeInteger(options.chunkMs) || options.chunkMs < 1000 || options.chunkMs > MAX_CHUNK_MS ||
+  if ((options.sessionNumber !== undefined && (!Number.isSafeInteger(options.sessionNumber) || options.sessionNumber < 1 || options.sessionNumber > 0xffffffff)) ||
+      !Number.isSafeInteger(options.chunkMs) || options.chunkMs < 1000 || options.chunkMs > MAX_CHUNK_MS ||
       !Number.isSafeInteger(options.overlapMs) || options.overlapMs < 0 || options.overlapMs >= options.chunkMs / 2 ||
       (options.audioBitsPerSecond !== undefined &&
         (!Number.isSafeInteger(options.audioBitsPerSecond) || options.audioBitsPerSecond < 8_000 || options.audioBitsPerSecond > 320_000))) {
