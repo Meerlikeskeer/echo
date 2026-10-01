@@ -132,6 +132,8 @@ Speaker labels, research, reminders, background processing, physically verified 
 
 ## Standing facts and hard-won lessons
 
+- ENG-023 records the owner’s 2026-10-01 authorization for check-gated squash auto-merge of ready task PRs, including features. Drafts remain excluded; no direct pushes, self-approval, protection bypass or automatic deployment. Pending physical acceptance remains explicit.
+
 Cheaper here than in a search, and each one cost something to learn.
 
 - **Provider credentials are server-side only, never `NEXT_PUBLIC_*`.**

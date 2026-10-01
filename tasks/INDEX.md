@@ -35,6 +35,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-020](ENG-020.md) Apply the auto-merge workflow ENG-016 specified | Workflow applied and pushed; three owner-side settings remain | `eng/ENG-020-apply-auto-merge` |
 | [ENG-021](ENG-021.md) Organize the repository by application | Done — reorganized; web and container CI verified; awaiting owner merge | `refactor/ENG-021-repository-layout` |
 | [ENG-022](ENG-022.md) Repair Vercel output path for device import deployment | Configuration repaired; full web CI passed; deployment and live import acceptance blocked… | `fix/ENG-022-vercel-output-path` |
+| [ENG-023](ENG-023.md) Check-gated auto-merge for ready task PRs | Implemented; YAML validation passed; local full verification blocked by filesystem/Python… | `eng/ENG-023-feature-auto-merge` |
 | [INT-001](INT-001.md) Branch integration and architecture documentation | Done | — |
 | [WEB-001](WEB-001.md) Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | [WEB-002](WEB-002.md) Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
