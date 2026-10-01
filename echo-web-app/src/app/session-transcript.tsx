@@ -6,6 +6,8 @@
 import { useId } from "react";
 import { stitchSession, type StitchedTranscript, type TranscriptEntry } from "../lib/recording/stitching";
 import type { Completion } from "../lib/recording/session-completion";
+import { TranscriptReader } from "./transcript-reader";
+import type { PlayableChunk } from "../lib/recording/session";
 import { SessionArtifacts } from "./session-artifacts";
 
 const clock = (ms: number) => {
@@ -13,7 +15,7 @@ const clock = (ms: number) => {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 };
 
-export function SessionTranscript({ transcript, showArtifacts = true }: { transcript: StitchedTranscript; showArtifacts?: boolean }) {
+export function SessionTranscript({ transcript, showArtifacts = true, audio = [] }: { transcript: StitchedTranscript; showArtifacts?: boolean; audio?: readonly PlayableChunk[] }) {
   // The heading names the section, so repeating it in an aria-label would only
   // duplicate it. useId keeps the reference unique when several sessions render
   // together; a session identifier could repeat or be invalid.
@@ -32,6 +34,8 @@ export function SessionTranscript({ transcript, showArtifacts = true }: { transc
         "Some saved session data is inconsistent or invalid. Completion cannot be confirmed."
       }</li>)}
     </ul> : null}
+    <TranscriptReader transcript={transcript} audio={audio} />
+    <details className="mt-4 text-xs text-slate-500"><summary>Timing and original sources</summary>
     <ol className="mt-4 space-y-4">
       {transcript.segments.map((segment, index) => <li key={index}>
         <p className="leading-7 text-slate-700">{segment.text}</p>
@@ -43,7 +47,7 @@ export function SessionTranscript({ transcript, showArtifacts = true }: { transc
           })}</ul>
         </details>
       </li>)}
-    </ol>
+    </ol></details>
     {!transcript.segments.length ? <p className="mt-4 text-sm text-slate-500">Waiting for a transcript. Saved audio remains available below.</p> : null}
     {/* The badge above carries the status; this note explains what that word
         means without reading as a second status of its own. */}
