@@ -49,6 +49,9 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-024 (ADR-026) adds a temporary Mac radio-test launcher under `tools/radio-test`: bounded concurrent BLE pings and byte-verified synthetic Wi-Fi transfers with local JSON reports. It does not implement the Mac receiver or assess audio; physical acceptance remains pending in `tasks/WEB-024.md`.
+
+
 - WEB-023 corrects WEB-022’s false refusal when Arduino reports an unchanged sleep setting. BLE startup now applies and verifies the driver power-save state; build and regression checks pass, physical retest pending in `tasks/WEB-023.md`.
 
 - WEB-022 repairs the modem-sleep configuration behind the owner-observed BLE coexistence crash. Firmware build and device regression checks pass; physical reflash/retest remains pending in `tasks/WEB-022.md`.

@@ -31,6 +31,10 @@ provider keys. The importer validates the complete archive before persistence,
 uses stable chunk identities for retries, and records completion only for clean
 device stops. Automatic deletion and the native Mac receiver remain future work.
 
+### Temporary radio diagnostic (WEB-024)
+
+ADR-026 permits a standalone macOS Swift CLI using bundled CoreBluetooth/Foundation under `tools/radio-test`. It tests only the existing synthetic probe and saves local reports. This is not the native receiver or a production framework decision; `echo-mac-app` remains a placeholder.
+
 ### Styling and UI
 
 | Technology | Responsibility | Status |

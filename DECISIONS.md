@@ -479,3 +479,13 @@ Allow explicit temporary station connection while keeping the protected device a
 A fixed 64 KiB generated payload checks transport bytes and measures browser elapsed time, with bounded server/client stalls. It does not touch SD and may run during capture, so physical acceptance can compare BLE/Wi-Fi coexistence and recording stability. It does not prove completed-chunk availability, background handoff, durable receipt or deletion eligibility. Native receiver and production connection/security choices remain open.
 
 The ESP32-S3 shares one radio between BLE and Wi-Fi ([Espressif coexistence documentation](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32s3/api-guides/coexist.html)). The local HTTP page uses an external GATT client for BLE because browser Bluetooth requires a secure context ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)). Physical evidence, rather than compilation, determines feasibility.
+
+## ADR-026 — Temporary macOS radio test harness
+
+**Status:** Accepted for implementation · **Date:** 2026-09-30 · **Task:** WEB-024
+
+Owner requests automated BLE/Wi-Fi probe testing after manual ping/pong succeeded. Use a standalone Swift command-line diagnostic under tools/radio-test, with Apple's bundled CoreBluetooth and Foundation, compiled using existing Xcode command-line tools. This limited diagnostic requires no dependency install, app backend or web framework and does not select the future Mac application's framework. Production receiver architecture stays open.
+
+Explicit invocation scans only Echo's experimental service, refuses ambiguous devices, connects and performs bounded sequential ping/pong operations concurrently with fixed synthetic HTTP transfers. Reports distinguish complete passes from failures/interruption and include timing, observed recording state and missing results. No recording start/stop, audio read/write, provider access, credential provisioning, deletion or automatic handoff. User enables probe, disconnects phone client and joins device/shared Wi-Fi first. macOS Bluetooth permission is deliberate. Reports contain transport metadata, never credentials or audio, and are saved to a user-selected local path. Physical run/recording playback remains acceptance evidence, not inferred from simulated tests.
+
+[Apple CoreBluetooth API](https://developer.apple.com/documentation/corebluetooth/cbcentralmanager) supplies service-filtered discovery and characteristic read/write. The diagnostic embeds a Bluetooth purpose string in its executable; no persistent background service is installed.
