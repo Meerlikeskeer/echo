@@ -160,6 +160,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     let active: ReturnType<typeof captureSession>;
     try {
       const sessionNumber = await reserveBrowserSessionNumber();
+      if (attempt !== generation.current) { stream.getTracks().forEach(track => track.stop()); return; }
       active = captureSession(stream,
         { chunkMs: sessionChunkMs, overlapMs: sessionOverlapMs, audioBitsPerSecond: AUDIO_BITS_PER_SECOND, sessionNumber },
         undefined, queue.persist);
