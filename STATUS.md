@@ -49,7 +49,7 @@ that every task must edit.**
 
 ## Deferred owner follow-ups
 
-On 2026-09-30 the owner asked to keep three items for a later product session: delete past device sessions deliberately; fix web titles staying on transcript previews rather than adopting generated notes titles; improve vague, unnatural notes and the notes page's depth. **Mention these in future Echo status reviews.** Details, reproduction limits and retention constraints: [`tasks/DOC-006.md`](tasks/DOC-006.md). All three are deferred, not implemented.
+On 2026-09-30 the owner asked to keep three items for a later product session: delete past device sessions deliberately; fix web titles staying on transcript previews rather than adopting generated notes titles; improve vague, unnatural notes and the notes page's depth. **Mention these in future Echo status reviews.** Details, reproduction limits and retention constraints: [`tasks/DOC-006.md`](tasks/DOC-006.md). The owner resumed all three on 2026-10-01. WEB-027 implements generated-title propagation; notes quality and deliberate device deletion are separate follow-up tasks. Browser acceptance remains explicit.
 
 ## What exists today
 
