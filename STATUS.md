@@ -49,6 +49,8 @@ that every task must edit.**
 
 ## What exists today
 
+- WEB-023 corrects WEB-022’s false refusal when Arduino reports an unchanged sleep setting. BLE startup now applies and verifies the driver power-save state; build and regression checks pass, physical retest pending in `tasks/WEB-023.md`.
+
 - WEB-022 repairs the modem-sleep configuration behind the owner-observed BLE coexistence crash. Firmware build and device regression checks pass; physical reflash/retest remains pending in `tasks/WEB-022.md`.
 
 - WEB-021 (ADR-025) adds a separate board-hosted `/probe` for explicit BLE ping/pong, temporary trusted shared Wi-Fi and synthetic transfer integrity/timing. No automatic audio handoff is implemented. Firmware/UI evidence and physical acceptance limits are in `tasks/WEB-021.md` and `status/acceptance/WEB-021-probe.md`. Shared-network clients can access the bench console; use a trusted personal network.

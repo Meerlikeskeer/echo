@@ -6,6 +6,7 @@
 #include <SPI.h>
 #include <BLEDevice.h>
 #include <esp_bt_main.h>
+#include <esp_wifi.h>
 #include <driver/i2s.h>
 #include <esp_camera.h>
 #include <esp_system.h>

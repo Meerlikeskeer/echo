@@ -20,3 +20,5 @@ After reflashing, monitor USB while enabling BLE: confirm no abort, no uptime re
 working ping/pong, disconnect/reconnect, repeated transfers, and a 90-second capture
 with clean playback. Disable probe and exercise the diagnostics beacon as well.
 These retest results are **not run**; the fix's build evidence does not prove them.
+
+WEB-022 physical retest: owner observed configuration refusal rather than reboot. WEB-023 fixes the unchanged-setting interpretation and checks actual driver state. After reflashing WEB-023, repeat the same BLE/transfer checks; success remains not run.
