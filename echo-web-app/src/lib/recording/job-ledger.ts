@@ -29,7 +29,7 @@ export interface JobKey {
   readonly sessionId: string;
   readonly id: string;
   readonly checksum: string;
-  readonly mode?: "quick-note";
+  readonly mode?: "quick-note" | "transcription-only";
 }
 
 /**
