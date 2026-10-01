@@ -81,14 +81,22 @@ export function endpoint(origin: string) {
   if (url.username || url.password || url.search || url.hash || url.pathname !== '/' || !(url.protocol === 'https:' || (url.protocol === 'http:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname)))) throw Error('Use an HTTPS origin or loopback HTTP');
   return new URL('/api/recordings', url);
 }
-export async function runWorker(output: string, origin: string, done: () => boolean) {
+export async function runWorker(output: string, origin: string, done: () => boolean, selected: () => string | undefined) {
   const url = endpoint(origin);
   const user = process.env.ECHO_OWNER_USERNAME, password = process.env.ECHO_OWNER_PASSWORD;
   if (!user || !password) throw Error('Set ECHO_OWNER_USERNAME and ECHO_OWNER_PASSWORD privately in the environment');
   await mkdir(output, { recursive: true, mode: 0o700 });
-  const lock = await open(join(output, '.transcription-lock'), 'wx', 0o600);
-  // Launcher owns this lock; removes it on exit. A stale lock is deliberately refused.
-  await lock.close();
+  const lockPath = join(output, '.transcription-lock');
+  const previousLock = await optional(lockPath);
+  if (previousLock !== null) {
+    const pid = Number(previousLock);
+    if (!Number.isInteger(pid) || pid <= 0) throw Error('Invalid processing lock');
+    try { process.kill(pid, 0); throw Error('Processing already active'); }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ESRCH') throw e; }
+    const { unlink } = await import('node:fs/promises'); await unlink(lockPath);
+  }
+  const lock = await open(lockPath, 'wx', 0o600);
+  await lock.writeFile(String(process.pid)); await lock.sync(); await lock.close();
   const send = async (c: AudioChunk, audio: Buffer): Promise<Transcript> => {
     const form = new FormData();
     form.set('mode', 'transcription-only'); form.set('chunk', JSON.stringify(c)); form.set('durationMs', String(c.endMs-c.startMs));
@@ -103,7 +111,7 @@ export async function runWorker(output: string, origin: string, done: () => bool
     for (;;) {
       let settled = true;
       for (const name of await readdir(output)) {
-        if (!/^[A-Za-z0-9-]{1,64}$/.test(name) || !await optional(join(output, name, 'receipt.json'))) continue;
+        if (name !== selected() || !/^[A-Za-z0-9-]{1,64}$/.test(name) || !await optional(join(output, name, 'receipt.json'))) continue;
         const result = await processFolder(join(output, name), send);
         if (!result.exhausted) settled = false;
       }

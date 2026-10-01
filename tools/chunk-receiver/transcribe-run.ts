@@ -12,11 +12,19 @@ endpoint(origin);
 let output = join(homedir(), 'Desktop/Echo-received');
 const index = args.indexOf('--output'); if (index >= 0) output = args[index+1];
 let done = false, code = 1;
-const child = spawn(binary, args, { stdio: 'inherit' });
+let selected: string | undefined;
+let buffered = '';
+const child = spawn(binary, args, { stdio: ['inherit', 'pipe', 'inherit'] });
+child.stdout.on('data', data => {
+  process.stdout.write(data);
+  buffered += data.toString();
+  const lines = buffered.split('\n'); buffered = lines.pop()!;
+  for (const line of lines) if (/^SESSION: [A-Za-z0-9-]{1,64}$/.test(line)) selected = line.slice(9);
+});
 child.on('exit', c => { code = c ?? 1; done = true; });
 child.on('error', () => { done = true; });
 process.on('SIGINT', () => { child.kill('SIGINT'); done = true; });
 process.on('SIGTERM', () => { child.kill('SIGTERM'); done = true; });
-runWorker(output, origin, () => done).then(() => { process.exitCode = code; }).catch(() => {
+runWorker(output, origin, () => done, () => selected).then(() => { process.exitCode = code; }).catch(() => {
   child.kill('SIGTERM'); console.error('Transcription stopped safely; audio retained. Check configuration, spool conflicts or processing lock.'); process.exitCode = 1;
 });

@@ -103,6 +103,7 @@ while ProcessInfo.processInfo.systemUptime-started<maxSeconds {
   let bytes=try get(path);guard bytes.count<=65536 else{throw Failure.invalid("Manifest too large")}
   let m=try JSONDecoder().decode(Manifest.self,from:bytes);try validate(m)
   if let selected,selected != m.sessionId{throw Failure.invalid("Session identity changed")};selected=m.sessionId
+  print("SESSION: \(m.sessionId)");fflush(stdout)
   let folder=output.appendingPathComponent(m.sessionId);try ensureDirectory(folder)
   let manifestFile=folder.appendingPathComponent("receipt.json")
   if previous==nil,FileManager.default.fileExists(atPath:manifestFile.path){previous=try JSONDecoder().decode(Manifest.self,from:Data(contentsOf:manifestFile));try validate(previous!)}
@@ -126,7 +127,7 @@ while ProcessInfo.processInfo.systemUptime-started<maxSeconds {
    }
    received.append(c)
    let prefix=Manifest(version:1,sessionId:m.sessionId,complete:false,chunks:received)
-   try durable(try encode(prefix),manifestFile);previous=prefix
+   if previous?.complete != true {try durable(try encode(prefix),manifestFile);previous=prefix}
   }
   let local=Manifest(version:1,sessionId:m.sessionId,complete:m.complete,chunks:received)
   try durable(try encode(local),manifestFile);previous=local;errors=0
