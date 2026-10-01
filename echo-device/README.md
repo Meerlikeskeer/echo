@@ -135,3 +135,12 @@ page reload alone does not install this fix. With USB Monitor open, enable the
 probe once, confirm no panic/reboot and stable uptime, then verify ping/pong and
 repeat Wi-Fi transfers. Also test the diagnostics beacon after disabling the probe.
 Shared-network and recording coexistence remain physical acceptance work.
+
+## Receive completed chunks while recording
+
+WEB-025 firmware adds `/api/transfer/manifest` and bounded `/api/transfer/chunk`
+slices for the explicit Mac receiver. Follow [the receiver instructions](../tools/chunk-receiver/README.md)
+and [physical acceptance](../status/acceptance/WEB-025-transfer.md). Only journal-committed
+closed WAVs are exposed; SD access is serialized with capture and unlocked before
+network sends. Existing full exports/diagnostics remain idle-only. No original is
+deleted and no copy is assumed safe from an HTTP response alone.

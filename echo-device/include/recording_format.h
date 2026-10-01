@@ -18,3 +18,7 @@ static bool validRecord(const ChunkRecord &r,size_t sequence,uint32_t previousEn
   for(int i=0;i<64;i++)if(!isxdigit((unsigned char)r.checksum[i]))return false;
   return true;
 }
+// No arithmetic overflow and no open-tail bytes in a transfer slice.
+static bool validTransferSlice(uint32_t fileSize,uint32_t offset,uint32_t length) {
+  return length>0&&length<=16384&&offset<fileSize&&length<=fileSize-offset;
+}

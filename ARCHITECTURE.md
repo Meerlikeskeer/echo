@@ -35,6 +35,10 @@ device stops. Automatic deletion and the native Mac receiver remain future work.
 
 ADR-026 permits a standalone macOS Swift CLI using bundled CoreBluetooth/Foundation under `tools/radio-test`. It tests only the existing synthetic probe and saves local reports. This is not the native receiver or a production framework decision; `echo-mac-app` remains a placeholder.
 
+### Completed-chunk transfer (WEB-025)
+
+ADR-027 permits bounded HTTP slice downloads of committed chunks during capture, with a shared SD mutex and RAM-published committed-prefix metadata. Temporary Swift/Foundation tooling in `tools/chunk-receiver` durably verifies a local spool and builds the existing `.echo` archive only with explicit device completion evidence. No SD deletion, cloud storage, production Mac framework, automatic network joining or transcription path is selected. Real-transfer physical acceptance remains separate from synthetic radio passes.
+
 ### Styling and UI
 
 | Technology | Responsibility | Status |

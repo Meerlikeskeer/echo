@@ -1,11 +1,16 @@
 #pragma once
 #include <mbedtls/sha256.h>
-// Only the capture task touches SD while busy. HTTP/BOOT starts happen on loop().
+// Capture and bounded committed-chunk reads serialize every shared SD operation.
+#include "card_lock.h"
 #include "recording_format.h"
 static volatile bool capturing=false,stopRequested=false;
 static volatile uint32_t capturedSamples=0,savedChunks=0,micLevel=0,stackFree=0;
 static char captureError[120]={0};
 static String activeSession;
+static ChunkRecord transferRecords[130];
+static size_t transferCount=0;
+static bool transferComplete=false;
+static portMUX_TYPE transferMux=portMUX_INITIALIZER_UNLOCKED;
 static uint64_t cardUsed=0,cardTotal=0;
 static void captureFail(const char *why) { snprintf(captureError,sizeof(captureError),"%s",why); }
 static bool idleOnly() { if(capturing) { fail("Recording is active. Stop and save before using diagnostics or downloads.",409); return false; } return true; }
@@ -29,6 +34,7 @@ static void captureTask(void *) {
   QueueHandle_t events=nullptr;bool installed=false;File wav;mbedtls_sha256_context hash;mbedtls_sha256_init(&hash);
   uint32_t chunkSamples=0,chunkStart=0,ringPos=0,sequence=0;uint64_t available=cardTotal-cardUsed;
   auto openChunk=[&]() {
+    CardGuard card;
     wav=SD.open(chunkPath(activeSession,sequence),FILE_WRITE);uint8_t header[44];wavHeader(header,CHUNK);
     if(!wav||wav.write(header,44)!=44)return false;
     mbedtls_sha256_starts_ret(&hash,0);mbedtls_sha256_update_ret(&hash,header,44);
@@ -42,6 +48,7 @@ static void captureTask(void *) {
     }return true;
   };
   auto commitChunk=[&](bool full) {
+    CardGuard card;
     String checksum;
     if(!full){uint8_t header[44];wavHeader(header,chunkSamples);if(!wav.seek(0)||wav.write(header,44)!=44)return false;}
     wav.flush();wav.close();
@@ -49,7 +56,10 @@ static void captureTask(void *) {
     if(checksum.length()!=64)return false;
     ChunkRecord r={};r.sequence=sequence;r.startMs=chunkStart/16;r.endMs=(chunkStart+chunkSamples)/16;r.overlapMs=sequence?2000:0;r.size=44+chunkSamples*2;memcpy(r.checksum,checksum.c_str(),65);
     File journal=SD.open("/echo/"+activeSession+"/journal",FILE_APPEND);bool good=journal&&journal.write((uint8_t*)&r,sizeof(r))==sizeof(r);journal.flush();journal.close();
-    if(good){savedChunks=++sequence;available-=r.size+sizeof(r);}return good;
+    if(good){
+      portENTER_CRITICAL(&transferMux);transferRecords[sequence]=r;transferCount=sequence+1;portEXIT_CRITICAL(&transferMux);
+      savedChunks=++sequence;available-=r.size+sizeof(r);
+    }return good;
   };
   if(!overlap)captureFail("PSRAM unavailable; recording was not started.");
   else if(!openChunk())captureFail("Cannot create audio file. Check the microSD card.");
@@ -63,7 +73,8 @@ static void captureTask(void *) {
       if(captureError[0])break;
       size_t bytes=0;size_t wanted=min((uint32_t)256,min(CHUNK-chunkSamples,LIMIT-capturedSamples))*2;
       if(i2s_read(I2S_NUM_0,block,wanted,&bytes,pdMS_TO_TICKS(500))!=ESP_OK||bytes!=wanted){captureFail("Microphone stalled; saved audio is partial.");break;}
-      if(wav.write((uint8_t*)block,bytes)!=bytes){captureFail("microSD write failed; all existing files are retained.");break;}
+      bool wrote=false;{CardGuard card;wrote=wav.write((uint8_t*)block,bytes)==bytes;}
+      if(!wrote){captureFail("microSD write failed; all existing files are retained.");break;}
       mbedtls_sha256_update_ret(&hash,(uint8_t*)block,bytes);
       uint32_t peak=0;for(size_t i=0;i<bytes/2;i++){int n=abs((int)block[i]);if((uint32_t)n>peak)peak=n;memcpy(overlap+ringPos*2,&block[i],2);ringPos=(ringPos+1)%OVERLAP;}
       micLevel=peak;chunkSamples+=bytes/2;capturedSamples+=bytes/2;
@@ -84,8 +95,9 @@ static void captureTask(void *) {
   }
   // A failed tail is deliberately left intact on the card, never advertised as committed.
   if(!captureError[0]&&wav&&chunkSamples>(sequence?OVERLAP:0)&&!commitChunk(false))captureFail("Could not finalize the last audio chunk; session is partial.");
-  if(wav){wav.flush();wav.close();}
+  {CardGuard card;if(wav){wav.flush();wav.close();}}
   mbedtls_sha256_free(&hash);free(overlap);micLevel=0;
+  {CardGuard finalCard;
   if(!captureError[0]&&savedChunks) {
     File journal=SD.open("/echo/"+activeSession+"/journal",FILE_READ);
     for(uint32_t i=0;i<savedChunks&&!captureError[0];i++) {
@@ -104,7 +116,11 @@ static void captureTask(void *) {
   }
   // Measured, not assumed: hashFile puts 2 KiB on this stack above SD and mbedtls.
   stackFree=uxTaskGetStackHighWaterMark(nullptr);
-  cacheCard();capturing=false;vTaskDelete(nullptr);
+  cacheCard();
+  portENTER_CRITICAL(&transferMux);transferComplete=!captureError[0]&&savedChunks>0;portEXIT_CRITICAL(&transferMux);
+  } // Release card before deleting the capture task.
+  capturing=false;
+  vTaskDelete(nullptr);
 }
 static bool validId(const String &id) {if(!id.length()||id.length()>64)return false;for(size_t i=0;i<id.length();i++)if(!isalnum((unsigned char)id[i])&&id[i]!='-')return false;return true;}
 static bool loadRecords(const String &id,ChunkRecord *records,size_t &count,bool &complete,bool verify=false) {
@@ -123,11 +139,13 @@ static void startCapture(bool reply=true) {
   auto reject=[&](const char *why){if(reply)fail(why);else captureFail(why);};
   if(!idleOnly())return;
   if(restartAt){reject("Device is restarting. Reconnect before recording.");return;}
+  if(!cardMutex){reject("SD synchronization unavailable; restart device.");return;}
   if(!sdReady){reject("Insert a FAT32 microSD card and mount it in Diagnostics.");return;}
   cacheCard();if(cardTotal<=cardUsed||cardTotal-cardUsed<RESERVE+CHUNK*2){reject("Not enough free microSD space. Existing recordings are kept.");return;}
   cameraStop();if(bleOn){BLEDevice::getAdvertising()->stop();bleOn=false;}WiFi.scanDelete();scanning=false;
   SD.mkdir("/echo");char id[48];snprintf(id,sizeof(id),"session-%08lx-%08lx",(unsigned long)esp_random(),(unsigned long)esp_random());activeSession=id;
   if(SD.exists("/echo/"+activeSession)||!SD.mkdir("/echo/"+activeSession)){reject("Cannot create a unique session directory.");return;}
+  portENTER_CRITICAL(&transferMux);transferCount=0;transferComplete=false;portEXIT_CRITICAL(&transferMux);
   capturedSamples=0;savedChunks=0;micLevel=0;captureError[0]=0;stopRequested=false;capturing=true;
   if(xTaskCreatePinnedToCore(captureTask,"echo-capture",16384,nullptr,3,nullptr,1)!=pdPASS){capturing=false;reject("Cannot start recording task.");return;}if(reply)ok("Recording to microSD");
 }

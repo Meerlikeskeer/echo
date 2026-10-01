@@ -175,9 +175,11 @@ void recordMicrophone() {
 
 #include "ble_radio.h"
 #include "handoff_probe.h"
+#include "chunk_transfer.h"
 
 void routes() {
   probeRoutes();
+  transferRoutes();
   recorderRoutes();
   const char *headers[] = {"X-Echo-Action"}; server.collectHeaders(headers, 1);
   server.on("/", HTTP_GET, [] {
@@ -296,6 +298,8 @@ void setup() {
   // Password deliberately appears only on the local USB console, not web logs.
   Serial.printf("\nWi-Fi network: %s\nWi-Fi password: %s\nOpen http://192.168.4.1\n\n",ssid.c_str(),password.c_str());
   logEvent("Local Wi-Fi ready; connection details are in USB serial output");
+  cardMutex=xSemaphoreCreateMutex();
+  if(!cardMutex){logEvent("FATAL: SD synchronization unavailable");return;}
   SPI.begin(7,8,9,21); mountCard(); cacheCard(); pinMode(0,INPUT_PULLUP); routes();
   logEvent("Web console ready; camera, microphone and BLE are off");
 }
