@@ -381,3 +381,7 @@ browser-local library with no remote audio copy or cloud history service.
 ### WEB-021 wireless probe boundaries
 
 ADR-025 adds the board-hosted `/probe` experimental section. Explicit idle-only actions enable a ping-only connectable BLE service and temporarily join a trusted shared network; the access point stays available. The station network's clients gain access to the bench console, including recordings, so this is an opt-in trust boundary expansion, not production authentication. Credentials are not persisted or logged. A fixed synthetic HTTP payload measures integrity and elapsed time without SD access, including during capture. Neither a successful transfer nor BLE ping certifies audio sync, durable receipt or automatic handoff. Physical results belong to `status/acceptance/WEB-021-probe.md`.
+
+## WEB-033 browser library organization
+
+ADR-031 adds browser-local custom groups and conservative transcript-based automatic categories, preserving explicit manual assignment. Sidebar erasure is a deliberate per-session operation serialized against queue drain and device import; active capture/import refuses it. Notes, processing rows, completion evidence and presentation preferences are removed with visible partial-failure handling. No remote/device copies or automatic-retention guards change. Notes use a dedicated escaped print document for native Save as PDF with completeness/revision disclosure. Physical-device work is paused at owner direction (2026-10-22).

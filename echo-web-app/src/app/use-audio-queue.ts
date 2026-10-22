@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { capacity, preserveAudio, chunkKey, drainQueue, durableWarning, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, transientWarning, type QueueEntry, type StorageWarning } from "../lib/recording/queue";
+import { ArtifactStore } from "../lib/recording/artifact-store";
+import { removePreference } from "../lib/recording/library";
+import { withLibraryDeletion } from "../lib/recording/delete-session";
 import { reportFailure } from "../lib/recording/log";
 import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
 import type { PlayableChunk, Session } from "../lib/recording/session";
@@ -160,6 +163,16 @@ export function useAudioQueue(canProcess = true) {
       }
     });
   }, [refresh, settled, sync]);
+  const removeSession = useCallback(async (sessionId: string) => {
+    if (!navigator.locks) throw new Error("Use a browser with Web Locks to delete safely.");
+    await withLibraryDeletion(navigator.locks, async () => {
+      await new ArtifactStore().deleteSession(sessionId);
+      await store.current.deleteSession(sessionId);
+      removePreference(localStorage, sessionId);
+      trackUnsaved(rows => rows.filter(row => row.metadata.sessionId !== sessionId));
+      await refresh();
+    });
+  }, [refresh, trackUnsaved]);
   const finished = useCallback(() => { void sync(); }, [sync]);
-  return { entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
+  return { removeSession, entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
 }

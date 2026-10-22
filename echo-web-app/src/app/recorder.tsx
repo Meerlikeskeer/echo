@@ -18,9 +18,11 @@ import { DeviceImport } from "./device-import";
 import { useWakeLock } from "./use-wake-lock";
 
 import { Button } from "../components/ui/button";
-import { Plus, Search, LockKeyhole, StickyNote, AudioLines, PanelLeft, Mic, Square, NotebookPen, AlignLeft, Headphones, RefreshCw, Pencil } from "lucide-react";
+import { Plus, Search, LockKeyhole, StickyNote, AudioLines, PanelLeft, Mic, Square, NotebookPen, AlignLeft, Headphones, RefreshCw, Pencil, Trash2, FolderPlus } from "lucide-react";
 import { libraryRecording, type EchoKind } from "../lib/recording/library";
 import { reserveBrowserSessionNumber } from "../lib/recording/session-name";
+import { addGroup, readGroups } from "../lib/recording/groups";
+import { DeleteRecordingDialog } from "./delete-recording-dialog";
 import { useLibrary } from "./use-library";
 import { stitchSession } from "../lib/recording/stitching";
 import { SessionArtifacts } from "./session-artifacts";
@@ -74,6 +76,16 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
   const queue = useAudioQueue(status.ready);
+  const [groups, setGroups] = useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [newGroup, setNewGroup] = useState("");
+  const [groupError, setGroupError] = useState("");
+  const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null);
+  useEffect(() => {
+    const load = () => { try { setGroups(readGroups(localStorage)); } catch { setGroupError("Groups could not be loaded. Check browser storage."); } };
+    load(); window.addEventListener("storage", load);
+    return () => window.removeEventListener("storage", load);
+  }, []);
   const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
   const ids = [...new Set([...chunks.map(chunk => chunk.metadata.sessionId), ...queue.completions.filter(item => item && typeof item.sessionId === "string").map(item => item.sessionId), ...(recorder ? [recorder.session.id] : [])])].sort();
   const libraryState = useLibrary(ids);
@@ -100,6 +112,13 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   }, [phase]);
 
   async function start() {
+    if (!navigator.locks) return;
+    await navigator.locks.request("echo-capture", { ifAvailable: true }, async lock => {
+      if (!lock) { setFailure({ title: "Another Echo tab is busy", detail: "Finish recording or deleting in the other tab first.", retryable: true }); return; }
+      await startCapture();
+    });
+  }
+  async function startCapture() {
     const attempt = ++generation.current;
     setFailure(null);
     setElapsedMs(0);
@@ -176,7 +195,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
     setSelectedId(active.session.id);
     setTab("transcript");
     setPhase("recording");
-    void active.finished.then(async (captured) => {
+    await active.finished.then(async (captured) => {
       let completionFailed = false;
       try { await queue.complete(captured); } catch { completionFailed = true; }
       queue.finished();
@@ -205,24 +224,40 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const selectedTranscript = selected ? stitchSession({ sessionId: selected.id,
     chunks: selected.results.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript })),
     completion: queue.completions.filter(item => item?.sessionId === selected.id).length > 1 ? { sessionId: selected.id, chunks: [] } : queue.completions.find(item => item?.sessionId === selected.id) ?? null }) : null;
+  const filteredLibrary = library.filter(item => item.title.toLowerCase().includes(search.toLowerCase()) && (groupFilter === "all" || (groupFilter === "ungrouped" ? !item.group : item.group === groupFilter)));
+  const availableGroups = [...new Set([...groups, ...library.flatMap(item => item.group ? [item.group] : [])])];
   function openRecording(id: string | null) { setSelectedId(id); setMobileOpen(false); setTab("notes"); }
   return <div className="echo-workspace">
     <a className="skip-link" href="#echo-main">Skip to recording</a>
     <aside className={`echo-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label="Recordings sidebar">
       <div className="sidebar-brand"><span className="wordmark">echo<span>.</span></span><span className="private-label"><LockKeyhole size={12} /> Private space</span></div>
-      <Button className="new-echo" disabled={capturing} onClick={() => openRecording(null)}><Plus /> Start new Echo</Button>
+      <Button className="new-echo" disabled={capturing || deleting !== null} onClick={() => openRecording(null)}><Plus /> Start new Echo</Button>
       <label className="library-search"><Search size={15} /><input aria-label="Search recordings" placeholder="Find a recording…" value={search} onChange={event => setSearch(event.target.value)} /></label>
+      <label className="group-filter">Group <select aria-label="Filter recordings by group" value={groupFilter} onChange={event => setGroupFilter(event.target.value)}><option value="all">All recordings</option><option value="ungrouped">Ungrouped</option>{availableGroups.map(group => <option key={group} value={group}>{group}</option>)}</select></label>
+      <form className="group-create" onSubmit={event => { event.preventDefault(); try { const next = addGroup(localStorage, newGroup); setGroups(next); setNewGroup(""); setGroupError(""); } catch (cause) { setGroupError(cause instanceof Error ? cause.message : "Group could not be saved."); } }}><input aria-label="New group name" placeholder="New group…" maxLength={60} value={newGroup} onChange={event => setNewGroup(event.target.value)} /><Button variant="ghost" size="icon" aria-label="Create group" disabled={!newGroup.trim()}><FolderPlus size={16} /></Button></form>
+      {groupError ? <p role="alert" className="text-sm">{groupError}</p> : null}
       <div className="library-heading">YOUR RECORDINGS <span>{library.length}</span></div>
       <nav className="recording-list" aria-label="Your recordings">
         {!queue.ready ? <p className="sidebar-empty">Opening your recordings…</p> : !library.length ? <p className="sidebar-empty">A little space for everything<br />you want to remember.</p> : null}
-        {library.filter(item => item.title.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} className={`recording-item ${selectedId === item.id ? "is-selected" : ""}`} aria-current={selectedId === item.id ? "page" : undefined} disabled={capturing && item.id !== selectedId} onClick={() => openRecording(item.id)}>
-          {item.kind === "quick-note" ? <StickyNote size={17} /> : <AudioLines size={17} />}
-          <span><strong>{item.title}</strong><small>{clock(item.duration)} · {item.id === recorder?.session.id && capturing ? "Recording" : item.unsaved ? "Unsaved audio" : item.blocked ? "Needs retry" : item.pending ? "Transcribing" : !item.complete ? "Partial" : item.kind === "quick-note" ? "Quick Note" : "Session"}</small></span>
-        </button>)}
-        {library.length > 0 && !library.some(item => item.title.toLowerCase().includes(search.toLowerCase())) ? <p className="sidebar-empty">No recordings match “{search}”.</p> : null}
+        {filteredLibrary.map(item => <div key={item.id} className="recording-row">
+          <button className={`recording-item ${selectedId === item.id ? "is-selected" : ""}`} aria-current={selectedId === item.id ? "page" : undefined} disabled={capturing && item.id !== selectedId || deleting !== null} onClick={() => openRecording(item.id)}>
+            {item.kind === "quick-note" ? <StickyNote size={17} /> : <AudioLines size={17} />}
+            <span><strong>{item.title}</strong><small>{clock(item.duration)} · {item.id === recorder?.session.id && capturing ? "Recording" : item.unsaved ? "Unsaved audio" : item.blocked ? "Needs retry" : item.pending ? "Transcribing" : !item.complete ? "Partial" : "Session"}</small>{item.group ? <small>{item.group}{item.groupAutomatic ? " · Auto" : ""}</small> : null}</span>
+          </button>
+          <Button variant="ghost" size="icon" className="recording-trash" aria-label={`Delete ${item.title}`} disabled={capturing || importing || deleting !== null} onClick={() => setDeleting({ id: item.id, title: item.title })}><Trash2 size={15} /></Button>
+        </div>)}
+        {library.length > 0 && !filteredLibrary.length ? <p className="sidebar-empty">No recordings match this search and group.</p> : null}
       </nav>
       <div className="sidebar-footer"><span className={`connection-dot ${queue.online ? "online" : ""}`} />{queue.online ? "Connected" : "Offline · saved audio waits"}<p>Saved in this browser.<br />Keep original audio as your backup.</p></div>
     </aside>
+    {deleting ? <DeleteRecordingDialog recording={deleting} onCancel={() => setDeleting(null)} onConfirm={async () => {
+      if (capturing || importing) throw new Error("Finish recording or importing before deleting.");
+      // Unmount generation/playback before erasing their saved data.
+      if (selectedId === deleting.id) setSelectedId(null);
+      await queue.removeSession(deleting.id);
+      if (recorder?.session.id === deleting.id) setRecorder(null);
+      setDeleting(null);
+    }} /> : null}
     <main id="echo-main" className="echo-main">
       <header className="workspace-topbar"><Button variant="ghost" size="icon" className="mobile-menu" aria-label="Toggle recordings" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><PanelLeft /></Button><span>{selected ? "Your recordings / Echo" : "Your space to listen"}</span><span className="topbar-note"><span className="connection-dot online" /> Browser-local library</span></header>
       <div className="workspace-content">
@@ -262,7 +297,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             {tab === "audio" ? <div className="audio-library"><h2>Original audio</h2><p>Saved on this browser, with no verified remote backup. Downloads preserve each original clip, including overlap. Nothing is deleted after transcription.</p><SessionTranscript transcript={selectedTranscript} showArtifacts={false} audio={selected.audio} /><details className="original-results"><summary>Original clips & downloads</summary>{selected.audio.map(chunk => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some(entry => chunkKey(entry) === chunkKey(chunk))} disabled={busy} onSave={() => { void queue.persist(chunk).then(queue.finished).catch(() => {}); }} />)}</details></div> : null}
           </div>
           {selected.pending || selected.blocked ? <div className="processing-footer"><p>{selected.pending} clips waiting · {queue.online ? "Processing continues while this page is open." : "Saved audio will process when you reconnect."}</p><Button variant="outline" size="sm" disabled={queue.working || !queue.online} onClick={() => { void queue.sync(true); }}><RefreshCw /> Retry pending processing</Button></div> : null}
-          {selected.unsaved ? <div className="echo-alert" role="alert">Some audio could not be saved. Open Original audio and download it before leaving.</div> : null}
+          <label className="session-group">Group <select aria-label="Session group" value={libraryState.preferences[selected.id]?.group === undefined ? "__auto" : selected.group ?? "__none"} onChange={event => libraryState.save(selected.id, { group: event.target.value === "__auto" ? undefined : event.target.value === "__none" ? null : event.target.value })}><option value="__auto">Auto{selected.groupAutomatic && selected.group ? ` — ${selected.group}` : ""}</option><option value="__none">Ungrouped</option>{availableGroups.map(group => <option key={group} value={group}>{group}</option>)}</select><small>Auto uses transcript clues; ambiguous sessions stay ungrouped.</small></label>
+        {selected.unsaved ? <div className="echo-alert" role="alert">Some audio could not be saved. Open Original audio and download it before leaving.</div> : null}
         </section> : null}
         <footer className="workspace-footer"><span>Made for being here.</span><details><summary>Storage & privacy</summary><p>Chunk processing: {progress.transcribed} transcribed · {progress.uploading} uploading · {progress.waiting} waiting · {progress.retrying} retrying · {progress.blocked} blocked</p><label>Chunk overlap <select aria-label="Chunk overlap" value={overlapMs} disabled={capturing} onChange={event => setOverlapMs(Number(event.target.value))}><option value={2000}>2 seconds</option><option value={5000}>5 seconds</option><option value={10000}>10 seconds</option></select></label><p>Audio and names stay in this browser. Site data can be cleared or evicted. Closing or backgrounding the page can interrupt recording and pauses processing. Capture stops after four hours or earlier if storage fails. Keep a backup for important moments.</p>{status.ready ? <DisclosureNotice disclosures={status.disclosures} /> : null}</details></footer>
       </div>
