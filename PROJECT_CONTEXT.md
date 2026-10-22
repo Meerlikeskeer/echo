@@ -8,6 +8,10 @@ Long recordings are sessions composed of ordered audio chunks, with configurable
 
 Users supply provider credentials. Keep transcription, LLM, storage, research, and reminder integrations interchangeable. Prefer private/self-hosted operation; explicitly disclose each external processor. Retention is configurable from 7–30 days and must preserve audio until transcription and verified-copy safeguards are satisfied.
 
+## Owner direction — 2026-10-22
+
+Physical-device development is paused. Prioritize the laptop/browser version: Google and email/password accounts, protected per-user provider keys without owner-key fallback, opt-in live notes, confirmed sidebar deletion, PDF notes export, and custom/content-based groups. Account setup must not expose a previous user’s browser library. Provider limits and hosting costs remain finite.
+
 ## Current development stage
 
 Shared documentation, the bounded builder/checker controller, the web shell and the first recording slice are established. WEB-001 adds the Next.js/TypeScript/Tailwind shell, fail-closed single-owner access, and local/PR verification tooling; ENG-001 adds the controller described in `AGENT_WORKFLOW.md`, whose automated feature loop remains deliberately disabled. WEB-002 adds the vertical slice: record one 30–60 second clip in the browser, post it to a Route Handler, and get back a transcript and generated notes through swappable provider ports (ADR-009).

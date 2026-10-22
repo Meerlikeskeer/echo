@@ -39,6 +39,17 @@ export class ArtifactStore {
     if (!record || record.sessionId !== sessionId || record.transcriptRevision !== revision) throw new Error("Saved guide could not be validated. Generate it again.");
     return record;
   }
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.access<void>("readwrite", (store, done) => {
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) { done(); return; }
+        if (cursor.value.sessionId === sessionId) cursor.delete();
+        cursor.continue();
+      };
+    });
+  }
   async save(record: ArtifactRecord): Promise<void> {
     const checked = validateStoredGuide(record);
     if (!checked) throw new Error("Invalid guide cannot be saved");
