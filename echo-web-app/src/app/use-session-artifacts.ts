@@ -69,7 +69,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     return () => { current = false; };
   }, [revision, transcript.sessionId]);
 
-  const generate = useCallback(async () => {
+  const generateUnlocked = useCallback(async () => {
     if (inFlight.current) return;
     const controller = new AbortController();
     inFlight.current = controller;
@@ -133,6 +133,14 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       if (mounted.current) setStatus("idle");
     }
   }, []);
+
+  const generate = useCallback(async () => {
+    if (!navigator.locks) { setError("Use a browser with Web Locks to safely generate saved notes."); return; }
+    await navigator.locks.request(`echo-session-notes/${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
+      if (!lock) { setError("This session is being changed in another tab. Try again when it finishes."); return; }
+      await generateUnlocked();
+    });
+  }, [generateUnlocked]);
 
   return {
     record,

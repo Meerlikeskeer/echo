@@ -171,7 +171,7 @@ export function useAudioQueue(canProcess = true) {
       removePreference(localStorage, sessionId);
       trackUnsaved(rows => rows.filter(row => row.metadata.sessionId !== sessionId));
       await refresh();
-    });
+    }, sessionId);
   }, [refresh, trackUnsaved]);
   const finished = useCallback(() => { void sync(); }, [sync]);
   return { removeSession, entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
