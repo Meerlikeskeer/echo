@@ -516,6 +516,14 @@ Owner requests date, time and session number names on both web and device, super
 
 The existing trusted local device page sends browser epoch milliseconds on opening and before a browser start, using the action header and idle-only guard. Firmware validates a bounded numeric epoch and advances it from its monotonic uptime. Disconnect does not lose time; reboot does. BOOT recordings before synchronization explicitly have no date. No network time service, RTC hardware, public endpoint, schema migration or historical inferred dates. Dates/times display in the viewing browser's local timezone. Firmware build and synthetic tests cannot certify physical clock accuracy.
 
+## ADR-031 — Browser library groups, explicit erasure and PDF export (WEB-033, 2026-10-22)
+
+Accepted at owner request: pause physical-device development and prioritize the laptop/browser workspace. Add user-created browser-local groups, explicit assignment and conservative content-based automatic grouping into Class, Workplace, People or Discussion. Classification is a local heuristic over available transcript text, never a claim to know the participants or an external model call. Manual assignments take priority, including an explicit ungrouped choice.
+
+Extend deliberate manual per-copy erasure to browser sessions: a sidebar trash action names the session, warns that its local notes/transcripts/audio may be the sole copy, and requires confirmation. Refuse while capture/import is active; serialize with the existing cross-tab queue/import locks. Delete notes before queue rows; report partial errors and permit retry. This changes no automatic retention policy and deletes no device or remote copy. Browser storage remains specific to origin.
+
+Notes export uses the browser's native print-to-PDF facility in a dedicated escaped document, with full guide sections and a partial/outdated disclosure. The control explicitly says Save as PDF and the print dialog lets the user select Save as PDF; no JSON notes download remains. Native printing preserves browser font/language support without introducing a PDF runtime dependency.
+
 ## ADR-032 — Supabase accounts and encrypted per-user keys (WEB-034, 2026-10-22)
 
 Accepted for implementation at the owner's request for Google and general accounts with user-paid inference. The temporary single-owner HTTP Basic gate (ADR-007) cannot identify multiple owners or support OAuth. Add explicit ECHO_AUTH_MODE=accounts using Supabase Auth (Google, email/password with confirmation and recovery) and Supabase PostgreSQL only for encrypted per-user provider credentials. @supabase/ssr and @supabase/supabase-js implement PKCE/session refresh; credentials are never custom password records. Hosted Supabase or its documented self-hosted deployment can serve the same portable Next.js app. No object storage or cloud audio/history is selected.
@@ -525,13 +533,6 @@ Absent mode preserves the existing private owner prototype; unknown/partial acco
 Provider keys are encrypted on the Next.js server with AES-256-GCM using an independent server-only encryption key and user identity as authenticated additional data, stored under Supabase row-level security using the user's verified session (no service-role key). Settings may replace/remove keys but never read raw saved keys back into forms. Provider URLs/models stay administrator-configured; users cannot direct authenticated server fetches to arbitrary URLs. Account-mode inference requires both personal keys and never falls back to platform keys. Existing in-process job deduplication gains user scope, not a durable/exactly-once claim.
 
 Browser audio/guides/presentation storage is namespaced by verified user ID; pre-account owner data is neither imported nor exposed automatically. This is application isolation on a trusted browser profile, not encryption from someone with local device/developer-tools access. Logout/account changes stop the workspace, and pending requests must match the workspace's expected user before paid processing. Auth services/hosting still have finite limits and costs; separate keys in one provider organization do not increase its limits.
-## ADR-031 — Browser library groups, explicit erasure and PDF export (WEB-033, 2026-10-22)
-
-Accepted at owner request: pause physical-device development and prioritize the laptop/browser workspace. Add user-created browser-local groups, explicit assignment and conservative content-based automatic grouping into Class, Workplace, People or Discussion. Classification is a local heuristic over available transcript text, never a claim to know the participants or an external model call. Manual assignments take priority, including an explicit ungrouped choice.
-
-Extend deliberate manual per-copy erasure to browser sessions: a sidebar trash action names the session, warns that its local notes/transcripts/audio may be the sole copy, and requires confirmation. Refuse while capture/import is active; serialize with the existing cross-tab queue/import locks. Delete notes before queue rows; report partial errors and permit retry. This changes no automatic retention policy and deletes no device or remote copy. Browser storage remains specific to origin.
-
-Notes export uses the browser's native print-to-PDF facility in a dedicated escaped document, with full guide sections and a partial/outdated disclosure. The control explicitly says Save as PDF and the print dialog lets the user select Save as PDF; no JSON notes download remains. Native printing preserves browser font/language support without introducing a PDF runtime dependency.
 
 ## ADR-033 — Opt-in revision-bound live notes (WEB-035, 2026-10-22)
 

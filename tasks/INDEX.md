@@ -38,6 +38,7 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [ENG-022](ENG-022.md) Repair Vercel output path for device import deployment | Configuration repaired; full web CI passed; deployment and live import acceptance blocked… | `fix/ENG-022-vercel-output-path` |
 | [ENG-023](ENG-023.md) Check-gated auto-merge for ready task PRs | Implemented; YAML validation passed; local full verification blocked by filesystem/Python… | `eng/ENG-023-feature-auto-merge` |
 | [INT-001](INT-001.md) Branch integration and architecture documentation | Done | — |
+| [INT-002](INT-002.md) Laptop features integration and verification handoff | Done — merged feature evidence and outstanding acceptance recorded | `docs/INT-002-laptop-account-handoff` |
 | [WEB-001](WEB-001.md) Web shell and tooling | Done (implemented, independently verified, and merged into `main`) | — |
 | [WEB-002](WEB-002.md) Short recording vertical slice | Done — implemented and verified on `feat/WEB-002-recording-slice`; awaiting owner review,… | — |
 | [WEB-003](WEB-003.md) Session and playable chunk model | Implemented and verified by test; browser acceptance outstanding | `feat/WEB-002-recording-slice` |
@@ -70,6 +71,6 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-030](WEB-030.md) Deliberate device-session deletion | Implemented; firmware and host/UI verification passed; physical erase/power-loss… | `feat/WEB-030-deliberate-device-deletion` |
 | [WEB-031](WEB-031.md) Date, time and session number names | Implemented; independent review complete; full local checks blocked; physical/browser… | `feat/WEB-031-date-time-session-names` |
 | [WEB-032](WEB-032.md) Visible device download progress | Implemented; firmware/UI checks passed; full local verification blocked; physical… | `feat/WEB-032-transfer-progress` |
-| [WEB-033](WEB-033.md) Browser workspace organization | Implemented; local unit checks pass, production verification and browser acceptance… | `feat/WEB-033-workspace-organization` |
-| [WEB-034](WEB-034.md) Accounts and per-user provider keys | Implemented; synthetic verification and account provisioning/live acceptance pending | `feat/WEB-034-user-accounts` |
-| [WEB-035](WEB-035.md) Opt-in live session notes | Implemented; integrated verification and live browser/provider acceptance pending | `feat/WEB-035-live-notes` |
+| [WEB-033](WEB-033.md) Browser workspace organization | Implemented and integrated CI verified; account setup/native acceptance and measured… | `feat/WEB-033-workspace-organization` |
+| [WEB-034](WEB-034.md) Accounts and per-user provider keys | Implemented and integrated CI verified; account setup/native acceptance and measured… | `feat/WEB-034-user-accounts` |
+| [WEB-035](WEB-035.md) Opt-in live session notes | Implemented and integrated CI verified; account setup/native acceptance and measured… | `feat/WEB-035-live-notes` |

@@ -234,3 +234,5 @@ Owner paused physical-device development. ADR-031 / WEB-033 implement browser-lo
 ## Live notes — 2026-10-22
 
 ADR-033 / WEB-035 add opt-in, chunk-paced session note refreshes on changed transcript revisions, capped at one attempt/minute and paused offline/in hidden tabs/on errors. Full-transcript refreshes add growing notes-model token usage; no word streaming or unlimited usage is claimed. Live provider/browser quality and timing remain acceptance.
+
+Combined laptop feature implementation (WEB-033/034/035) is merged at main `9b0ddf7`; full GitHub web/container checks passed at `966a11c`. Per-task records retain exact counts/local failures and remaining account setup/native acceptance. No deployment was performed. Native PDF export uses the print dialog, automatic categories use conservative transcript clues, and account recordings stay browser-local.
