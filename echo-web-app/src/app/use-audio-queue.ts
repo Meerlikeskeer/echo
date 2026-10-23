@@ -156,6 +156,7 @@ export function useAudioQueue(canProcess = true) {
       await navigator.storage?.persist().catch(() => false);
       try {
         await saveDeviceRecording(recording, store.current, progress);
+        localStorage.removeItem(`echo-deleted-session-v1/${recording.sessionId}`);
         settled();
       } finally {
         await refresh();
@@ -166,12 +167,13 @@ export function useAudioQueue(canProcess = true) {
   const removeSession = useCallback(async (sessionId: string) => {
     if (!navigator.locks) throw new Error("Use a browser with Web Locks to delete safely.");
     await withLibraryDeletion(navigator.locks, async () => {
+      localStorage.setItem(`echo-deleted-session-v1/${sessionId}`, "deleted");
       await new ArtifactStore().deleteSession(sessionId);
       await store.current.deleteSession(sessionId);
       removePreference(localStorage, sessionId);
       trackUnsaved(rows => rows.filter(row => row.metadata.sessionId !== sessionId));
       await refresh();
-    });
+    }, sessionId);
   }, [refresh, trackUnsaved]);
   const finished = useCallback(() => { void sync(); }, [sync]);
   return { removeSession, entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };

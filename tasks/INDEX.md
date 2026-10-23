@@ -70,4 +70,4 @@ Two branches adding two tasks touch two different files. This index is marked `m
 | [WEB-030](WEB-030.md) Deliberate device-session deletion | Implemented; firmware and host/UI verification passed; physical erase/power-loss… | `feat/WEB-030-deliberate-device-deletion` |
 | [WEB-031](WEB-031.md) Date, time and session number names | Implemented; independent review complete; full local checks blocked; physical/browser… | `feat/WEB-031-date-time-session-names` |
 | [WEB-032](WEB-032.md) Visible device download progress | Implemented; firmware/UI checks passed; full local verification blocked; physical… | `feat/WEB-032-transfer-progress` |
-| [WEB-033](WEB-033.md) Browser workspace organization | In progress | `feat/WEB-033-workspace-organization` |
+| [WEB-033](WEB-033.md) Browser workspace organization | Implemented; local unit checks pass, production verification and browser acceptance… | `feat/WEB-033-workspace-organization` |
