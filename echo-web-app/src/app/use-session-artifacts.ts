@@ -138,6 +138,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     if (!navigator.locks) { setError("Use a browser with Web Locks to safely generate saved notes."); return; }
     await navigator.locks.request(`echo-session-notes/${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
       if (!lock) { setError("This session is being changed in another tab. Try again when it finishes."); return; }
+      if (localStorage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) { setError("This recording was deleted in another tab. Reopen your library."); return; }
       await generateUnlocked();
     });
   }, [generateUnlocked]);
