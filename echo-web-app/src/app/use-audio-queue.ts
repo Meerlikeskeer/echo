@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { capacity, preserveAudio, chunkKey, drainQueue, durableWarning, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, transientWarning, type QueueEntry, type StorageWarning } from "../lib/recording/queue";
+import { useWorkspaceIdentity } from "./workspace-identity";
 import { ArtifactStore } from "../lib/recording/artifact-store";
 import { removePreference } from "../lib/recording/library";
 import { withLibraryDeletion } from "../lib/recording/delete-session";
@@ -12,7 +13,8 @@ import type { PlayableChunk, Session } from "../lib/recording/session";
 import { saveDeviceRecording, type DeviceRecording, type ImportProgress } from "../lib/recording/device-import";
 
 export function useAudioQueue(canProcess = true) {
-  const store = useRef(new IndexedDBQueue());
+  const {userId,namespace,storage} = useWorkspaceIdentity();
+  const store = useRef(new IndexedDBQueue(namespace + "echo-audio-queue-v1"));
   const processingAllowed = useRef(canProcess);
   useEffect(() => { processingAllowed.current = canProcess; }, [canProcess]);
   const mounted = useRef(false);
@@ -69,7 +71,7 @@ export function useAudioQueue(canProcess = true) {
         if (!lock || !mounted.current) return;
         setWorking(true);
         try {
-          await drainQueue(store.current, sendChunk, { online: () => navigator.onLine, now: () => Date.now(), force, active: () => mounted.current });
+          await drainQueue(store.current, chunk => sendChunk(chunk, userId), { online: () => navigator.onLine, now: () => Date.now(), force, active: () => mounted.current });
           await refresh();
           settled();
         } finally { if (mounted.current) setWorking(false); }
@@ -78,7 +80,7 @@ export function useAudioQueue(canProcess = true) {
       reportFailure("draining the upload queue", cause);
       if (mounted.current) setWarning(transientWarning(storageFailure(cause, "maintenance")));
     }
-  }, [refresh, settled]);
+  }, [refresh, settled, userId]);
   useEffect(() => {
     mounted.current = true;
     const poll = async (stale = false) => {
@@ -156,25 +158,25 @@ export function useAudioQueue(canProcess = true) {
       await navigator.storage?.persist().catch(() => false);
       try {
         await saveDeviceRecording(recording, store.current, progress);
-        localStorage.removeItem(`echo-deleted-session-v1/${recording.sessionId}`);
+        storage.removeItem(`echo-deleted-session-v1/${recording.sessionId}`);
         settled();
       } finally {
         await refresh();
         void sync();
       }
     });
-  }, [refresh, settled, sync]);
+  }, [refresh, settled, sync, storage]);
   const removeSession = useCallback(async (sessionId: string) => {
     if (!navigator.locks) throw new Error("Use a browser with Web Locks to delete safely.");
     await withLibraryDeletion(navigator.locks, async () => {
-      localStorage.setItem(`echo-deleted-session-v1/${sessionId}`, "deleted");
-      await new ArtifactStore().deleteSession(sessionId);
+      storage.setItem(`echo-deleted-session-v1/${sessionId}`, "deleted");
+      await new ArtifactStore(namespace + "echo-session-guides-v1").deleteSession(sessionId);
       await store.current.deleteSession(sessionId);
-      removePreference(localStorage, sessionId);
+      removePreference(storage, sessionId);
       trackUnsaved(rows => rows.filter(row => row.metadata.sessionId !== sessionId));
       await refresh();
-    }, sessionId);
-  }, [refresh, trackUnsaved]);
+    }, namespace + sessionId);
+  }, [refresh, trackUnsaved, namespace, storage]);
   const finished = useCallback(() => { void sync(); }, [sync]);
   return { removeSession, entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
 }

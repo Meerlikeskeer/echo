@@ -1,5 +1,5 @@
-import { requireOwnerAccess } from "../../../lib/owner-access";
-import { providerSetup } from "../../../lib/providers/registry";
+import { requireProcessingAccess } from "../../../lib/owner-access";
+import { providersFor } from "../../../lib/auth/credentials";
 import { processRecording, validateClip, type RecordingResult } from "../../../lib/recording/pipeline";
 import { describeFailure, type RecordingErrorBody } from "../../../lib/recording/http";
 import { ProviderError } from "../../../lib/providers/errors";
@@ -37,12 +37,14 @@ const fail = (status: number, body: RecordingErrorBody) => json(status, { error:
 export async function POST(request: Request): Promise<Response> {
   // Proxy already gates every route; this endpoint checks again at its own
   // boundary so the guard does not depend on middleware remaining in place.
+  let principal;
   try {
-    await requireOwnerAccess();
+    principal = await requireProcessingAccess();
   } catch {
     return fail(401, { code: "unauthorized_owner", port: null, message: "Private access required.", retryable: false });
   }
 
+  const providerSetup = await providersFor(principal);
   if (!providerSetup.ok) {
     return json(503, {
       error: { code: "provider_unconfigured", port: null, message: "Recording providers are not configured.", retryable: false } satisfies RecordingErrorBody,
@@ -101,7 +103,7 @@ export async function POST(request: Request): Promise<Response> {
     // Built only from metadata already checked byte-for-byte against the upload
     // above, and only after the owner gate — an unauthenticated caller can
     // neither read this nor put anything in it.
-    const { result, outcome } = await ledger.run({ sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum, ...(transcriptionOnly ? { mode: "transcription-only" as const } : identity.quickNote ? { mode: "quick-note" as const } : {}) }, async () => ({
+    const { result, outcome } = await ledger.run({ ownerId: principal.id, sessionId: identity.sessionId, id: identity.id, checksum: identity.checksum, ...(transcriptionOnly ? { mode: "transcription-only" as const } : identity.quickNote ? { mode: "quick-note" as const } : {}) }, async () => ({
       ...await process(identity.startMs, !!identity.quickNote),
       chunk: identity,
     }));

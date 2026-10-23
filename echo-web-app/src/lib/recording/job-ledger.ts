@@ -26,6 +26,7 @@
  * for.
  */
 export interface JobKey {
+  readonly ownerId?: string;
   readonly sessionId: string;
   readonly id: string;
   readonly checksum: string;
@@ -48,7 +49,7 @@ export interface JobLedger<T> {
   run(key: JobKey, work: () => Promise<T>): Promise<JobRun<T>>;
 }
 
-export const jobKey = (key: JobKey): string => `${key.sessionId}/${key.id}/${key.checksum}${key.mode ? `/${key.mode}` : ""}`;
+export const jobKey = (key: JobKey): string => `${key.ownerId ? `${key.ownerId}/` : ""}${key.sessionId}/${key.id}/${key.checksum}${key.mode ? `/${key.mode}` : ""}`;
 
 /** Long enough to cover a suspended tab reconnecting; short enough that a
  *  transcript is not held in memory beyond the retry window it exists for. */

@@ -15,13 +15,15 @@ import {
   type ArtifactRecord, type RevisionInput,
 } from "../lib/recording/artifacts";
 
+import { useWorkspaceIdentity } from "./workspace-identity";
 import { ArtifactStore } from "../lib/recording/artifact-store";
 import { ARTIFACT_REQUEST_TIMEOUT_MS } from "../lib/recording/request-policy";
 
 export type ArtifactStatus = "idle" | "working";
 
 export function useSessionArtifacts(transcript: RevisionInput) {
-  const store = useRef(new ArtifactStore());
+  const {userId,namespace,storage} = useWorkspaceIdentity();
+  const store = useRef(new ArtifactStore(namespace + "echo-session-guides-v1"));
   const inFlight = useRef<AbortController | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const mounted = useRef(false);
@@ -81,7 +83,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       const response = await fetch("/api/sessions/artifacts", {
         method: "POST",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(ARTIFACT_REQUEST_TIMEOUT_MS)]),
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(userId === "owner" ? {} : { "x-echo-user": userId }) },
         body: JSON.stringify({
           sessionId: source.sessionId, text: source.text, status: source.status,
           segments: source.segments.map((segment) => ({ text: segment.text, startMs: segment.startMs, endMs: segment.endMs })),
@@ -132,16 +134,16 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       if (inFlight.current === controller) inFlight.current = null;
       if (mounted.current) setStatus("idle");
     }
-  }, []);
+  }, [userId]);
 
   const generate = useCallback(async () => {
     if (!navigator.locks) { setError("Use a browser with Web Locks to safely generate saved notes."); return; }
-    await navigator.locks.request(`echo-session-notes/${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
+    await navigator.locks.request(`echo-session-notes/${namespace}${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
       if (!lock) { setError("This session is being changed in another tab. Try again when it finishes."); return; }
-      if (localStorage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) { setError("This recording was deleted in another tab. Reopen your library."); return; }
+      if (storage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) { setError("This recording was deleted in another tab. Reopen your library."); return; }
       await generateUnlocked();
     });
-  }, [generateUnlocked]);
+  }, [generateUnlocked,namespace,storage]);
 
   return {
     record,

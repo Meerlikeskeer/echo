@@ -224,6 +224,9 @@ The point of this section is that **an interrupted task must still be recoverabl
 
 **Keep this file short.** If a section grows past a screen, the detail belongs in the document that owns it, and this file should link there.
 
+## Account mode — 2026-10-22
+
+ADR-032 / WEB-034 add optional Supabase Google/email accounts and server-encrypted per-user provider keys, with user-scoped browser storage and retry ledger. Default owner mode remains private; account mode has no owner-key fallback. Auth/project configuration, SQL policies, OAuth/email and live billing acceptance require the setup in `docs/accounts.md`; no cloud audio/history or deployment is implied.
 ## Laptop/browser priority — 2026-10-22
 
 Owner paused physical-device development. ADR-031 / WEB-033 implement browser-local groups, conservative transcript-based automatic categorization, confirmed sidebar session erasure and native Save as PDF notes export. The PDF control opens the browser print dialog; it does not produce a JSON download. Accounts/per-user keys and opt-in live notes are separate follow-up tasks; no production account setup or live-provider acceptance is implied.
