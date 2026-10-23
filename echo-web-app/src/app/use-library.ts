@@ -1,9 +1,11 @@
 "use client";
+import { useWorkspaceIdentity } from "./workspace-identity";
 import { reserveBrowserSessionNumber } from "../lib/recording/session-name";
 import { useEffect, useState } from "react";
 import { readPreference, savePreference, type LibraryPreference } from "../lib/recording/library";
 
 export function useLibrary(ids: readonly string[]) {
+  const {namespace,storage} = useWorkspaceIdentity();
   const [preferences, setPreferences] = useState<Record<string, LibraryPreference>>({});
   const [error, setError] = useState("");
   const key = JSON.stringify(ids);
@@ -13,12 +15,12 @@ export function useLibrary(ids: readonly string[]) {
       try {
         const next: Record<string, LibraryPreference> = {};
         for (const id of JSON.parse(key) as string[]) {
-          let preference = readPreference(localStorage, id);
+          let preference = readPreference(storage, id);
           if (!/^session-(\d{13}|undated)-\d+-/.test(id) && !preference.legacyNumber) {
-            const number = await reserveBrowserSessionNumber();
+            const number = await reserveBrowserSessionNumber(namespace, storage);
             // Another tab may have assigned this recording while we waited.
-            preference = readPreference(localStorage, id);
-            if (!preference.legacyNumber) preference = savePreference(localStorage, id, { legacyNumber: number });
+            preference = readPreference(storage, id);
+            if (!preference.legacyNumber) preference = savePreference(storage, id, { legacyNumber: number });
           }
           next[id] = preference;
         }
@@ -28,10 +30,10 @@ export function useLibrary(ids: readonly string[]) {
     void load();
     window.addEventListener("storage", load);
     return () => { cancelled = true; window.removeEventListener("storage", load); };
-  }, [key]);
+  }, [key, namespace, storage]);
   function save(id: string, patch: LibraryPreference): boolean {
     try {
-      const value = savePreference(localStorage, id, patch);
+      const value = savePreference(storage, id, patch);
       setPreferences(previous => ({ ...previous, [id]: value })); setError(""); return true;
     } catch { setError("That change could not be saved. Your audio is unaffected; check browser storage and try again."); return false; }
   }

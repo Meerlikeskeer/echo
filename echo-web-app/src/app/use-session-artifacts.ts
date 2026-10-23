@@ -14,13 +14,15 @@ import {
 } from "../lib/recording/artifacts";
 
 import { liveNotesDue } from "../lib/recording/live-notes";
+import { useWorkspaceIdentity } from "./workspace-identity";
 import { ArtifactStore } from "../lib/recording/artifact-store";
 import { ARTIFACT_REQUEST_TIMEOUT_MS } from "../lib/recording/request-policy";
 
 export type ArtifactStatus = "idle" | "working";
 
 export function useSessionArtifacts(transcript: RevisionInput) {
-  const store = useRef(new ArtifactStore());
+  const {userId,namespace,storage} = useWorkspaceIdentity();
+  const store = useRef(new ArtifactStore(namespace + "echo-session-guides-v1"));
   const inFlight = useRef<AbortController | null>(null);
   const [live, setLive] = useState(false);
   const [liveFailed, setLiveFailed] = useState(false);
@@ -71,7 +73,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     return () => { current = false; };
   }, [revision, transcript.sessionId]);
 
-  const generate = useCallback(async () => {
+  const generateUnlocked = useCallback(async () => {
     if (inFlight.current) return;
     const controller = new AbortController();
     inFlight.current = controller;
@@ -84,7 +86,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       const response = await fetch("/api/sessions/artifacts", {
         method: "POST",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(ARTIFACT_REQUEST_TIMEOUT_MS)]),
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(userId === "owner" ? {} : { "x-echo-user": userId }) },
         body: JSON.stringify({
           sessionId: source.sessionId, text: source.text, status: source.status,
           segments: source.segments.map((segment) => ({ text: segment.text, startMs: segment.startMs, endMs: segment.endMs })),
@@ -135,7 +137,20 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       if (inFlight.current === controller) inFlight.current = null;
       if (mounted.current) setStatus("idle");
     }
-  }, []);
+  }, [userId]);
+
+  const generate = useCallback(async () => {
+    try {
+      if (!navigator.locks) throw new Error("Use a browser with Web Locks to safely generate saved notes.");
+      await navigator.locks.request(`echo-session-notes/${namespace}${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
+        if (!lock) throw new Error("This session is being changed in another tab. Try again when it finishes.");
+        if (storage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) throw new Error("This recording was deleted in another tab. Reopen your library.");
+        await generateUnlocked();
+      });
+    } catch (cause) {
+      if (mounted.current) { setError(cause instanceof Error ? cause.message : "Saved notes could not be accessed."); setLiveFailed(true); }
+    }
+  }, [generateUnlocked,namespace,storage]);
 
   useEffect(() => {
     const update = () => {

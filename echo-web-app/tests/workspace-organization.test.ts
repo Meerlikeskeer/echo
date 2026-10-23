@@ -27,16 +27,16 @@ test("custom groups and explicit ungrouped survive reload; auto can be restored"
   assert.deepEqual(readPreference(storage,"a"),{});
 });
 test("deletion cannot run when any capture/import/drain lock is unavailable", async () => {
-  for (const blocked of ["echo-capture", "echo-device-import", "echo-audio-queue-drain"]) {
+  for (const blocked of ["echo-capture", "echo-device-import", "echo-audio-queue-drain", "echo-session-notes/session-a"]) {
     let ran = false;
     const locks = { request: async (name: string, _options: unknown, callback: (lock: unknown) => unknown) => callback(name === blocked ? null : {}) } as unknown as LockManager;
-    await assert.rejects(withLibraryDeletion(locks, async () => { ran = true; }), /Another Echo tab/);
+    await assert.rejects(withLibraryDeletion(locks, async () => { ran = true; }, "session-a"), /Another Echo tab/);
     assert.equal(ran, false);
   }
   const names: string[] = [];
   const locks = { request: async (name: string, _options: unknown, callback: (lock: unknown) => unknown) => { names.push(name); return callback({}); } } as unknown as LockManager;
-  assert.equal(await withLibraryDeletion(locks, async () => "deleted"), "deleted");
-  assert.deepEqual(names,["echo-capture", "echo-device-import", "echo-audio-queue-drain"]);
+  assert.equal(await withLibraryDeletion(locks, async () => "deleted", "session-a"), "deleted");
+  assert.deepEqual(names,["echo-capture", "echo-device-import", "echo-audio-queue-drain", "echo-session-notes/session-a"]);
 });
 test("PDF print document includes all guide sections, disclosure and escaped untrusted content", () => {
   const record: ArtifactRecord = {sessionId:"session-a", transcriptRevision:"a".repeat(64), generation:1, artifacts:{title:"<script>alert(1)</script>",course:"Physics",summary:"Résumé α",keyPoints:["A & B"],outline:[{heading:"Lesson",notes:["Detail"]}],terms:[{term:"Force",definition:"Definition"}],openQuestions:["Question"],actionItems:["Action"],researchTopics:["Topic"]}};

@@ -21,6 +21,7 @@ import { Button } from "../components/ui/button";
 import { Plus, Search, LockKeyhole, StickyNote, AudioLines, PanelLeft, Mic, Square, NotebookPen, AlignLeft, Headphones, RefreshCw, Pencil, Trash2, FolderPlus } from "lucide-react";
 import { libraryRecording, type EchoKind } from "../lib/recording/library";
 import { reserveBrowserSessionNumber } from "../lib/recording/session-name";
+import { useWorkspaceIdentity } from "./workspace-identity";
 import { addGroup, readGroups } from "../lib/recording/groups";
 import { DeleteRecordingDialog } from "./delete-recording-dialog";
 import { useLibrary } from "./use-library";
@@ -62,6 +63,7 @@ function clock(ms: number): string {
 }
 
 export function Recorder({ status }: { status: ProviderStatus }) {
+  const {namespace,storage} = useWorkspaceIdentity();
   const [phase, setPhase] = useState<Phase>("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -82,10 +84,10 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const [groupError, setGroupError] = useState("");
   const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null);
   useEffect(() => {
-    const load = () => { try { setGroups(readGroups(localStorage)); } catch { setGroupError("Groups could not be loaded. Check browser storage."); } };
+    const load = () => { try { setGroups(readGroups(storage)); } catch { setGroupError("Groups could not be loaded. Check browser storage."); } };
     load(); window.addEventListener("storage", load);
     return () => window.removeEventListener("storage", load);
-  }, []);
+  }, [storage]);
   const chunks: PlayableChunk[] = [...queue.entries, ...queue.unsaved];
   const ids = [...new Set([...chunks.map(chunk => chunk.metadata.sessionId), ...queue.completions.filter(item => item && typeof item.sessionId === "string").map(item => item.sessionId), ...(recorder ? [recorder.session.id] : [])])].sort();
   const libraryState = useLibrary(ids);
@@ -178,7 +180,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
 
     let active: ReturnType<typeof captureSession>;
     try {
-      const sessionNumber = await reserveBrowserSessionNumber();
+      const sessionNumber = await reserveBrowserSessionNumber(namespace, storage);
       if (attempt !== generation.current) { stream.getTracks().forEach(track => track.stop()); return; }
       active = captureSession(stream,
         { chunkMs: sessionChunkMs, overlapMs: sessionOverlapMs, audioBitsPerSecond: AUDIO_BITS_PER_SECOND, sessionNumber },
@@ -224,7 +226,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
   const selectedTranscript = selected ? stitchSession({ sessionId: selected.id,
     chunks: selected.results.map(entry => ({ metadata: entry.metadata, transcript: entry.result?.transcript })),
     completion: queue.completions.filter(item => item?.sessionId === selected.id).length > 1 ? { sessionId: selected.id, chunks: [] } : queue.completions.find(item => item?.sessionId === selected.id) ?? null }) : null;
-  const filteredLibrary = library.filter(item => item.title.toLowerCase().includes(search.toLowerCase()) && (groupFilter === "all" || (groupFilter === "ungrouped" ? !item.group : item.group === groupFilter)));
+  const filteredLibrary = library.filter(item => item.title.toLowerCase().includes(search.toLowerCase()) && (groupFilter === "all" || (groupFilter === "ungrouped" ? !item.group : `group:${item.group}` === groupFilter)));
   const availableGroups = [...new Set([...groups, ...library.flatMap(item => item.group ? [item.group] : [])])];
   function openRecording(id: string | null) { setSelectedId(id); setMobileOpen(false); setTab("notes"); }
   return <div className="echo-workspace">
@@ -233,8 +235,8 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       <div className="sidebar-brand"><span className="wordmark">echo<span>.</span></span><span className="private-label"><LockKeyhole size={12} /> Private space</span></div>
       <Button className="new-echo" disabled={capturing || deleting !== null} onClick={() => openRecording(null)}><Plus /> Start new Echo</Button>
       <label className="library-search"><Search size={15} /><input aria-label="Search recordings" placeholder="Find a recording…" value={search} onChange={event => setSearch(event.target.value)} /></label>
-      <label className="group-filter">Group <select aria-label="Filter recordings by group" value={groupFilter} onChange={event => setGroupFilter(event.target.value)}><option value="all">All recordings</option><option value="ungrouped">Ungrouped</option>{availableGroups.map(group => <option key={group} value={group}>{group}</option>)}</select></label>
-      <form className="group-create" onSubmit={event => { event.preventDefault(); try { const next = addGroup(localStorage, newGroup); setGroups(next); setNewGroup(""); setGroupError(""); } catch (cause) { setGroupError(cause instanceof Error ? cause.message : "Group could not be saved."); } }}><input aria-label="New group name" placeholder="New group…" maxLength={60} value={newGroup} onChange={event => setNewGroup(event.target.value)} /><Button variant="ghost" size="icon" aria-label="Create group" disabled={!newGroup.trim()}><FolderPlus size={16} /></Button></form>
+      <label className="group-filter">Group <select aria-label="Filter recordings by group" value={groupFilter} onChange={event => setGroupFilter(event.target.value)}><option value="all">All recordings</option><option value="ungrouped">Ungrouped</option>{availableGroups.map(group => <option key={group} value={`group:${group}`}>{group}</option>)}</select></label>
+      <form className="group-create" onSubmit={event => { event.preventDefault(); try { const next = addGroup(storage, newGroup); setGroups(next); setNewGroup(""); setGroupError(""); } catch (cause) { setGroupError(cause instanceof Error ? cause.message : "Group could not be saved."); } }}><input aria-label="New group name" placeholder="New group…" maxLength={60} value={newGroup} onChange={event => setNewGroup(event.target.value)} /><Button variant="ghost" size="icon" aria-label="Create group" disabled={!newGroup.trim()}><FolderPlus size={16} /></Button></form>
       {groupError ? <p role="alert" className="text-sm">{groupError}</p> : null}
       <div className="library-heading">YOUR RECORDINGS <span>{library.length}</span></div>
       <nav className="recording-list" aria-label="Your recordings">
@@ -262,7 +264,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
       <header className="workspace-topbar"><Button variant="ghost" size="icon" className="mobile-menu" aria-label="Toggle recordings" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><PanelLeft /></Button><span>{selected ? "Your recordings / Echo" : "Your space to listen"}</span><span className="topbar-note"><span className="connection-dot online" /> Browser-local library</span></header>
       <div className="workspace-content">
         {libraryState.error ? <p role="alert" className="echo-alert">{libraryState.error}</p> : null}
-        {!status.ready ? <div className="echo-alert" role="alert"><strong>Recording is unavailable</strong><p>Your saved recordings are still here. An owner needs to finish the server provider setup.</p><details><summary>Setup details</summary><ul>{status.problems.map(problem => <li key={problem}>{problem}</li>)}</ul></details></div> : null}
+        {!status.ready ? <div className="echo-alert" role="alert"><strong>Recording is unavailable</strong><p>Your saved recordings are still here. Open Account settings to add personal API keys, or ask the owner to finish provider setup.</p><details><summary>Setup details</summary><ul>{status.problems.map(problem => <li key={problem}>{problem}</li>)}</ul></details></div> : null}
         {failure ? <div role="alert" className="echo-alert"><strong>{failure.title}</strong><p>{failure.detail}</p>{failure.retryable ? <p>You can try again when ready.</p> : null}</div> : null}
         {queue.error ? <p role="alert" className="echo-alert">{queue.error}</p> : null}
         {queue.space?.nearFull ? <p role="alert" className="echo-alert">Storage is nearly full. Download your audio; Echo never deletes it to make room.</p> : null}
@@ -297,7 +299,7 @@ export function Recorder({ status }: { status: ProviderStatus }) {
             {tab === "audio" ? <div className="audio-library"><h2>Original audio</h2><p>Saved on this browser, with no verified remote backup. Downloads preserve each original clip, including overlap. Nothing is deleted after transcription.</p><SessionTranscript transcript={selectedTranscript} showArtifacts={false} audio={selected.audio} /><details className="original-results"><summary>Original clips & downloads</summary>{selected.audio.map(chunk => <ChunkPlayer key={chunkKey(chunk)} chunk={chunk} saved={queue.entries.some(entry => chunkKey(entry) === chunkKey(chunk))} disabled={busy} onSave={() => { void queue.persist(chunk).then(queue.finished).catch(() => {}); }} />)}</details></div> : null}
           </div>
           {selected.pending || selected.blocked ? <div className="processing-footer"><p>{selected.pending} clips waiting · {queue.online ? "Processing continues while this page is open." : "Saved audio will process when you reconnect."}</p><Button variant="outline" size="sm" disabled={queue.working || !queue.online} onClick={() => { void queue.sync(true); }}><RefreshCw /> Retry pending processing</Button></div> : null}
-          <label className="session-group">Group <select aria-label="Session group" value={libraryState.preferences[selected.id]?.group === undefined ? "__auto" : selected.group ?? "__none"} onChange={event => libraryState.save(selected.id, { group: event.target.value === "__auto" ? undefined : event.target.value === "__none" ? null : event.target.value })}><option value="__auto">Auto{selected.groupAutomatic && selected.group ? ` — ${selected.group}` : ""}</option><option value="__none">Ungrouped</option>{availableGroups.map(group => <option key={group} value={group}>{group}</option>)}</select><small>Auto uses transcript clues; ambiguous sessions stay ungrouped.</small></label>
+          <label className="session-group">Group <select aria-label="Session group" value={libraryState.preferences[selected.id]?.group === undefined ? "__auto" : selected.group === null ? "__none" : `group:${selected.group}`} onChange={event => libraryState.save(selected.id, { group: event.target.value === "__auto" ? undefined : event.target.value === "__none" ? null : event.target.value.slice(6) })}><option value="__auto">Auto{selected.groupAutomatic && selected.group ? ` — ${selected.group}` : ""}</option><option value="__none">Ungrouped</option>{availableGroups.map(group => <option key={group} value={`group:${group}`}>{group}</option>)}</select><small>Auto uses transcript clues; ambiguous sessions stay ungrouped.</small></label>
         {selected.unsaved ? <div className="echo-alert" role="alert">Some audio could not be saved. Open Original audio and download it before leaving.</div> : null}
         </section> : null}
         <footer className="workspace-footer"><span>Made for being here.</span><details><summary>Storage & privacy</summary><p>Chunk processing: {progress.transcribed} transcribed · {progress.uploading} uploading · {progress.waiting} waiting · {progress.retrying} retrying · {progress.blocked} blocked</p><label>Chunk overlap <select aria-label="Chunk overlap" value={overlapMs} disabled={capturing} onChange={event => setOverlapMs(Number(event.target.value))}><option value={2000}>2 seconds</option><option value={5000}>5 seconds</option><option value={10000}>10 seconds</option></select></label><p>Audio and names stay in this browser. Site data can be cleared or evicted. Closing or backgrounding the page can interrupt recording and pauses processing. Capture stops after four hours or earlier if storage fails. Keep a backup for important moments.</p>{status.ready ? <DisclosureNotice disclosures={status.disclosures} /> : null}</details></footer>
