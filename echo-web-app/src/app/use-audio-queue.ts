@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { capacity, preserveAudio, chunkKey, drainQueue, durableWarning, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, transientWarning, type QueueEntry, type StorageWarning } from "../lib/recording/queue";
 import { useWorkspaceIdentity } from "./workspace-identity";
+import { ArtifactStore } from "../lib/recording/artifact-store";
+import { removePreference } from "../lib/recording/library";
+import { withLibraryDeletion } from "../lib/recording/delete-session";
 import { reportFailure } from "../lib/recording/log";
 import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
 import type { PlayableChunk, Session } from "../lib/recording/session";
@@ -10,7 +13,7 @@ import type { PlayableChunk, Session } from "../lib/recording/session";
 import { saveDeviceRecording, type DeviceRecording, type ImportProgress } from "../lib/recording/device-import";
 
 export function useAudioQueue(canProcess = true) {
-  const {userId,namespace} = useWorkspaceIdentity();
+  const {userId,namespace,storage} = useWorkspaceIdentity();
   const store = useRef(new IndexedDBQueue(namespace + "echo-audio-queue-v1"));
   const processingAllowed = useRef(canProcess);
   useEffect(() => { processingAllowed.current = canProcess; }, [canProcess]);
@@ -155,13 +158,25 @@ export function useAudioQueue(canProcess = true) {
       await navigator.storage?.persist().catch(() => false);
       try {
         await saveDeviceRecording(recording, store.current, progress);
+        storage.removeItem(`echo-deleted-session-v1/${recording.sessionId}`);
         settled();
       } finally {
         await refresh();
         void sync();
       }
     });
-  }, [refresh, settled, sync]);
+  }, [refresh, settled, sync, storage]);
+  const removeSession = useCallback(async (sessionId: string) => {
+    if (!navigator.locks) throw new Error("Use a browser with Web Locks to delete safely.");
+    await withLibraryDeletion(navigator.locks, async () => {
+      storage.setItem(`echo-deleted-session-v1/${sessionId}`, "deleted");
+      await new ArtifactStore(namespace + "echo-session-guides-v1").deleteSession(sessionId);
+      await store.current.deleteSession(sessionId);
+      removePreference(storage, sessionId);
+      trackUnsaved(rows => rows.filter(row => row.metadata.sessionId !== sessionId));
+      await refresh();
+    }, namespace + sessionId);
+  }, [refresh, trackUnsaved, namespace, storage]);
   const finished = useCallback(() => { void sync(); }, [sync]);
-  return { entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
+  return { removeSession, entries, completions, complete, importDevice, unsaved, error, ready, working, space, online, locksAvailable, persist, prepare, finished, sync };
 }

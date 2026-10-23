@@ -22,7 +22,7 @@ import { ARTIFACT_REQUEST_TIMEOUT_MS } from "../lib/recording/request-policy";
 export type ArtifactStatus = "idle" | "working";
 
 export function useSessionArtifacts(transcript: RevisionInput) {
-  const {userId,namespace} = useWorkspaceIdentity();
+  const {userId,namespace,storage} = useWorkspaceIdentity();
   const store = useRef(new ArtifactStore(namespace + "echo-session-guides-v1"));
   const inFlight = useRef<AbortController | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -71,7 +71,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     return () => { current = false; };
   }, [revision, transcript.sessionId]);
 
-  const generate = useCallback(async () => {
+  const generateUnlocked = useCallback(async () => {
     if (inFlight.current) return;
     const controller = new AbortController();
     inFlight.current = controller;
@@ -135,6 +135,15 @@ export function useSessionArtifacts(transcript: RevisionInput) {
       if (mounted.current) setStatus("idle");
     }
   }, [userId]);
+
+  const generate = useCallback(async () => {
+    if (!navigator.locks) { setError("Use a browser with Web Locks to safely generate saved notes."); return; }
+    await navigator.locks.request(`echo-session-notes/${namespace}${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
+      if (!lock) { setError("This session is being changed in another tab. Try again when it finishes."); return; }
+      if (storage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) { setError("This recording was deleted in another tab. Reopen your library."); return; }
+      await generateUnlocked();
+    });
+  }, [generateUnlocked,namespace,storage]);
 
   return {
     record,

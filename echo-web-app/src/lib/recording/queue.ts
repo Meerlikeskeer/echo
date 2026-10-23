@@ -318,6 +318,24 @@ export class IndexedDBQueue implements QueueStore {
       };
     });
   }
+  /** Explicit manual per-copy erasure; caller holds capture/import/drain locks. */
+  async deleteSession(sessionId: string): Promise<void> {
+    if (!/^[a-zA-Z0-9-]{1,64}$/.test(sessionId)) throw new Error("Invalid session identity");
+    const db = await this.open();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(["chunks", "sessions"], "readwrite", { durability: "strict" });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onabort = () => { db.close(); reject(tx.error ?? new Error("Deletion failed")); };
+      const cursor = tx.objectStore("chunks").openCursor();
+      cursor.onsuccess = () => {
+        const row = cursor.result;
+        if (!row) return;
+        if ((row.value as QueueEntry).metadata.sessionId === sessionId) row.delete();
+        row.continue();
+      };
+      tx.objectStore("sessions").delete(sessionId);
+    });
+  }
   async listCompletions(): Promise<Completion[]> {
     const db = await this.open();
     return new Promise<Completion[]>((resolve, reject) => {
