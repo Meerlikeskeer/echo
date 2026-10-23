@@ -385,3 +385,7 @@ ADR-025 adds the board-hosted `/probe` experimental section. Explicit idle-only 
 ## WEB-033 browser library organization
 
 ADR-031 adds browser-local custom groups and conservative transcript-based automatic categories, preserving explicit manual assignment. Sidebar erasure is a deliberate per-session operation serialized against queue drain and device import; active capture/import refuses it. Notes, processing rows, completion evidence and presentation preferences are removed with visible partial-failure handling. No remote/device copies or automatic-retention guards change. Notes use a dedicated escaped print document for native Save as PDF with completeness/revision disclosure. Physical-device work is paused at owner direction (2026-10-22).
+
+## WEB-035 opt-in live notes
+
+ADR-033 adds an in-memory per-session opt-in scheduler around the existing artifact generation hook: changed nonempty revisions only, one attempt per minute, no concurrent calls, visible/online tabs only, pause after error. Exact-revision acceptance, saved guides, partial/stale disclosures and provider boundaries stay authoritative. Existing notes remain visible; a response overtaken by transcription is discarded and the next eligible revision may be attempted. Disable/navigation prevents new automatic requests; already-sent work may still be billed. Full accumulated transcript refreshes have growing input-token cost; this is chunk-paced updating, not word/token streaming.
