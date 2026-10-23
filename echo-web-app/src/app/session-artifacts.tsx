@@ -45,6 +45,9 @@ export function SessionArtifacts({ transcript, onTitle }: { transcript: Revision
       </button>
     </div>
 
+    <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={artifacts.live} onChange={event => artifacts.toggleLive(event.target.checked)} />Update notes live</label>
+    <p className="mt-1 text-xs text-slate-500">Optional: updates after new transcript chunks arrive, at most once a minute in this tab while it is visible and online. Each refresh sends the growing transcript and adds notes-model usage. Turning it off stops future updates; an active request may still finish.</p>
+    {artifacts.live && artifacts.liveFailed ? <p role="status" className="mt-2 text-sm text-amber-800">Live updates paused after an error. Generate again or turn live updates off and on to retry.</p> : null}
     {artifacts.storageError ? <p role="alert" className="mt-3 text-sm text-amber-800">{artifacts.storageError}</p> : null}
     {record ? <button type="button" className="mt-3 text-sm underline" onClick={() => {
       try {
@@ -56,7 +59,7 @@ export function SessionArtifacts({ transcript, onTitle }: { transcript: Revision
     {empty
       ? <p className="mt-2 text-sm text-slate-500">There is no transcript text to summarize yet.</p>
       : <p className="mt-2 text-xs text-slate-500">
-          Generated on request from this recording’s transcript. {transcript.status === "final"
+          Generated from this recording’s transcript. {transcript.status === "final"
             ? "That transcript is final."
             : "That transcript is still partial, so these notes describe only what has been transcribed so far."}
         </p>}

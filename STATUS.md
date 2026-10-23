@@ -230,3 +230,7 @@ ADR-032 / WEB-034 add optional Supabase Google/email accounts and server-encrypt
 ## Laptop/browser priority — 2026-10-22
 
 Owner paused physical-device development. ADR-031 / WEB-033 implement browser-local groups, conservative transcript-based automatic categorization, confirmed sidebar session erasure and native Save as PDF notes export. The PDF control opens the browser print dialog; it does not produce a JSON download. Accounts/per-user keys and opt-in live notes are separate follow-up tasks; no production account setup or live-provider acceptance is implied.
+
+## Live notes — 2026-10-22
+
+ADR-033 / WEB-035 add opt-in, chunk-paced session note refreshes on changed transcript revisions, capped at one attempt/minute and paused offline/in hidden tabs/on errors. Full-transcript refreshes add growing notes-model token usage; no word streaming or unlimited usage is claimed. Live provider/browser quality and timing remain acceptance.

@@ -4,9 +4,7 @@
  * WEB-007. Requests session artifacts and decides whether the answer still
  * applies when it arrives.
  *
- * Generation is **on demand**, never automatic. A transcript changes on every
- * chunk during capture, and regenerating on each change would spend a provider
- * call per chunk to produce a summary the owner never asked for.
+ * Manual generation and explicit, bounded live updates share revision checks.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,6 +13,7 @@ import {
   type ArtifactRecord, type RevisionInput,
 } from "../lib/recording/artifacts";
 
+import { liveNotesDue } from "../lib/recording/live-notes";
 import { useWorkspaceIdentity } from "./workspace-identity";
 import { ArtifactStore } from "../lib/recording/artifact-store";
 import { ARTIFACT_REQUEST_TIMEOUT_MS } from "../lib/recording/request-policy";
@@ -25,6 +24,9 @@ export function useSessionArtifacts(transcript: RevisionInput) {
   const {userId,namespace,storage} = useWorkspaceIdentity();
   const store = useRef(new ArtifactStore(namespace + "echo-session-guides-v1"));
   const inFlight = useRef<AbortController | null>(null);
+  const [live, setLive] = useState(false);
+  const [liveFailed, setLiveFailed] = useState(false);
+  const lastLiveAttempt = useRef<{revision: string | null; at: number | null}>({revision:null,at:null});
   const [storageError, setStorageError] = useState<string | null>(null);
   const mounted = useRef(false);
   const [record, setRecord] = useState<ArtifactRecord | null>(null);
@@ -78,6 +80,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
     const generation = ++attempts.current;
     setStatus("working");
     setError(null);
+    setLiveFailed(false);
     try {
       const source = latest.current;
       const response = await fetch("/api/sessions/artifacts", {
@@ -129,7 +132,7 @@ export function useSessionArtifacts(transcript: RevisionInput) {
         setError("The transcript changed while these notes were being written, so they were discarded. Generate again.");
       }
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : "Notes could not be generated.");
+      if (mounted.current) { setError(cause instanceof Error ? cause.message : "Notes could not be generated."); setLiveFailed(true); }
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
       if (mounted.current) setStatus("idle");
@@ -137,15 +140,35 @@ export function useSessionArtifacts(transcript: RevisionInput) {
   }, [userId]);
 
   const generate = useCallback(async () => {
-    if (!navigator.locks) { setError("Use a browser with Web Locks to safely generate saved notes."); return; }
-    await navigator.locks.request(`echo-session-notes/${namespace}${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
-      if (!lock) { setError("This session is being changed in another tab. Try again when it finishes."); return; }
-      if (storage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) { setError("This recording was deleted in another tab. Reopen your library."); return; }
-      await generateUnlocked();
-    });
+    try {
+      if (!navigator.locks) throw new Error("Use a browser with Web Locks to safely generate saved notes.");
+      await navigator.locks.request(`echo-session-notes/${namespace}${latest.current.sessionId}`, { ifAvailable: true }, async lock => {
+        if (!lock) throw new Error("This session is being changed in another tab. Try again when it finishes.");
+        if (storage.getItem(`echo-deleted-session-v1/${latest.current.sessionId}`)) throw new Error("This recording was deleted in another tab. Reopen your library.");
+        await generateUnlocked();
+      });
+    } catch (cause) {
+      if (mounted.current) { setError(cause instanceof Error ? cause.message : "Saved notes could not be accessed."); setLiveFailed(true); }
+    }
   }, [generateUnlocked,namespace,storage]);
 
+  useEffect(() => {
+    const update = () => {
+      if (!liveNotesDue({enabled:live, online:navigator.onLine, visible:document.visibilityState === "visible", working:status === "working", failed:liveFailed,
+        revision, savedRevision:record?.transcriptRevision ?? null, lastRevision:lastLiveAttempt.current.revision, hasText:!!latest.current.text.trim(), now:Date.now(), lastAttemptAt:lastLiveAttempt.current.at})) return;
+      lastLiveAttempt.current = {revision,at:Date.now()};
+      void generate();
+    };
+    update();
+    const timer = setInterval(update,1000);
+    window.addEventListener("online",update);
+    document.addEventListener("visibilitychange",update);
+    return () => { clearInterval(timer); window.removeEventListener("online",update); document.removeEventListener("visibilitychange",update); };
+  }, [live,liveFailed,revision,record?.transcriptRevision,status,generate]);
+  const toggleLive = (enabled: boolean) => { setLive(enabled); if (enabled) { setLiveFailed(false); lastLiveAttempt.current.revision = null; } };
+
   return {
+    live, liveFailed, toggleLive,
     record,
     storageError,
     revision,
