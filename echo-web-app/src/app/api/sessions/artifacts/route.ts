@@ -18,8 +18,8 @@
  * the current transcript lives — there is no server-side session store (ADR-016).
  */
 
-import { requireOwnerAccess } from "../../../../lib/owner-access";
-import { providerSetup } from "../../../../lib/providers/registry";
+import { requireProcessingAccess } from "../../../../lib/owner-access";
+import { providersFor } from "../../../../lib/auth/credentials";
 import { describeFailure, type RecordingErrorBody } from "../../../../lib/recording/http";
 import { ProviderError } from "../../../../lib/providers/errors";
 import { describeGaps, isRevisionInput, transcriptForArtifacts, transcriptRevision } from "../../../../lib/recording/artifacts";
@@ -41,12 +41,14 @@ const fail = (status: number, body: RecordingErrorBody) => json(status, { error:
 export async function POST(request: Request): Promise<Response> {
   // Proxy gates every route; this endpoint checks again at its own boundary so
   // the guard does not depend on middleware remaining in place.
+  let principal;
   try {
-    await requireOwnerAccess();
+    principal = await requireProcessingAccess();
   } catch {
     return fail(401, { code: "unauthorized_owner", port: null, message: "Private access required.", retryable: false });
   }
 
+  const providerSetup = await providersFor(principal);
   if (!providerSetup.ok) {
     return json(503, {
       error: { code: "provider_unconfigured", port: null, message: "Recording providers are not configured.", retryable: false } satisfies RecordingErrorBody,

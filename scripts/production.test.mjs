@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -88,21 +89,21 @@ test("chunk uploads validate checksum and normalize transcription into session t
   });
 });
 
-async function withServer({ configured, providers = BLANK_PROVIDERS }, run) {
+async function withServer({ configured, providers = BLANK_PROVIDERS, extraEnv = {} }, run) {
   const socket = createServer();
   await new Promise((resolve, reject) => { socket.once("error", reject); socket.listen(0, "127.0.0.1", resolve); });
   const port = socket.address().port;
   await new Promise((resolve) => socket.close(resolve));
+  const base = `http://127.0.0.1:${port}`;
   // Explicit values override any inherited secrets; never print process environment.
   const child = spawn(process.execPath, [fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url)), "start", "--hostname", "127.0.0.1", "--port", String(port)], {
     cwd: new URL("../echo-web-app/", import.meta.url),
-    env: { ...process.env, NODE_ENV: "production", ECHO_OWNER_USERNAME: configured ? username : "", ECHO_OWNER_PASSWORD: configured ? password : "", ...providers },
+    env: { ...process.env, NODE_ENV: "production", ECHO_AUTH_MODE: "owner", SUPABASE_URL: "", SUPABASE_PUBLISHABLE_KEY: "", ECHO_APP_URL: base, ECHO_CREDENTIAL_ENCRYPTION_KEY: "", ECHO_OWNER_USERNAME: configured ? username : "", ECHO_OWNER_PASSWORD: configured ? password : "", ...providers, ...extraEnv },
     stdio: "pipe",
   });
   let output = "";
   child.stdout.on("data", (chunk) => { output += chunk; });
   child.stderr.on("data", (chunk) => { output += chunk; });
-  const base = `http://127.0.0.1:${port}`;
   try {
     let ready = false;
     for (let attempt = 0; attempt < 150; attempt++) {
@@ -357,4 +358,55 @@ test("transcription-only mode omits notes and has its own authenticated replay i
     const ordinary = await (await post()).json(); assert.equal(ordinary.replayed, false); assert.ok(ordinary.notes);
     assert.equal((await post("unknown")).status, 400);
   });
+});
+
+
+// Synthetic Auth server: only a known test token is accepted. No real provider,
+// OAuth application, mailbox or Supabase project is contacted by these checks.
+test("account mode verifies identity, isolates paid requests and never falls back to owner keys", {timeout:30000}, async () => {
+  const id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const user = {id, email:"synthetic@example.test", app_metadata:{provider:"email"}, user_metadata:{}, aud:"authenticated", created_at:"2026-01-01T00:00:00Z"};
+  const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const token = `${encode({alg:"HS256",typ:"JWT"})}.${encode({sub:id,exp:Math.floor(Date.now()/1000)+3600})}.synthetic-signature`;
+  let authCalls = 0, databaseCalls = 0;
+  const auth = createHttpServer((request,response) => {
+    response.setHeader("content-type","application/json");
+    if (request.url === "/auth/v1/user") {
+      authCalls++;
+      if (request.headers.authorization === `Bearer ${token}`) { response.end(JSON.stringify(user)); return; }
+      response.statusCode=401; response.end(JSON.stringify({message:"Invalid token"})); return;
+    }
+    if (request.url.startsWith("/rest/v1/provider_credentials")) { databaseCalls++; response.end("null"); return; }
+    response.statusCode=404; response.end("{}");
+  });
+  await new Promise(resolve => auth.listen(0,"127.0.0.1",resolve));
+  try {
+    await withServer({configured:true, providers:FIXTURE_PROVIDERS, extraEnv:{ECHO_AUTH_MODE:"accounts",SUPABASE_URL:`http://127.0.0.1:${auth.address().port}`,SUPABASE_PUBLISHABLE_KEY:"synthetic-public-key",ECHO_CREDENTIAL_ENCRYPTION_KEY:"ab".repeat(32)}}, async base => {
+      const session = {access_token:token,refresh_token:"synthetic-refresh-token",token_type:"bearer",expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,user};
+      const cookie = `echo-account-session=base64-${encode(session)}`;
+      assert.equal((await fetch(`${base}/login`)).status,200);
+      assert.equal((await fetch(`${base}/api/account`,{headers:{authorization}})).status,401,"owner Basic cannot bypass account login");
+      const identity = await fetch(`${base}/api/account`,{headers:{cookie}});
+      assert.equal(identity.status,200); assert.equal((await identity.json()).userId,id);
+      const post = headers => fetch(`${base}/api/recordings`,{method:"POST",headers:{cookie,...headers},body:syntheticClip()});
+      assert.equal((await post({origin:base,"x-echo-user":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"})).status,401);
+      assert.equal((await post({origin:"https://evil.example","x-echo-user":id})).status,401);
+      assert.equal((await post({origin:base})).status,401);
+      assert.equal(databaseCalls,0,"rejected requests must not load keys");
+      const missing = await post({origin:base,"x-echo-user":id});
+      assert.equal(missing.status,503,"fixture/owner provider config must not process account audio without personal keys");
+      assert.ok(databaseCalls>0); assert.ok(authCalls>0);
+      assert.match(JSON.stringify(await missing.json()),/Account settings/);
+      const forged = `echo-account-session=base64-${encode({...session,access_token:token+"forged"})}`;
+      assert.equal((await fetch(`${base}/api/account`,{headers:{cookie:forged}})).status,401);
+    });
+  } finally { await new Promise(resolve => auth.close(resolve)); }
+});
+
+test("unknown and incomplete account configuration stay closed", {timeout:30000}, async () => {
+  for (const extraEnv of [{ECHO_AUTH_MODE:"unknown"},{ECHO_AUTH_MODE:"accounts",SUPABASE_URL:"",SUPABASE_PUBLISHABLE_KEY:""}]) {
+    await withServer({configured:true,providers:FIXTURE_PROVIDERS,extraEnv},async base=>{
+      for (const path of ["/","/login","/api/recordings","/_next/static/missing.js"]) assert.equal((await fetch(`${base}${path}`,{headers:{authorization}})).status,503);
+    });
+  }
 });

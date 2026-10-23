@@ -1,7 +1,7 @@
 const counterKey = "echo-session-number-v1";
-export async function reserveBrowserSessionNumber(): Promise<number> {
+export async function reserveBrowserSessionNumber(namespace = "", storage: Pick<Storage,"getItem"|"setItem"> = localStorage): Promise<number> {
   if (!navigator.locks) throw new Error("This browser cannot safely reserve session numbers.");
-  return navigator.locks.request(counterKey, () => reserveSessionNumber(localStorage));
+  return navigator.locks.request(namespace + counterKey, () => reserveSessionNumber(storage));
 }
 export function reserveSessionNumber(storage: Pick<Storage, "getItem" | "setItem">): number {
   const previous = Number(storage.getItem(counterKey) ?? "0");

@@ -387,13 +387,13 @@ export async function drainQueue(store: QueueStore, send: (chunk: PlayableChunk)
     await store.update({ ...attempt, state: "processed", result, resultReceivedAt: options.now(), error: undefined, nextAttemptAt: 0 });
   }
 }
-export async function sendChunk(chunk: PlayableChunk): Promise<RecordingResult> {
+export async function sendChunk(chunk: PlayableChunk, userId = "owner"): Promise<RecordingResult> {
   if (chunk.audio.size > MAX_UPLOAD_BYTES) throw new UploadFailure(false, OVERSIZED);
   const body = new FormData();
   body.append("audio", chunk.audio, `recording.${chunk.audio.type.includes("ogg") ? "ogg" : chunk.audio.type.includes("mp4") ? "m4a" : "webm"}`);
   body.append("durationMs", String(chunk.metadata.endMs - chunk.metadata.startMs));
   body.append("chunk", JSON.stringify(chunk.metadata));
-  const response = await fetch("/api/recordings", { method: "POST", body, cache: "no-store", signal: AbortSignal.timeout(RECORDING_REQUEST_TIMEOUT_MS) });
+  const response = await fetch("/api/recordings", { method: "POST", body, headers: userId === "owner" ? {} : { "x-echo-user": userId }, cache: "no-store", signal: AbortSignal.timeout(RECORDING_REQUEST_TIMEOUT_MS) });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     const error = body && typeof body === "object" && "error" in body ? body.error : null;

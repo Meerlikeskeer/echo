@@ -180,6 +180,10 @@ interface DiarizationProvider {
 
 Echo's provider ports use the OpenAI `/v1/audio/transcriptions` and `/v1/chat/completions` request shapes (ADR-009), which hosted vendors and self-hosted servers both implement; switching between them is a base-URL change rather than a code change. **The permanent transcription and LLM vendors remain undecided**; ADR-009 selects prototype defaults marked Temporary. Every provider exposes machine-readable capability and disclosure descriptors, and the external-processor disclosure required by REQ-009 is derived from that data rather than from prose. Credentials stay server-side; never place provider secrets in browser bundles or `NEXT_PUBLIC_*` variables. See `Provider boundaries` below for the full adapter contract table.
 
+### Account authentication and credential storage
+
+ADR-032 approves Supabase Auth (Google and email/password), @supabase/ssr and @supabase/supabase-js for explicit account mode, plus Supabase PostgreSQL for server-encrypted per-user provider keys under row-level security. Self-hosted Supabase is the portable alternative. No cloud audio/session store is introduced. Existing owner-only mode remains the default; invalid modes/configuration fail closed. Account-mode public login/callback/assets replace the Basic gate only in that mode; server workspace/API guards still verify identity. See `docs/accounts.md` for setup and acceptance.
+
 ### Browser-local storage
 
 Native IndexedDB is approved for the WEB-004 offline audio queue (ADR-012) and its WEB-006 capture completion records (ADR-017), with native Web Locks for same-origin retry serialization. No dependency or server-side storage choice is introduced. Browser persistence is subject to quota, eviction and user clearing; no local queue entry is an independent verified remote copy.
@@ -190,9 +194,9 @@ These are intentionally unresolved. An agent encountering one must not silently 
 
 | Decision | Current state |
 | --- | --- |
-| Relational database provider | **Open.** PostgreSQL is the likely direction, but it is not an approved final choice. ADR-016 records the first concrete thing it would buy: a job ledger that survives a cold start. |
+| Relational database provider | **Approved for credentials only:** Supabase PostgreSQL (ADR-032). Other persistent application data remains open. ADR-016 records the first concrete thing it would buy: a job ledger that survives a cold start. |
 | Object/audio storage provider | **Open.** Large audio must not be stored in relational database rows; object/blob storage will likely be required. |
-| Production authentication | **Open.** The WEB-001 single-owner HTTP Basic gate is temporary prototype protection, not the final architecture. |
+| Production authentication | **Approved:** optional Supabase Auth account mode (ADR-032); owner-only Basic remains the default prototype mode. |
 | Transcription vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `TranscriptionProvider`. |
 | LLM vendor | **Open** for the permanent choice. ADR-009 selects a **Temporary** prototype default behind `NotesProvider`. |
 | Diarization vendor | **Open.** Kept behind a session-scoped `DiarizationProvider`; depends on object storage, so not required before WEB-005. |

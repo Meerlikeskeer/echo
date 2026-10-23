@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { capacity, preserveAudio, chunkKey, drainQueue, durableWarning, IndexedDBQueue, resolveFailure, sendChunk, storageFailure, transientWarning, type QueueEntry, type StorageWarning } from "../lib/recording/queue";
+import { useWorkspaceIdentity } from "./workspace-identity";
 import { reportFailure } from "../lib/recording/log";
 import { persistSessionCompletion, type Completion } from "../lib/recording/session-completion";
 import type { PlayableChunk, Session } from "../lib/recording/session";
@@ -9,7 +10,8 @@ import type { PlayableChunk, Session } from "../lib/recording/session";
 import { saveDeviceRecording, type DeviceRecording, type ImportProgress } from "../lib/recording/device-import";
 
 export function useAudioQueue(canProcess = true) {
-  const store = useRef(new IndexedDBQueue());
+  const {userId,namespace} = useWorkspaceIdentity();
+  const store = useRef(new IndexedDBQueue(namespace + "echo-audio-queue-v1"));
   const processingAllowed = useRef(canProcess);
   useEffect(() => { processingAllowed.current = canProcess; }, [canProcess]);
   const mounted = useRef(false);
@@ -66,7 +68,7 @@ export function useAudioQueue(canProcess = true) {
         if (!lock || !mounted.current) return;
         setWorking(true);
         try {
-          await drainQueue(store.current, sendChunk, { online: () => navigator.onLine, now: () => Date.now(), force, active: () => mounted.current });
+          await drainQueue(store.current, chunk => sendChunk(chunk, userId), { online: () => navigator.onLine, now: () => Date.now(), force, active: () => mounted.current });
           await refresh();
           settled();
         } finally { if (mounted.current) setWorking(false); }
@@ -75,7 +77,7 @@ export function useAudioQueue(canProcess = true) {
       reportFailure("draining the upload queue", cause);
       if (mounted.current) setWarning(transientWarning(storageFailure(cause, "maintenance")));
     }
-  }, [refresh, settled]);
+  }, [refresh, settled, userId]);
   useEffect(() => {
     mounted.current = true;
     const poll = async (stale = false) => {
